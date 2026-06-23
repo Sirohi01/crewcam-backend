@@ -1,0 +1,395 @@
+import { Request, Response } from 'express';
+import { User } from '../models/User';
+import bcrypt from 'bcrypt';
+import { AuthToken } from '../models/AuthToken';
+import { createOpaqueToken, hashToken, signAccessToken } from '../utils/authTokens';
+import speakeasy from 'speakeasy';
+import qrcode from 'qrcode';
+import { z } from 'zod';
+import { AuditLog } from '../models/AuditLog';
+import { Session } from '../models/Session';
+
+const passwordSchema = z.string()
+  .min(8, 'Password must be at least 8 characters long')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number');
+
+const refreshExpiry = () => new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+const resetExpiry = () => new Date(Date.now() + 1000 * 60 * 30);
+
+export const login = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email }).setOptions({ bypassTenantIsolation: true });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    if (user.lockoutUntil && user.lockoutUntil > new Date()) {
+      return res.status(403).json({ message: 'Account is locked. Please try again later.' });
+    }
+    
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+      if (user.failedLoginAttempts >= 5) {
+        user.lockoutUntil = new Date(Date.now() + 15 * 60 * 1000);
+      }
+      await user.save();
+
+      await AuditLog.create({
+        tenantId: user.tenantId,
+        userId: user._id,
+        action: 'LOGIN',
+        module: 'Auth',
+        status: 'FAILURE',
+        ipAddress: req.ip || '',
+        userAgent: req.headers['user-agent'] || '',
+        details: { reason: 'Invalid password' }
+      });
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    user.failedLoginAttempts = 0;
+    user.lockoutUntil = undefined as any;
+    await user.save();
+
+    if (!user.isActive) {
+      return res.status(401).json({ message: 'User account is inactive' });
+    }
+
+    if (user.twoFactorEnabled) {
+      return res.status(200).json({ 
+        message: '2FA required', 
+        requires2FA: true, 
+        email: user.email 
+      });
+    }
+
+    const token = signAccessToken(user);
+    const refreshToken = createOpaqueToken();
+    await AuthToken.create({
+      userId: user._id,
+      tokenHash: hashToken(refreshToken),
+      type: 'refresh',
+      expiresAt: refreshExpiry(),
+    });
+
+    await Session.create({
+      userId: user._id,
+      tenantId: user.tenantId,
+      refreshToken: refreshToken,
+      browser: req.headers['user-agent'] || '',
+      ipAddress: req.ip || '',
+      expiresAt: refreshExpiry(),
+    });
+
+    await AuditLog.create({
+      tenantId: user.tenantId,
+      userId: user._id,
+      action: 'LOGIN',
+      module: 'Auth',
+      status: 'SUCCESS',
+      ipAddress: req.ip || '',
+      userAgent: req.headers['user-agent'] || ''
+    });
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('token', token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profilePictureUrl: user.profilePictureUrl,
+        tenantId: user.tenantId,
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const login2FA = async (req: Request, res: Response) => {
+  try {
+    const { email, password, token: totpToken } = req.body;
+    const user = await User.findOne({ email }).setOptions({ bypassTenantIsolation: true });
+    
+    if (!user || !user.isActive || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(401).json({ message: 'Invalid 2FA request' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: totpToken,
+      window: 1 // Allow 30 seconds clock drift
+    });
+
+    if (!verified) {
+      return res.status(401).json({ message: 'Invalid 2FA token' });
+    }
+
+    const token = signAccessToken(user);
+    const refreshToken = createOpaqueToken();
+    await AuthToken.create({
+      userId: user._id,
+      tokenHash: hashToken(refreshToken),
+      type: 'refresh',
+      expiresAt: refreshExpiry(),
+    });
+
+    await Session.create({
+      userId: user._id,
+      tenantId: user.tenantId,
+      refreshToken: refreshToken,
+      browser: req.headers['user-agent'] || '',
+      ipAddress: req.ip || '',
+      expiresAt: refreshExpiry(),
+    });
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('token', token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        tenantId: user.tenantId,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const register = async (req: Request, res: Response) => {
+  return res.status(403).json({ message: 'Public registration is disabled. Please contact your administrator to create an account.' });
+};
+
+export const refreshToken = async (req: Request, res: Response) => {
+  try {
+    const rawToken = req.cookies.refreshToken || req.body.refreshToken;
+    if (!rawToken) return res.status(400).json({ message: 'Refresh token is required' });
+
+    const tokenDoc = await AuthToken.findOne({
+      tokenHash: hashToken(rawToken),
+      type: 'refresh',
+      revokedAt: { $exists: false },
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!tokenDoc) return res.status(401).json({ message: 'Invalid or expired refresh token' });
+
+    // bypassTenantIsolation: userId comes from a verified opaque refresh-token hash, not request input.
+    const user = await User.findById(tokenDoc.userId).setOptions({ bypassTenantIsolation: true });
+    if (!user || !user.isActive) return res.status(401).json({ message: 'User not found or inactive' });
+
+    const nextRefreshToken = createOpaqueToken();
+    tokenDoc.revokedAt = new Date();
+    await tokenDoc.save();
+    await AuthToken.create({
+      userId: user._id,
+      tokenHash: hashToken(nextRefreshToken),
+      type: 'refresh',
+      expiresAt: refreshExpiry(),
+    });
+
+    await Session.findOneAndUpdate(
+      { refreshToken: rawToken, tenantId: user.tenantId } as any,
+      { refreshToken: nextRefreshToken, expiresAt: refreshExpiry(), lastActive: new Date() }
+    );
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('token', signAccessToken(user), { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+    res.cookie('refreshToken', nextRefreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+
+    res.status(200).json({ message: 'Token refreshed successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error refreshing token' });
+  }
+};
+
+export const logout = async (req: Request, res: Response) => {
+  try {
+    const rawToken = req.cookies.refreshToken || req.body.refreshToken;
+    if (rawToken) {
+      await AuthToken.findOneAndUpdate(
+        { tokenHash: hashToken(rawToken), type: 'refresh' },
+        { revokedAt: new Date() }
+      );
+    }
+    res.clearCookie('token', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+    res.status(200).json({ message: 'Logged out successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error logging out' });
+  }
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email }).setOptions({ bypassTenantIsolation: true });
+    if (!user) {
+      return res.status(200).json({ message: 'If the email exists, a reset token has been generated' });
+    }
+
+    const resetToken = createOpaqueToken();
+    await AuthToken.create({
+      userId: user._id,
+      tokenHash: hashToken(resetToken),
+      type: 'password_reset',
+      expiresAt: resetExpiry(),
+    });
+
+    res.status(200).json({
+      message: 'If the email exists, a reset token has been generated',
+      resetToken: process.env.NODE_ENV === 'production' ? undefined : resetToken,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating reset token' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ message: 'Token and password are required' });
+    try {
+      passwordSchema.parse(password);
+    } catch (zodError: any) {
+      return res.status(400).json({ message: zodError.errors[0].message });
+    }
+
+    const tokenDoc = await AuthToken.findOne({
+      tokenHash: hashToken(token),
+      type: 'password_reset',
+      revokedAt: { $exists: false },
+      expiresAt: { $gt: new Date() },
+    });
+    if (!tokenDoc) return res.status(400).json({ message: 'Invalid or expired reset token' });
+
+    const salt = await bcrypt.genSalt(10);
+    // bypassTenantIsolation: userId comes from a verified opaque reset-token hash, not request input.
+    await User.findByIdAndUpdate(tokenDoc.userId, { passwordHash: await bcrypt.hash(password, salt) }, { bypassTenantIsolation: true } as any);
+    tokenDoc.revokedAt = new Date();
+    await tokenDoc.save();
+
+    const userForAudit = await User.findById(tokenDoc.userId).setOptions({ bypassTenantIsolation: true }).lean();
+
+    await AuditLog.create({
+      tenantId: userForAudit?.tenantId || 'system',
+      userId: tokenDoc.userId,
+      action: 'PASSWORD_RESET',
+      module: 'Auth',
+      status: 'SUCCESS',
+      ipAddress: req.ip || '',
+      userAgent: req.headers['user-agent'] || ''
+    });
+
+    res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error resetting password' });
+  }
+};
+
+export const setup2FA = async (req: any, res: Response) => {
+  try {
+    const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.twoFactorEnabled) {
+      return res.status(400).json({ message: '2FA is already enabled' });
+    }
+
+    const secret = speakeasy.generateSecret({
+      name: `CREWCAM (${user.email})`
+    });
+
+    user.twoFactorSecret = secret.base32;
+    await user.save();
+
+    const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url || '');
+
+    res.status(200).json({
+      secret: secret.base32,
+      qrCodeUrl,
+      message: 'Scan this QR code with your authenticator app'
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error setting up 2FA' });
+  }
+};
+
+export const verifyAndEnable2FA = async (req: any, res: Response) => {
+  try {
+    const { token } = req.body;
+    const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any);
+    
+    if (!user || !user.twoFactorSecret) {
+      return res.status(400).json({ message: '2FA setup not initialized' });
+    }
+
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token,
+      window: 1
+    });
+
+    if (verified) {
+      user.twoFactorEnabled = true;
+      await user.save();
+      return res.status(200).json({ message: '2FA enabled successfully' });
+    } else {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error verifying 2FA' });
+  }
+};
+
+export const disable2FA = async (req: any, res: Response) => {
+  try {
+    const { token } = req.body;
+    const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any);
+    
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(400).json({ message: '2FA is not enabled' });
+    }
+
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token,
+      window: 1
+    });
+
+    if (verified) {
+      user.twoFactorEnabled = false;
+      user.twoFactorSecret = '';
+      await user.save();
+      return res.status(200).json({ message: '2FA disabled successfully' });
+    } else {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error disabling 2FA' });
+  }
+};

@@ -1,0 +1,225 @@
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/employeeController.ts(193,28): error TS2552: Cannot find name 'creditedByLeaveTy'. Did you mean 'creditedByLeaveType'?
+src/controllers/employeeController.ts(193,47): error TS7005: Variable 'pe' implicitly has an 'any' type.
+src/controllers/employeeController.ts(193,50): error TS7005: Variable 'get' implicitly has an 'any' type.
+src/controllers/employeeController.ts(193,47): error TS1005: ',' expected.
+src/controllers/employeeController.ts(193,49): error TS1005: ',' expected.
+src/controllers/employeeController.ts(193,53): error TS1005: ',' expected.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2552, 7005, 7005, 1005, 1005, 1005 ]
+}
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/communicationController.ts(119,30): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type '{ tenantId: any; title: string; message: string; audienceType: "User"; audienceValue: any; link: string | undefined; createdBy: any; readBy: never[]; }' is not assignable to parameter of type '{ tenantId?: ObjectIdQueryTypeCasting; title?: string | RegExp; message?: string | RegExp; audienceType?: RegExp | "User" | "Role" | "Branch" | "Department" | "All"; ... 62 more ...; validateSync?: { ...; }; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Types of property 'link' are incompatible.
+        Type 'string | undefined' is not assignable to type 'string | RegExp'.
+          Type 'undefined' is not assignable to type 'string | RegExp'.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2769 ]
+}
+(node:21028) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:21028) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+(node:21028) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+(node:21028) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+(node:8612) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:8612) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/routes/hrAdminRoutes.ts(5,3): error TS2304: Cannot find name 'createComplianceRecord'.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(5,3): error TS2695: Left side of comma operator is unused and has no side effects.
+src/routes/hrAdminRoutes.ts(6,3): error TS2304: Cannot find name 'getComplianceRecords'.
+src/routes/hrAdminRoutes.ts(7,3): error TS2304: Cannot find name 'createDisciplinaryAction'.
+src/routes/hrAdminRoutes.ts(8,3): error TS2304: Cannot find name 'getDisciplinaryActions'.
+src/routes/hrAdminRoutes.ts(9,3): error TS2304: Cannot find name 'assignPolicy'.
+src/routes/hrAdminRoutes.ts(10,3): error TS2304: Cannot find name 'getPolicyStatuses'.
+src/routes/hrAdminRoutes.ts(11,3): error TS2304: Cannot find name 'createBGVRequest'.
+src/routes/hrAdminRoutes.ts(12,3): error TS2304: Cannot find name 'getBGVRequests'.
+src/routes/hrAdminRoutes.ts(13,3): error TS2304: Cannot find name 'updateBGVStatus'.
+src/routes/hrAdminRoutes.ts(14,3): error TS2304: Cannot find name 'from'.
+src/routes/hrAdminRoutes.ts(21,58): error TS2304: Cannot find name 'createComplianceRecord'.
+src/routes/hrAdminRoutes.ts(22,56): error TS2304: Cannot find name 'getComplianceRecords'.
+src/routes/hrAdminRoutes.ts(25,60): error TS2304: Cannot find name 'createDisciplinaryAction'.
+src/routes/hrAdminRoutes.ts(26,58): error TS2304: Cannot find name 'getDisciplinaryActions'.
+src/routes/hrAdminRoutes.ts(29,63): error TS2304: Cannot find name 'assignPolicy'.
+src/routes/hrAdminRoutes.ts(30,54): error TS2304: Cannot find name 'getPolicyStatuses'.
+src/routes/hrAdminRoutes.ts(33,51): error TS2304: Cannot find name 'createBGVRequest'.
+src/routes/hrAdminRoutes.ts(34,49): error TS2304: Cannot find name 'getBGVRequests'.
+src/routes/hrAdminRoutes.ts(35,54): error TS2304: Cannot find name 'updateBGVStatus'.
+src/routes/hrAdminRoutes.ts(14,1): error TS1128: Declaration or statement expected.
+src/routes/hrAdminRoutes.ts(14,3): error TS1434: Unexpected keyword or identifier.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [
+    2304, 2695, 2695, 2695, 2695,
+    2695, 2695, 2695, 2695, 2304,
+    2304, 2304, 2304, 2304, 2304,
+    2304, 2304, 2304, 2304, 2304,
+    2304, 2304, 2304, 2304, 2304,
+    2304, 2304, 1128, 1434
+  ]
+}
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/masterDataController.ts(214,40): error TS2349: This expression is not callable.
+  Each member of the union type '{ <ResultDoc = Document<unknown, {}, IShiftTiming, {}, DefaultSchemaOptions> & IShiftTiming & Required<{ _id: ObjectId; }> & { ...; } & { ...; }>(filter: _QueryFilter<...>, update: UpdateQuery<...>, options: QueryOptions<...> & { ...; }): Query<...>; (filter: Query<...>, update: UpdateQuery<...>, options: QueryOptio...' has signatures, but none of those signatures are compatible with each other.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2349 ]
+}
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/masterDataController.ts(214,40): error TS2349: This expression is not callable.
+  Each member of the union type '{ <ResultDoc = Document<unknown, {}, IShiftTiming, {}, DefaultSchemaOptions> & IShiftTiming & Required<{ _id: ObjectId; }> & { ...; } & { ...; }>(filter: _QueryFilter<...>, update: UpdateQuery<...>, options: QueryOptions<...> & { ...; }): Query<...>; (filter: Query<...>, update: UpdateQuery<...>, options: QueryOptio...' has signatures, but none of those signatures are compatible with each other.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2349 ]
+}
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/masterDataController.ts(214,40): error TS2349: This expression is not callable.
+  Each member of the union type '{ <ResultDoc = Document<unknown, {}, IShiftTiming, {}, DefaultSchemaOptions> & IShiftTiming & Required<{ _id: ObjectId; }> & { ...; } & { ...; }>(filter: _QueryFilter<...>, update: UpdateQuery<...>, options: QueryOptions<...> & { ...; }): Query<...>; (filter: Query<...>, update: UpdateQuery<...>, options: QueryOptio...' has signatures, but none of those signatures are compatible with each other.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2349 ]
+}
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/masterDataController.ts(214,40): error TS2349: This expression is not callable.
+  Each member of the union type '{ <ResultDoc = Document<unknown, {}, IShiftTiming, {}, DefaultSchemaOptions> & IShiftTiming & Required<{ _id: ObjectId; }> & { ...; } & { ...; }>(filter: _QueryFilter<...>, update: UpdateQuery<...>, options: QueryOptions<...> & { ...; }): Query<...>; (filter: Query<...>, update: UpdateQuery<...>, options: QueryOptio...' has signatures, but none of those signatures are compatible with each other.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2349 ]
+}
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/masterDataController.ts(214,40): error TS2349: This expression is not callable.
+  Each member of the union type '{ <ResultDoc = Document<unknown, {}, IShiftTiming, {}, DefaultSchemaOptions> & IShiftTiming & Required<{ _id: ObjectId; }> & { ...; } & { ...; }>(filter: _QueryFilter<...>, update: UpdateQuery<...>, options: QueryOptions<...> & { ...; }): Query<...>; (filter: Query<...>, update: UpdateQuery<...>, options: QueryOptio...' has signatures, but none of those signatures are compatible with each other.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2349 ]
+}
+D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/attendanceController.ts(279,50): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type '{ tenantId: any; userId: any; date: Date; clockInTime: Date; clockOutTime: Date | undefined; status: any; locationIp: string; }' is not assignable to parameter of type '{ tenantId?: ObjectIdQueryTypeCasting; userId?: ObjectIdQueryTypeCasting; date?: DateQueryTypeCasting; ... 65 more ...; validateSync?: { ...; }; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Types of property 'clockOutTime' are incompatible.
+        Type 'Date | undefined' is not assignable to type 'DateQueryTypeCasting'.
+          Type 'undefined' is not assignable to type 'DateQueryTypeCasting'.
+
+    at createTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1893:10
+    at Object.require.extensions.<computed> [as .ts] (D:\CRUCAM\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14) {
+  diagnosticCodes: [ 2769 ]
+}
