@@ -78,13 +78,13 @@ export const generateManpowerRequisitionPdfBuffer = async (data: ManpowerRequisi
   const headerImage = await loadHeaderImage(data.headerImageUrl);
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 24, bufferPages: true });
+    const doc = new PDFDocument({ size: 'A4', margin: 22, bufferPages: true });
     const chunks: Buffer[] = [];
-    const left = 24;
-    const right = 571;
+    const left = 22;
+    const right = 573;
     const contentWidth = right - left;
-    const labelWidth = 86;
-    const gap = 28;
+    const labelWidth = 82;
+    const gap = 24;
     const colWidth = (contentWidth - gap) / 2;
     const blue = '#0d3c68';
     const orange = '#f97316';
@@ -96,108 +96,122 @@ export const generateManpowerRequisitionPdfBuffer = async (data: ManpowerRequisi
     doc.on('error', reject);
 
     const fit = (value?: string) => value?.trim() || ' ';
-    const formatMoney = (value?: string) => value ? `₹ ${value}` : '';
+    const formatMoney = (value?: string) => value ? `Rs. ${value}` : '';
 
-    const drawHeader = () => {
-      doc.y = 22;
+    const drawFirstPageHeader = () => {
+      doc.y = 18;
       if (headerImage) {
-        doc.image(headerImage, left, 20, { fit: [contentWidth, 72], align: 'center', valign: 'center' });
-        doc.y = 96;
+        doc.image(headerImage, left, 18, { width: contentWidth, height: 62 });
+        doc.y = 84;
       } else {
-        doc.font('Helvetica-Bold').fontSize(18).fillColor(blue).text(data.companyName || 'CREWCAM', left, 26, { width: contentWidth, align: 'center' });
-        doc.y = 56;
+        doc.font('Helvetica-Bold').fontSize(16).fillColor(blue).text(data.companyName || 'CREWCAM', left, 24, { width: contentWidth, align: 'center' });
+        doc.y = 52;
       }
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(orange).text('MANPOWER REQUISITION FORM', left, doc.y);
-      doc.font('Helvetica-Oblique').fontSize(6.6).fillColor('#111827').text('(For Internal Use - HR & Recruitment Department)', left, doc.y - 9.5, { width: contentWidth, align: 'right' });
-      doc.moveTo(left, doc.y + 3).lineTo(right, doc.y + 3).lineWidth(1.1).strokeColor(line).stroke();
-      doc.y += 9;
+      const titleY = doc.y;
+      doc.font('Helvetica-Bold').fontSize(8).fillColor(orange).text('MANPOWER REQUISITION FORM', left, titleY, { width: contentWidth / 2 });
+      doc.font('Helvetica-Oblique').fontSize(6).fillColor('#111827').text('(For Internal Use - HR & Recruitment Department)', left + contentWidth / 2, titleY + 1, { width: contentWidth / 2, align: 'right' });
+      doc.moveTo(left, titleY + 11).lineTo(right, titleY + 11).lineWidth(1).strokeColor(line).stroke();
+      doc.y = titleY + 16;
     };
 
     const ensure = (height: number) => {
-      if (doc.y + height > 770) {
+      if (doc.y + height > 777) {
         doc.addPage();
-        drawHeader();
+        // Header intentionally appears only on page 1.
+        doc.y = 22;
       }
     };
 
     const divider = () => {
-      doc.moveTo(left, doc.y + 4).lineTo(right, doc.y + 4).lineWidth(1.05).strokeColor(line).stroke();
-      doc.y += 11;
+      doc.moveTo(left, doc.y + 2.5).lineTo(right, doc.y + 2.5).lineWidth(0.85).strokeColor(line).stroke();
+      doc.y += 7;
     };
 
     const sectionTitle = (title: string) => {
-      ensure(26);
-      doc.font('Helvetica-Bold').fontSize(8).fillColor('#0f172a').text(title.toUpperCase(), left, doc.y, { characterSpacing: 0.25 });
-      doc.y += 12;
+      ensure(16);
+      doc.font('Helvetica-Bold').fontSize(7.2).fillColor('#0f172a').text(title.toUpperCase(), left, doc.y, { characterSpacing: 0.15 });
+      doc.y += 8.8;
     };
 
     const inlineField = (x: number, y: number, label: string, value?: string, width = colWidth, customLabelWidth = labelWidth) => {
-      doc.font('Helvetica-Bold').fontSize(6.8).fillColor('#0f172a').text(label, x, y, { width: customLabelWidth });
+      doc.font('Helvetica-Bold').fontSize(6.15).fillColor('#0f172a').text(label, x, y, { width: customLabelWidth });
       doc.text(':', x + customLabelWidth + 2, y, { width: 6 });
       const valueX = x + customLabelWidth + 10;
       const valueWidth = width - customLabelWidth - 10;
-      doc.moveTo(valueX, y + 10).lineTo(x + width, y + 10).lineWidth(0.45).strokeColor(lightLine).stroke();
-      doc.font('Helvetica').fontSize(6.9).fillColor('#0f172a').text(fit(value), valueX + 4, y - 0.5, { width: valueWidth - 6, height: 10, ellipsis: true });
+      doc.moveTo(valueX, y + 8.5).lineTo(x + width, y + 8.5).lineWidth(0.38).strokeColor(lightLine).stroke();
+      doc.font('Helvetica').fontSize(6.15).fillColor('#0f172a').text(fit(value), valueX + 3, y - 0.4, { width: valueWidth - 5, height: 8.5, ellipsis: true });
     };
 
     const row = (leftField: [string, string | undefined, number?], rightField?: [string, string | undefined, number?]) => {
-      ensure(18);
+      ensure(12);
       const y = doc.y;
       inlineField(left, y, leftField[0], leftField[1], colWidth, leftField[2] || labelWidth);
       if (rightField) inlineField(left + colWidth + gap, y, rightField[0], rightField[1], colWidth, rightField[2] || labelWidth);
-      doc.y += 16;
+      doc.y += 11.5;
     };
 
-    const paragraphBlock = (label: string, value?: string, labelW = 138) => {
+    const paragraphBlock = (label: string, value?: string, labelW = 132) => {
       const clean = stripHtml(value);
-      const textWidth = contentWidth - labelW - 14;
-      const h = Math.max(26, doc.heightOfString(clean || ' ', { width: textWidth, align: 'justify' }) + 4);
-      ensure(h + 4);
+      const textWidth = contentWidth - labelW - 13;
+      const h = Math.max(16, doc.heightOfString(clean || ' ', { width: textWidth, lineGap: 0.2 }) + 2);
+      ensure(h + 3);
       const y = doc.y;
-      doc.font('Helvetica-Bold').fontSize(6.8).fillColor('#0f172a').text(label, left, y, { width: labelW });
+      doc.font('Helvetica-Bold').fontSize(6.15).fillColor('#0f172a').text(label, left, y, { width: labelW });
       doc.text(':', left + labelW + 2, y, { width: 6 });
-      doc.font('Helvetica').fontSize(6.9).fillColor('#0f172a').text(clean || ' ', left + labelW + 14, y - 0.5, { width: textWidth, align: 'justify', lineGap: 1.1 });
+      doc.font('Helvetica').fontSize(6.15).fillColor('#0f172a').text(clean || ' ', left + labelW + 13, y - 0.4, { width: textWidth, align: 'justify', lineGap: 0.2 });
       doc.y = y + h;
+    };
+
+    const fullTextSection = (value?: string) => {
+      const clean = stripHtml(value);
+      if (!clean) {
+        doc.y += 8;
+        return;
+      }
+      const h = doc.heightOfString(clean, { width: contentWidth - 6, lineGap: 0.2 });
+      ensure(h + 4);
+      doc.font('Helvetica').fontSize(6.15).fillColor('#0f172a').text(clean, left + 3, doc.y, { width: contentWidth - 6, align: 'justify', lineGap: 0.2 });
+      doc.y += 2;
     };
 
     const bulletSection = (value?: string) => {
       const bullets = splitBullets(value);
       const fallbackText = stripHtml(value);
       if (!bullets.length && fallbackText) {
-        doc.font('Helvetica').fontSize(6.9).fillColor('#0f172a').text(fallbackText, left + 4, doc.y, { width: contentWidth - 8, align: 'justify', lineGap: 1.1 });
-        doc.y += 4;
+        const h = doc.heightOfString(fallbackText, { width: contentWidth - 6, lineGap: 0.2 });
+        ensure(h + 4);
+        doc.font('Helvetica').fontSize(6.15).fillColor('#0f172a').text(fallbackText, left + 3, doc.y, { width: contentWidth - 6, align: 'justify', lineGap: 0.2 });
+        doc.y += 1;
         return;
       }
 
-      const colGap = 22;
+      const colGap = 20;
       const bulletWidth = (contentWidth - colGap) / 2;
       const startY = doc.y;
       let y1 = startY;
       let y2 = startY;
-
       bullets.forEach((item, index) => {
         const isLeftCol = index % 2 === 0;
-        const x = isLeftCol ? left + 4 : left + bulletWidth + colGap + 4;
+        const x = isLeftCol ? left + 3 : left + bulletWidth + colGap + 3;
         const y = isLeftCol ? y1 : y2;
-        ensure(14);
-        doc.font('Helvetica-Bold').fontSize(7).fillColor('#111827').text('•', x, y, { width: 6 });
-        doc.font('Helvetica').fontSize(6.9).fillColor('#0f172a').text(item, x + 9, y, { width: bulletWidth - 9, lineGap: 0.5 });
-        const used = Math.max(10, doc.heightOfString(item, { width: bulletWidth - 9 }) + 2);
-        if (isLeftCol) y1 += used; else y2 += used;
+        const itemHeight = Math.max(7.6, doc.heightOfString(item, { width: bulletWidth - 8, lineGap: 0.2 }) + 0.8);
+        ensure(itemHeight + 2);
+        doc.font('Helvetica-Bold').fontSize(6.15).fillColor('#111827').text('-', x, y, { width: 6 });
+        doc.font('Helvetica').fontSize(6.15).fillColor('#0f172a').text(item, x + 8, y, { width: bulletWidth - 8, lineGap: 0.2 });
+        if (isLeftCol) y1 += itemHeight; else y2 += itemHeight;
       });
-
-      doc.y = Math.max(y1, y2, startY + 22);
+      doc.y = Math.max(y1, y2, startY + 16);
     };
 
-    const benefitBox = (x: number, y: number, label: string, selected: boolean) => {
-      doc.rect(x, y + 1, 7, 7).lineWidth(0.6).strokeColor(line).stroke();
+    const benefitBox = (x: number, y: number, label: string, selected: boolean, width = 72) => {
+      doc.rect(x, y + 0.8, 6.5, 6.5).lineWidth(0.55).strokeColor(line).stroke();
       if (selected) {
-        doc.font('Helvetica-Bold').fontSize(6).fillColor(blue).text('✓', x + 1, y - 0.5, { width: 7, align: 'center' });
+        doc.font('Helvetica-Bold').fontSize(5.4).fillColor(blue).text('X', x + 0.8, y + 0.3, { width: 6.5, align: 'center' });
       }
-      doc.font('Helvetica-Bold').fontSize(6.6).fillColor('#0f172a').text(label, x + 10, y, { width: 76 });
+      doc.font('Helvetica-Bold').fontSize(5.9).fillColor('#0f172a').text(label, x + 9, y, { width, ellipsis: true });
     };
 
-    drawHeader();
+    drawFirstPageHeader();
 
     sectionTitle('1. Department Details');
     row(['Department', data.department], ['Date of Request', data.requestDate]);
@@ -211,12 +225,12 @@ export const generateManpowerRequisitionPdfBuffer = async (data: ManpowerRequisi
     divider();
 
     sectionTitle('3. Reason for Hiring');
-    row(['Reason', data.reasonForHiring], ['If Replacement, Prev. Employee', data.replacementName, 128]);
-    paragraphBlock('Detailed Justification (Mandatory)', data.detailedJustification, 138);
+    row(['Reason', data.reasonForHiring], ['If Replacement, Prev. Employee', data.replacementName, 126]);
+    paragraphBlock('Detailed Justification (Mandatory)', data.detailedJustification, 132);
     divider();
 
     sectionTitle('4. Job Description Summary');
-    bulletSection(data.jobDescriptionSummary);
+    fullTextSection(data.jobDescriptionSummary);
     divider();
 
     sectionTitle('5. KRA Report');
@@ -224,30 +238,43 @@ export const generateManpowerRequisitionPdfBuffer = async (data: ManpowerRequisi
     divider();
 
     sectionTitle('6. Compensation Details');
-    ensure(38);
+    ensure(44);
     const salaryY = doc.y;
-    doc.font('Helvetica-Bold').fontSize(6.8).fillColor('#0f172a').text('Salary Range (CTC)', left, salaryY, { width: labelWidth });
+    doc.font('Helvetica-Bold').fontSize(6.15).fillColor('#0f172a').text('Salary Range (CTC)', left, salaryY, { width: labelWidth });
     doc.text(':', left + labelWidth + 2, salaryY);
-    doc.font('Helvetica-Bold').fontSize(6.8).text(formatMoney(data.salaryCtcMin), left + labelWidth + 12, salaryY, { width: 72 });
-    doc.moveTo(left + labelWidth + 12, salaryY + 10).lineTo(left + labelWidth + 82, salaryY + 10).lineWidth(0.45).strokeColor(lightLine).stroke();
-    doc.text('to', left + labelWidth + 88, salaryY, { width: 14 });
-    doc.font('Helvetica-Bold').fontSize(6.8).text(formatMoney(data.salaryCtcMax), left + labelWidth + 105, salaryY, { width: 72 });
-    doc.moveTo(left + labelWidth + 105, salaryY + 10).lineTo(left + labelWidth + 175, salaryY + 10).lineWidth(0.45).strokeColor(lightLine).stroke();
+    doc.font('Helvetica-Bold').fontSize(6.15).text(formatMoney(data.salaryCtcMin), left + labelWidth + 12, salaryY, { width: 70 });
+    doc.moveTo(left + labelWidth + 12, salaryY + 8.5).lineTo(left + labelWidth + 80, salaryY + 8.5).lineWidth(0.38).strokeColor(lightLine).stroke();
+    doc.text('to', left + labelWidth + 86, salaryY, { width: 12 });
+    doc.font('Helvetica-Bold').fontSize(6.15).text(formatMoney(data.salaryCtcMax), left + labelWidth + 101, salaryY, { width: 70 });
+    doc.moveTo(left + labelWidth + 101, salaryY + 8.5).lineTo(left + labelWidth + 170, salaryY + 8.5).lineWidth(0.38).strokeColor(lightLine).stroke();
     inlineField(left + colWidth + gap, salaryY, 'Budget Approved By', data.budgetApprovedBy);
-    doc.y += 16;
+    doc.y += 12;
 
     const benefits = data.benefits || [];
-    doc.font('Helvetica-Bold').fontSize(6.8).fillColor('#0f172a').text('Other Benefits (if any)', left, doc.y, { width: labelWidth });
-    doc.text(':', left + labelWidth + 2, doc.y);
-    let bx = left + labelWidth + 12;
-    ['PF', 'Travel Allowance', 'ESIC', 'Accommodation', 'Incentives'].forEach((benefit) => {
-      benefitBox(bx, doc.y - 1, benefit, benefits.includes(benefit));
-      bx += benefit === 'Travel Allowance' ? 88 : 72;
-    });
-    benefitBox(bx, doc.y - 1, 'Other', benefits.includes('Other'));
-    doc.moveTo(bx + 48, doc.y + 9).lineTo(right, doc.y + 9).lineWidth(0.45).strokeColor(lightLine).stroke();
-    doc.font('Helvetica').fontSize(6.8).text(data.otherBenefits || ' ', bx + 50, doc.y - 0.5, { width: right - bx - 52, ellipsis: true });
-    doc.y += 20;
+    const benefitsY = doc.y;
+    doc.font('Helvetica-Bold').fontSize(6.15).fillColor('#0f172a').text('Other Benefits (if any)', left, benefitsY, { width: labelWidth });
+    doc.text(':', left + labelWidth + 2, benefitsY);
+    const benefitStart = left + labelWidth + 13;
+    benefitBox(benefitStart, benefitsY - 0.5, 'PF', benefits.includes('PF'), 24);
+    benefitBox(benefitStart + 38, benefitsY - 0.5, 'Travel Allowance', benefits.includes('Travel Allowance'), 78);
+    benefitBox(benefitStart + 136, benefitsY - 0.5, 'ESIC', benefits.includes('ESIC'), 34);
+    benefitBox(benefitStart + 191, benefitsY - 0.5, 'Accommodation', benefits.includes('Accommodation'), 78);
+    benefitBox(benefitStart + 292, benefitsY - 0.5, 'Incentives', benefits.includes('Incentives'), 54);
+    benefitBox(benefitStart + 368, benefitsY - 0.5, 'Other', benefits.includes('Other'), 40);
+    doc.y += 12;
+
+    if (data.otherBenefits) {
+      const otherY = doc.y;
+      const otherLabelW = labelWidth;
+      doc.font('Helvetica-Bold').fontSize(6.15).fillColor('#0f172a').text('Other Details', left, otherY, { width: otherLabelW });
+      doc.text(':', left + otherLabelW + 2, otherY);
+      const otherX = left + labelWidth + 13;
+      const otherHeight = Math.max(9, doc.heightOfString(data.otherBenefits, { width: right - otherX - 5, lineGap: 0.2 }));
+      ensure(otherHeight + 3);
+      doc.moveTo(otherX, otherY + 8.5).lineTo(right, otherY + 8.5).lineWidth(0.38).strokeColor(lightLine).stroke();
+      doc.font('Helvetica').fontSize(6).fillColor('#0f172a').text(data.otherBenefits, otherX + 3, otherY - 0.4, { width: right - otherX - 5, lineGap: 0.2 });
+      doc.y = otherY + otherHeight + 4;
+    }
     divider();
 
     sectionTitle('7. Hiring Timeline');
@@ -260,24 +287,25 @@ export const generateManpowerRequisitionPdfBuffer = async (data: ManpowerRequisi
     divider();
 
     sectionTitle('9. Declaration');
-    doc.font('Helvetica-Oblique').fontSize(6.8).fillColor('#475569').text('I confirm that the above manpower requirement is essential for operational / project needs and budget provision has been considered.', left, doc.y, { width: contentWidth, align: 'justify' });
-    doc.y += 20;
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#0f172a').text('SIGNATURE', left, doc.y);
-    doc.y += 16;
-    const sigW = (contentWidth - 46) / 3;
-    inlineField(left, doc.y, 'Department Head', data.departmentHeadSignature, sigW, 78);
-    inlineField(left + sigW + 23, doc.y, 'HR Head', data.hrHeadSignature, sigW, 48);
-    inlineField(left + (sigW + 23) * 2, doc.y, 'Director Approval', data.directorApprovalSignature, sigW, 76);
-    doc.y += 20;
+    doc.font('Helvetica-Oblique').fontSize(6.15).fillColor('#475569').text('I confirm that the above manpower requirement is essential for operational / project needs and budget provision has been considered.', left, doc.y, { width: contentWidth, height: 10, align: 'justify' });
+    doc.y += 15;
+    doc.font('Helvetica-Bold').fontSize(7.2).fillColor('#0f172a').text('SIGNATURE', left, doc.y);
+    doc.y += 12;
+    const sigY = doc.y;
+    const sigW = (contentWidth - 42) / 3;
+    inlineField(left, sigY, 'Department Head', data.departmentHeadSignature, sigW, 74);
+    inlineField(left + sigW + 21, sigY, 'HR Head', data.hrHeadSignature, sigW, 54);
+    inlineField(left + (sigW + 21) * 2, sigY, 'Director Approval', data.directorApprovalSignature, sigW, 76);
+    doc.y = sigY + 14;
 
     if (data.footerNote) {
-      doc.font('Helvetica').fontSize(6.5).fillColor('#64748b').text(data.footerNote, left, Math.min(doc.y + 4, 760), { width: contentWidth - 70 });
+      doc.font('Helvetica').fontSize(5.8).fillColor('#64748b').text(data.footerNote, left, Math.min(doc.y + 3, 763), { width: contentWidth - 70, height: 8, ellipsis: true });
     }
 
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i += 1) {
       doc.switchToPage(i);
-      doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#64748b').text(`Page ${i + 1} / ${range.count}`, left, 780, { width: contentWidth, align: 'right' });
+      doc.font('Helvetica-Bold').fontSize(6).fillColor('#64748b').text(`Page ${i + 1} / ${range.count}`, left, 780, { width: contentWidth, align: 'right' });
     }
 
     doc.end();
