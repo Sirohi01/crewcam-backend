@@ -45,6 +45,9 @@ export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
     if (status) filter.status = status;
 
     const requests = await ManpowerRequest.find(filter)
+      .populate('departmentId', 'name')
+      .populate('locationBranchId', 'name city state')
+      .populate('reportingTo', 'firstName lastName email')
       .populate('requestedBy', 'firstName lastName email')
       .populate('approvedBy', 'firstName lastName email')
       .sort({ createdAt: -1 });

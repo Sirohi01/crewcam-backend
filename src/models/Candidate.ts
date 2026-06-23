@@ -14,6 +14,10 @@ export interface ICandidate extends Document {
   source?: string;
   rating?: number;
   comments?: string;
+  profileImageUrl?: string;
+  /** Detailed application data captured during hiring intake. Kept on the candidate,
+   * while every downstream hiring step remains a separate model. */
+  applicationDetails?: Record<string, unknown>;
 }
 
 const candidateSchema = new Schema<ICandidate>({
@@ -34,6 +38,8 @@ const candidateSchema = new Schema<ICandidate>({
   source: { type: String },
   rating: { type: Number, min: 1, max: 5 },
   comments: { type: String }
+  ,profileImageUrl: { type: String }
+  ,applicationDetails: { type: Schema.Types.Mixed }
 }, {
   timestamps: true
 });
