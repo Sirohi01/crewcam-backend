@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantResolver } from '../middleware/tenantResolver';
 import { checkPermission } from '../middleware/rbac';
 import { requireStepUnlocked } from '../middleware/hiringGate';
+import { validateObjectIdQuery, validateObjectIdParam } from '../middleware/validateObjectId';
 import {
   createCandidate,
   getCandidates,
@@ -105,6 +106,10 @@ import {
 const router = Router();
 router.use(authenticate);
 router.use(tenantResolver);
+router.use(validateObjectIdQuery);
+router.param('id', validateObjectIdParam);
+router.param('candidateId', validateObjectIdParam);
+router.param('employeeId', validateObjectIdParam);
 
 router.get('/pdf-view', checkPermission('ORG_READ'), streamHiringPdf);
 

@@ -13,7 +13,7 @@ import { TeamIntro } from '../models/TeamIntro';
 import { AuditLog } from '../models/AuditLog';
 import { Candidate } from '../models/Candidate';
 import { advanceStep, linkEmployeeId } from '../utils/hiringPipelineHelpers';
-import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
@@ -463,7 +463,7 @@ export const generateJoiningFormPdf = async (req: AuthRequest, res: Response) =>
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `joining-form-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `joining-form-${id}.pdf`);
     (form as any).pdfUrl = pdfUrl;
     await (form as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_JOINING_FORM_PDF', req, { formId: id });
@@ -525,7 +525,7 @@ export const generateNominationPdf = async (req: AuthRequest, res: Response) => 
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `nomination-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `nomination-${id}.pdf`);
     (nom as any).pdfUrl = pdfUrl;
     await nom.save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_NOMINATION_PDF', req, { nominationId: id });
@@ -588,7 +588,7 @@ export const generateBankPayrollPdf = async (req: AuthRequest, res: Response) =>
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `bank-payroll-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `bank-payroll-${id}.pdf`);
     (info as any).pdfUrl = pdfUrl;
     await (info as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_BANK_PAYROLL_PDF', req, { infoId: id });
@@ -642,7 +642,7 @@ export const generatePolicyAcceptancePdf = async (req: AuthRequest, res: Respons
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `it-policy-accept-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `it-policy-accept-${id}.pdf`);
     (acc as any).pdfUrl = pdfUrl;
     await (acc as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_POLICY_ACCEPTANCE_PDF', req, { acceptanceId: id });
@@ -676,7 +676,7 @@ export const generateConductAcceptancePdf = async (req: AuthRequest, res: Respon
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `conduct-accept-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `conduct-accept-${id}.pdf`);
     (acc as any).pdfUrl = pdfUrl;
     await (acc as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_CONDUCT_ACCEPTANCE_PDF', req, { acceptanceId: id });
