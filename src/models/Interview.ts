@@ -9,6 +9,8 @@ export interface IInterview extends Document {
   status: 'Scheduled' | 'Completed' | 'Cancelled' | 'No_Show';
   rating?: number;
   feedback?: string;
+  mode?: 'In-person' | 'Phone' | 'Video';
+  location?: string;
   meetingLink?: string;
 }
 
@@ -29,6 +31,8 @@ const interviewSchema = new Schema<IInterview>({
   },
   rating: { type: Number, min: 1, max: 5 },
   feedback: { type: String },
+  mode: { type: String, enum: ['In-person', 'Phone', 'Video'], default: 'Video' },
+  location: { type: String },
   meetingLink: { type: String }
 }, {
   timestamps: true
