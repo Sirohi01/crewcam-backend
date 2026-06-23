@@ -10,6 +10,8 @@ export interface ICompany extends ITenantScoped, IAuditable {
   companyType?: string;
   website?: string;
   logoUrl?: string;
+  documentHeaderImageUrl?: string;
+  documentFooterText?: string;
   founderName?: string;
 
   // Contact & Address
@@ -49,6 +51,8 @@ const CompanySchema = new Schema<ICompany>({
   companyType: { type: String },
   website: { type: String },
   logoUrl: { type: String },
+  documentHeaderImageUrl: { type: String },
+  documentFooterText: { type: String, maxlength: 300 },
   founderName: { type: String },
 
   // Contact & Address

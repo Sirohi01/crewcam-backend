@@ -19,6 +19,7 @@ import {
   getManpowerRequests,
   updateManpowerRequest,
   updateManpowerRequestStatus,
+  generateManpowerRequestPdf,
   createInterviewEvaluation,
   getInterviewEvaluations,
   createSelectionApproval,
@@ -112,6 +113,7 @@ router.post('/manpower-request', checkPermission('ORG_WRITE'), createManpowerReq
 router.get('/manpower-request', checkPermission('ORG_READ'), getManpowerRequests);
 router.put('/manpower-request/:id', checkPermission('ORG_WRITE'), updateManpowerRequest);
 router.put('/manpower-request/:id/status', checkPermission('ORG_WRITE'), updateManpowerRequestStatus);
+router.post('/manpower-request/:id/generate-pdf', checkPermission('ORG_READ'), generateManpowerRequestPdf);
 
 // Step 2: Interview Evaluation Sheet
 router.post('/evaluation', checkPermission('ORG_WRITE'), requireStepUnlocked('interviewEvaluation'), createInterviewEvaluation);

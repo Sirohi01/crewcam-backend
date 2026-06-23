@@ -6,6 +6,7 @@ import { IDCard } from '../models/IDCard';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStepForEmployee } from '../utils/hiringPipelineHelpers';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
@@ -179,8 +180,10 @@ export const generateIDCardPdf = async (req: AuthRequest, res: Response) => {
     if (!card) return res.status(404).json({ message: 'ID card not found' });
 
     const employee = await User.findOne({ _id: card.employeeId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
 
     const buffer = await generatePdfBuffer({
+      ...branding,
       title: card.cardType,
       recipientName: employee ? `${employee.firstName} ${employee.lastName}` : undefined,
       lines: [
@@ -190,7 +193,7 @@ export const generateIDCardPdf = async (req: AuthRequest, res: Response) => {
         { label: 'Valid From', value: card.validFrom ? new Date(card.validFrom).toDateString() : 'N/A' },
         { label: 'Valid To', value: card.validTo ? new Date(card.validTo).toDateString() : 'N/A' }
       ],
-      footerNote: 'Property of the company. To be returned upon separation.'
+      footerNote: branding.footerNote
     });
 
     const pdfUrl = savePdfToLocalDisk(buffer, `idcard-${id}.pdf`);

@@ -5,6 +5,8 @@ import { InterviewEvaluation } from '../models/InterviewEvaluation';
 import { SelectionApproval } from '../models/SelectionApproval';
 import { AuditLog } from '../models/AuditLog';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
+import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -25,7 +27,7 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const request = await ManpowerRequest.create({ ...req.body, tenantId, requestedBy: req.user!._id });
+    const request = await ManpowerRequest.create({ ...req.body, tenantId, requestedBy: req.body.requestedBy || req.user!._id });
     await logAudit(tenantId, req.user!._id, 'CREATE_MANPOWER_REQUEST', req, { requestId: (request as any)._id });
 
     res.status(201).json(request);
@@ -98,6 +100,47 @@ export const updateManpowerRequestStatus = async (req: AuthRequest, res: Respons
   } catch (error: any) {
     console.error('Error updating manpower request:', error);
     res.status(500).json({ message: 'Error updating manpower request' });
+  }
+};
+
+/** Generates a branded requisition PDF from the same tenant-scoped source record. */
+export const generateManpowerRequestPdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const request = await ManpowerRequest.findOne({ _id: req.params.id, tenantId } as any)
+      .populate('departmentId', 'name')
+      .populate('locationBranchId', 'name city state')
+      .populate('reportingTo', 'firstName lastName');
+    if (!request) return res.status(404).json({ message: 'Manpower request not found' });
+
+    const branding = await getCompanyDocumentBranding(tenantId);
+    const department = (request.departmentId as any)?.name || 'N/A';
+    const branch = (request.locationBranchId as any)?.name || request.workLocation || 'N/A';
+    const reporting = request.reportingTo as any;
+    const lines = [
+      { label: 'Department', value: department },
+      { label: 'Position / Designation', value: `${request.jobTitle}${request.designation ? ` / ${request.designation}` : ''}` },
+      { label: 'No. of positions', value: String(request.numberOfPositions) },
+      { label: 'Work location', value: branch },
+      { label: 'Employment type', value: (request.employmentTypes || [request.employmentType]).join(', ') },
+      { label: 'Reason for hiring', value: (request.hiringReasons || [request.reasonForHiring]).join(', ') },
+      { label: 'Required joining date', value: request.requiredJoiningDate ? new Date(request.requiredJoiningDate).toDateString() : 'N/A' },
+      { label: 'Salary range', value: request.salaryCtcMin || request.salaryCtcMax ? `${request.salaryCtcMin || '—'} to ${request.salaryCtcMax || '—'} ${'INR'}` : 'N/A' },
+      { label: 'Reporting to', value: reporting?.firstName ? `${reporting.firstName} ${reporting.lastName || ''}` : 'N/A' },
+      { label: 'Job description', value: request.jobDescriptionSummary || 'N/A' },
+      { label: 'KRA / responsibilities', value: request.kraReport || (request.keyResponsibilities || []).join('; ') || 'N/A' },
+      { label: 'Justification', value: request.detailedJustification || request.justification || 'N/A' },
+      { label: 'Recruitment status', value: request.recruitmentStatus || request.status },
+    ];
+    const buffer = await generatePdfBuffer({ ...branding, title: 'Manpower Requisition Form', lines, footerNote: branding.footerNote });
+    const pdfUrl = savePdfToLocalDisk(buffer, `manpower-request-${request._id}.pdf`);
+    request.pdfUrl = pdfUrl;
+    await request.save();
+    await logAudit(tenantId, req.user!._id, 'GENERATE_MANPOWER_REQUEST_PDF', req, { requestId: request._id });
+    res.status(200).json({ pdfUrl, request });
+  } catch (error: any) {
+    console.error('Error generating manpower request PDF:', error);
+    res.status(500).json({ message: 'Error generating manpower request PDF' });
   }
 };
 

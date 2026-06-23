@@ -10,6 +10,7 @@ export interface PdfLine {
 export interface PdfOptions {
   title: string;
   companyName?: string | undefined;
+  headerImageUrl?: string | undefined;
   recipientName?: string | undefined;
   lines: PdfLine[];
   footerNote?: string | undefined;
@@ -17,7 +18,28 @@ export interface PdfOptions {
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'hiring');
 
-export const generatePdfBuffer = (options: PdfOptions): Promise<Buffer> => {
+const loadHeaderImage = async (imageUrl?: string): Promise<Buffer | null> => {
+  if (!imageUrl) return null;
+  try {
+    const parsed = new URL(imageUrl, 'http://local');
+    if (parsed.pathname.startsWith('/uploads/')) {
+      return fs.promises.readFile(path.join(process.cwd(), 'public', parsed.pathname));
+    }
+    // Document artwork is uploaded through our uploader (local storage or Cloudinary).
+    // Do not turn PDF generation into a server-side request proxy for arbitrary URLs.
+    if (parsed.protocol === 'https:' && parsed.hostname === 'res.cloudinary.com') {
+      const response = await fetch(imageUrl);
+      if (!response.ok) return null;
+      return Buffer.from(await response.arrayBuffer());
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+export const generatePdfBuffer = async (options: PdfOptions): Promise<Buffer> => {
+  const headerImage = await loadHeaderImage(options.headerImageUrl);
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50 });
     const chunks: Buffer[] = [];
@@ -26,8 +48,14 @@ export const generatePdfBuffer = (options: PdfOptions): Promise<Buffer> => {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(16).font('Helvetica-Bold').text(options.companyName || 'CREWCAM', { align: 'center' });
-    doc.moveDown(0.5);
+    if (headerImage) {
+      // Keep the full image visible; a company can prepare a wide A4 header without it being cropped.
+      doc.image(headerImage, 50, 36, { fit: [495, 100], align: 'center', valign: 'center' });
+      doc.y = 148;
+    } else {
+      doc.fontSize(16).font('Helvetica-Bold').text(options.companyName || 'CREWCAM', { align: 'center' });
+      doc.moveDown(0.5);
+    }
     doc.fontSize(13).font('Helvetica-Bold').text(options.title, { align: 'center' });
     doc.moveDown(1);
     doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#cccccc').stroke();

@@ -7,11 +7,19 @@ export interface IManpowerRequest extends Document {
   requestDate?: Date;
   locationBranchId?: Types.ObjectId;
   designation?: string;
+  workLocation?: string;
   reportingTo?: Types.ObjectId;
   employmentTypes?: string[];
   hiringReasons?: string[];
   jobDescriptionSummary?: string;
   kraReport?: string;
+  replacementName?: string;
+  detailedJustification?: string;
+  keyResponsibilities?: string[];
+  qualificationReq?: string;
+  experienceReq?: string;
+  technicalSkills?: string;
+  softSkills?: string;
   numberOfPositions: number;
   employmentType: string;
   reasonForHiring: string;
@@ -34,6 +42,10 @@ export interface IManpowerRequest extends Document {
   approvedBy?: Types.ObjectId;
   rejectionReason?: string;
   approvalDate?: Date;
+  departmentHeadSignature?: string;
+  directorApprovalSignature?: string;
+  hrHeadSignature?: string;
+  pdfUrl?: string;
 }
 
 const manpowerRequestSchema = new Schema<IManpowerRequest>({
@@ -43,11 +55,19 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   requestDate: { type: Date },
   locationBranchId: { type: Schema.Types.ObjectId, ref: 'Branch' },
   designation: { type: String },
+  workLocation: { type: String },
   reportingTo: { type: Schema.Types.ObjectId, ref: 'User' },
   employmentTypes: [{ type: String }],
   hiringReasons: [{ type: String }],
   jobDescriptionSummary: { type: String },
   kraReport: { type: String },
+  replacementName: { type: String },
+  detailedJustification: { type: String },
+  keyResponsibilities: [{ type: String }],
+  qualificationReq: { type: String },
+  experienceReq: { type: String },
+  technicalSkills: { type: String },
+  softSkills: { type: String },
   numberOfPositions: { type: Number, required: true, default: 1 },
   employmentType: { type: String, required: true, default: 'Full-time' },
   reasonForHiring: { type: String, required: true, default: 'New Position' },
@@ -69,7 +89,11 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   requestedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   rejectionReason: { type: String },
-  approvalDate: { type: Date }
+  approvalDate: { type: Date },
+  departmentHeadSignature: { type: String },
+  directorApprovalSignature: { type: String },
+  hrHeadSignature: { type: String },
+  pdfUrl: { type: String }
 }, {
   timestamps: true
 });

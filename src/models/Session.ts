@@ -3,7 +3,7 @@ import { tenantPlugin } from './plugins/tenantPlugin';
 
 export interface ISession extends Document {
   userId: mongoose.Types.ObjectId;
-  tenantId: mongoose.Types.ObjectId;
+  tenantId: string;
   refreshToken: string;
   deviceType?: string;
   browser?: string;
@@ -16,7 +16,7 @@ export interface ISession extends Document {
 
 const SessionSchema = new Schema<ISession>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
+  tenantId: { type: String, required: true, index: true },
   refreshToken: { type: String, required: true, unique: true },
   deviceType: { type: String },
   browser: { type: String },

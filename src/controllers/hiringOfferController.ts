@@ -8,6 +8,7 @@ import { AppointmentLetter } from '../models/AppointmentLetter';
 import { Candidate } from '../models/Candidate';
 import { AuditLog } from '../models/AuditLog';
 import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
@@ -105,8 +106,10 @@ export const generateLOIPdf = async (req: AuthRequest, res: Response) => {
     if (!loi) return res.status(404).json({ message: 'LOI not found' });
 
     const candidate = await Candidate.findOne({ _id: loi.candidateId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
 
     const buffer = await generatePdfBuffer({
+      ...branding,
       title: 'Letter of Intent',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
       lines: [
@@ -116,7 +119,7 @@ export const generateLOIPdf = async (req: AuthRequest, res: Response) => {
         { label: 'Valid Until', value: loi.validUntil ? new Date(loi.validUntil).toDateString() : 'N/A' },
         { value: loi.letterContent || 'We are pleased to extend this Letter of Intent to you for the above position, subject to successful completion of pre-joining formalities.' }
       ],
-      footerNote: 'This is a system-generated document.'
+      footerNote: branding.footerNote
     });
 
     const pdfUrl = savePdfToLocalDisk(buffer, `loi-${id}.pdf`);
@@ -176,8 +179,10 @@ export const generateOfferLetterPdf = async (req: AuthRequest, res: Response) =>
     if (!offer) return res.status(404).json({ message: 'Offer letter not found' });
 
     const candidate = await Candidate.findOne({ _id: offer.candidateId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
 
     const buffer = await generatePdfBuffer({
+      ...branding,
       title: 'Offer Letter',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
       lines: [
@@ -186,7 +191,7 @@ export const generateOfferLetterPdf = async (req: AuthRequest, res: Response) =>
         { label: 'Offer Valid Until', value: offer.validUntil ? new Date(offer.validUntil).toDateString() : 'N/A' },
         { value: offer.offerContent || 'We are pleased to offer you the above position. Please review the terms and confirm your acceptance.' }
       ],
-      footerNote: 'This is a system-generated document.'
+      footerNote: branding.footerNote
     });
 
     const pdfUrl = savePdfToLocalDisk(buffer, `offer-${id}.pdf`);
@@ -270,14 +275,16 @@ export const generateNDAPdf = async (req: AuthRequest, res: Response) => {
     if (!nda) return res.status(404).json({ message: 'NDA not found' });
 
     const candidate = await Candidate.findOne({ _id: nda.candidateId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
 
     const buffer = await generatePdfBuffer({
+      ...branding,
       title: 'Non-Disclosure Agreement',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
       lines: [
         { value: nda.documentContent || 'This Non-Disclosure Agreement governs the confidential information shared during and after the course of employment.' }
       ],
-      footerNote: 'By signing this document, you agree to the terms above.'
+      footerNote: branding.footerNote
     });
 
     const pdfUrl = savePdfToLocalDisk(buffer, `nda-${id}.pdf`);
@@ -354,8 +361,10 @@ export const generateAppointmentLetterPdf = async (req: AuthRequest, res: Respon
     if (!letter) return res.status(404).json({ message: 'Appointment letter not found' });
 
     const candidate = await Candidate.findOne({ _id: letter.candidateId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
 
     const buffer = await generatePdfBuffer({
+      ...branding,
       title: 'Appointment Letter',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
       lines: [
@@ -364,7 +373,7 @@ export const generateAppointmentLetterPdf = async (req: AuthRequest, res: Respon
         { label: 'Probation Period', value: `${letter.probationPeriodMonths} months` },
         { value: letter.letterContent || 'We are pleased to confirm your appointment to the above position on the terms and conditions set out herein.' }
       ],
-      footerNote: 'This is a system-generated document.'
+      footerNote: branding.footerNote
     });
 
     const pdfUrl = savePdfToLocalDisk(buffer, `appointment-${id}.pdf`);
