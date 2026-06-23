@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
-import { Course } from './src/models/Course';
-import { Tenant } from './src/models/Tenant';
-import { User } from './src/models/User';
+import { Course } from '../models/Course';
+import { Tenant } from '../models/Tenant';
+import { User } from '../models/User';
 import dotenv from 'dotenv';
 dotenv.config();
 

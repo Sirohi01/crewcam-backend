@@ -66,9 +66,19 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
 export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { status, page, limit } = req.query;
+    const { status, page, limit, search } = req.query;
     const filter: any = { tenantId };
     if (status) filter.status = status;
+    if (search && String(search).trim()) {
+      const term = String(search).trim();
+      filter.$or = [
+        { jobTitle: { $regex: term, $options: 'i' } },
+        { designation: { $regex: term, $options: 'i' } },
+        { workLocation: { $regex: term, $options: 'i' } },
+        { priority: { $regex: term, $options: 'i' } },
+        { recruitmentStatus: { $regex: term, $options: 'i' } },
+      ];
+    }
 
     const query = ManpowerRequest.find(filter)
       .populate('departmentId', 'name')
