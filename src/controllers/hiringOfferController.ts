@@ -369,9 +369,19 @@ export const generateAppointmentLetterPdf = async (req: AuthRequest, res: Respon
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
       lines: [
         { label: 'Designation', value: letter.designation },
+        { label: 'Department', value: letter.departmentName || '—' },
+        { label: 'Reporting To', value: letter.reportingTo || '—' },
+        { label: 'Work Location', value: letter.workLocation || '—' },
         { label: 'Joining Date', value: letter.joiningDate ? new Date(letter.joiningDate).toDateString() : 'TBD' },
-        { label: 'Probation Period', value: `${letter.probationPeriodMonths} months` },
-        { value: letter.letterContent || 'We are pleased to confirm your appointment to the above position on the terms and conditions set out herein.' }
+        { label: 'Probation Period', value: `${letter.probationPeriodMonths || 6} months` },
+        { label: 'Annual CTC', value: letter.ctc ? `₹${letter.ctc.toLocaleString('en-IN')} ${letter.ctcInWords ? `(${letter.ctcInWords})` : ''}` : '—' },
+        { label: 'Payment Mode', value: letter.paymentMode || '—' },
+        { label: 'Working Hours', value: letter.workingHours || '—' },
+        { label: 'Working Days', value: letter.workingDays || '—' },
+        { label: 'Weekly Off', value: letter.weeklyOff || '—' },
+        { value: '\n' },
+        { value: letter.letterContent || 'We are pleased to confirm your appointment to the above position on the terms and conditions set out herein.' },
+        { value: '\n\nEmployee Acknowledgement\n\nI acknowledge that I have received, read and accepted the terms of this Appointment Letter.\n\nName: ________________________\n\nSignature: ________________________    Date: ________________________' },
       ],
       footerNote: branding.footerNote
     });

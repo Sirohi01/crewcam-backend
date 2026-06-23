@@ -59,16 +59,25 @@ import {
 import {
   createJoiningForm,
   getJoiningForms,
+  verifyJoiningForm,
+  generateJoiningFormPdf,
   createNomination,
   getNominations,
+  verifyNomination,
+  generateNominationPdf,
   createBankPayrollInfo,
   getBankPayrollInfos,
+  verifyBankPayrollInfo,
+  generateBankPayrollPdf,
   createEmergencyContact,
   getEmergencyContacts,
+  verifyEmergencyContact,
   createPolicyAcceptance,
   getPolicyAcceptances,
+  generatePolicyAcceptancePdf,
   createConductAcceptance,
   getConductAcceptances,
+  generateConductAcceptancePdf,
   createAssetAccessForm,
   getAssetAccessForms,
   createEngagementConfirmation,
@@ -151,18 +160,25 @@ router.put('/bgv/:id/report', checkPermission('ORG_WRITE'), updateBGVReport);
 // Step 9: Employee Joining Form
 router.post('/joining-form', checkPermission('ORG_WRITE'), requireStepUnlocked('joiningForm'), createJoiningForm);
 router.get('/joining-form', checkPermission('ORG_READ'), getJoiningForms);
+router.put('/joining-form/:id/verify', checkPermission('ORG_WRITE'), verifyJoiningForm);
+router.post('/joining-form/:id/generate-pdf', checkPermission('ORG_READ'), generateJoiningFormPdf);
 
 // Step 10: Nomination Form
 router.post('/nomination', checkPermission('ORG_WRITE'), requireStepUnlocked('nomination'), createNomination);
 router.get('/nomination', checkPermission('ORG_READ'), getNominations);
+router.put('/nomination/:id/verify', checkPermission('ORG_WRITE'), verifyNomination);
+router.post('/nomination/:id/generate-pdf', checkPermission('ORG_READ'), generateNominationPdf);
 
 // Step 11: Bank & Payroll Information Form
 router.post('/bank-payroll', checkPermission('ORG_WRITE'), requireStepUnlocked('bankPayrollInfo'), createBankPayrollInfo);
 router.get('/bank-payroll', checkPermission('ORG_READ'), getBankPayrollInfos);
+router.put('/bank-payroll/:id/verify', checkPermission('ORG_WRITE'), verifyBankPayrollInfo);
+router.post('/bank-payroll/:id/generate-pdf', checkPermission('ORG_READ'), generateBankPayrollPdf);
 
 // Step 12: Emergency Contact Details Form
 router.post('/emergency-contact', checkPermission('ORG_WRITE'), requireStepUnlocked('emergencyContact'), createEmergencyContact);
 router.get('/emergency-contact', checkPermission('ORG_READ'), getEmergencyContacts);
+router.put('/emergency-contact/:id/verify', checkPermission('ORG_WRITE'), verifyEmergencyContact);
 
 // Step 13: Offer Letter
 router.post('/offer-letter', checkPermission('ORG_WRITE'), requireStepUnlocked('offerLetter'), createOfferLetter);
@@ -179,10 +195,12 @@ router.put('/nda/:id/sign', checkPermission('ORG_WRITE'), signNDA);
 // Step 15: IT Policy & IT Acceptance Form
 router.post('/it-policy-accept', checkPermission('ORG_WRITE'), requireStepUnlocked('itPolicyAcceptance'), createPolicyAcceptance);
 router.get('/it-policy-accept', checkPermission('ORG_READ'), getPolicyAcceptances);
+router.post('/it-policy-accept/:id/generate-pdf', checkPermission('ORG_READ'), generatePolicyAcceptancePdf);
 
 // Step 16: Code of Conduct Acceptance
 router.post('/code-of-conduct-accept', checkPermission('ORG_WRITE'), requireStepUnlocked('conductAcceptance'), createConductAcceptance);
 router.get('/code-of-conduct-accept', checkPermission('ORG_READ'), getConductAcceptances);
+router.post('/code-of-conduct-accept/:id/generate-pdf', checkPermission('ORG_READ'), generateConductAcceptancePdf);
 
 // Step 17: Appointment Letter
 router.post('/appointment-letter', checkPermission('ORG_WRITE'), requireStepUnlocked('appointmentLetter'), createAppointmentLetter);
