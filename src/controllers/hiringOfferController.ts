@@ -31,19 +31,40 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
+    let candidateId = req.body.candidateId;
+    if (!candidateId && req.body.candidateName) {
+      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
+      const lastName = lastNameParts.join(' ') || 'Unknown';
+      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
+      const candidate = await Candidate.findOne({ email, tenantId });
+      if (candidate) {
+        candidateId = candidate._id;
+      } else {
+        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.department || 'Candidate' });
+        candidateId = newCandidate._id;
+      }
+    }
+
     const b = req.body.breakup || {};
-    const monthlyGross = (req.body.annualCTC || 0) / 12;
-    const monthlyDeductions = ((b.pfEmployee || 0)) / 12;
+    const annualCTC = parseFloat(String(req.body.annualCTC || '0').replace(/,/g, '')) || 0;
+    const monthlyGross = annualCTC / 12;
+    const pfDeduction = parseFloat(String(req.body.pfDeduction || '0').replace(/,/g, '')) || 0;
+    const monthlyDeductions = pfDeduction;
 
     const ctcBreakup = await CTCBreakup.create({
       ...req.body,
       tenantId,
+      candidateId,
+      annualCTC,
       preparedBy: req.user!._id,
       monthlyGross,
-      monthlyTakeHome: monthlyGross - monthlyDeductions
+      monthlyTakeHome: monthlyGross - monthlyDeductions,
+      approvalStatus: 'Pending'
     });
 
-    await advanceStep(req, tenantId, req.body.candidateId, 'ctcBreakup', 'completed', (ctcBreakup as any)._id);
+    if (candidateId) {
+      await advanceStep(req, tenantId, candidateId, 'ctcBreakup', 'completed', (ctcBreakup as any)._id);
+    }
     await logAudit(tenantId, req.user!._id, 'CREATE_CTC_BREAKUP', req, { ctcBreakupId: (ctcBreakup as any)._id });
     res.status(201).json(ctcBreakup);
   } catch (error: any) {
@@ -59,8 +80,24 @@ export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const breakups = await CTCBreakup.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(breakups);
+    const breakups = await CTCBreakup.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole')
+      .populate('preparedBy', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const mapped = breakups.map((b: any) => ({
+      _id: b._id,
+      candidateName: b.candidateId ? `${(b.candidateId as any).firstName} ${(b.candidateId as any).lastName}`.trim() : 'Unknown',
+      department: (b.candidateId as any)?.jobRole || 'N/A',
+      annualCTC: b.annualCTC?.toLocaleString() || '0',
+      netTakeHome: b.monthlyTakeHome?.toLocaleString() || '0',
+      status: b.approvalStatus || 'Pending',
+      createdBy: b.preparedBy,
+      updatedAt: b.updatedAt
+    }));
+
+    res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching CTC breakups:', error);
     res.status(500).json({ message: 'Error fetching CTC breakups' });
@@ -73,8 +110,33 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const loi = await LetterOfIntent.create({ ...req.body, tenantId, issuedBy: req.user!._id });
-    await advanceStep(req, tenantId, req.body.candidateId, 'loi', 'in_progress', (loi as any)._id);
+    let candidateId = req.body.candidateId;
+    if (!candidateId && req.body.candidateName) {
+      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
+      const lastName = lastNameParts.join(' ') || 'Unknown';
+      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
+      const candidate = await Candidate.findOne({ email, tenantId });
+      if (candidate) {
+        candidateId = candidate._id;
+      } else {
+        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.position || 'Candidate' });
+        candidateId = newCandidate._id;
+      }
+    }
+
+    const loi = await LetterOfIntent.create({
+      ...req.body,
+      tenantId,
+      candidateId,
+      designation: req.body.position,
+      joiningDate: req.body.joiningDate,
+      issuedBy: req.user!._id,
+      status: 'Issued'
+    });
+    
+    if (candidateId) {
+      await advanceStep(req, tenantId, candidateId, 'loi', 'in_progress', (loi as any)._id);
+    }
     await logAudit(tenantId, req.user!._id, 'CREATE_LOI', req, { loiId: (loi as any)._id });
     res.status(201).json(loi);
   } catch (error: any) {
@@ -90,8 +152,24 @@ export const getLOIs = async (req: AuthRequest, res: Response) => {
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const lois = await LetterOfIntent.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(lois);
+    const lois = await LetterOfIntent.find(filter)
+      .populate('candidateId', 'firstName lastName')
+      .populate('issuedBy', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .lean();
+      
+    const mapped = lois.map((l: any) => ({
+      _id: l._id,
+      candidateName: l.candidateId ? `${(l.candidateId as any).firstName} ${(l.candidateId as any).lastName}`.trim() : 'Unknown',
+      department: 'N/A', // or from candidate if needed
+      position: l.designation || 'N/A',
+      joiningDate: l.joiningDate || null,
+      status: l.status || 'Pending',
+      createdBy: l.issuedBy,
+      updatedAt: l.updatedAt
+    }));
+
+    res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching LOIs:', error);
     res.status(500).json({ message: 'Error fetching LOIs' });

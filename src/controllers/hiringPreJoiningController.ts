@@ -27,28 +27,51 @@ export const createJoiningConfirmation = async (req: AuthRequest, res: Response)
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId } as any);
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+    let candidateId = req.body.candidateId;
+    let candidate;
+    if (!candidateId && req.body.candidateName) {
+      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
+      const lastName = lastNameParts.join(' ') || 'Unknown';
+      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
+      candidate = await Candidate.findOne({ email, tenantId });
+      if (candidate) {
+        candidateId = candidate._id;
+      } else {
+        candidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: 'Candidate' });
+        candidateId = candidate._id;
+      }
+    } else if (candidateId) {
+      candidate = await Candidate.findOne({ _id: candidateId, tenantId } as any);
+    }
+    
+    if (!candidateId || !candidate) return res.status(404).json({ message: 'Candidate not found' });
 
     const confirmation = await JoiningConfirmation.create({
       ...req.body,
       tenantId,
+      candidateId,
+      confirmedJoiningDate: req.body.joiningDate,
       sentBy: req.user!._id,
-      emailSentTo: candidate.email
+      emailSentTo: candidate.email,
+      status: req.body.confirmationStatus || 'Sent'
     });
 
-    await notificationService.sendEmail(
-      String(tenantId),
-      candidate.email,
-      'Joining Confirmation',
-      `Dear ${candidate.firstName}, your joining is confirmed for ${confirmation.confirmedJoiningDate}.`
-    );
+    try {
+      await notificationService.sendEmail(
+        String(tenantId),
+        candidate.email,
+        'Joining Confirmation',
+        `Dear ${candidate.firstName}, your joining is confirmed for ${confirmation.confirmedJoiningDate}.`
+      );
+      confirmation.emailSentAt = new Date();
+      await confirmation.save();
+    } catch (e) {
+      console.warn("Could not send email, continuing");
+    }
 
-    confirmation.status = 'Sent';
-    confirmation.emailSentAt = new Date();
-    await confirmation.save();
-
-    await advanceStep(req, tenantId, req.body.candidateId, 'joiningConfirmation', 'in_progress', (confirmation as any)._id);
+    if (candidateId) {
+      await advanceStep(req, tenantId, candidateId, 'joiningConfirmation', 'in_progress', (confirmation as any)._id);
+    }
 
     await logAudit(tenantId, req.user!._id, 'SEND_JOINING_CONFIRMATION', req, { confirmationId: (confirmation as any)._id });
     res.status(201).json(confirmation);
@@ -65,8 +88,24 @@ export const getJoiningConfirmations = async (req: AuthRequest, res: Response) =
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const confirmations = await JoiningConfirmation.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(confirmations);
+    const confirmations = await JoiningConfirmation.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole')
+      .populate('sentBy', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const mapped = confirmations.map((c: any) => ({
+      _id: c._id,
+      candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : 'Unknown',
+      position: (c.candidateId as any)?.jobRole || 'N/A',
+      joiningDate: c.confirmedJoiningDate || null,
+      reportingTime: c.reportingTime || 'N/A',
+      status: c.status || 'Pending',
+      createdBy: c.sentBy,
+      updatedAt: c.updatedAt
+    }));
+
+    res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching joining confirmations:', error);
     res.status(500).json({ message: 'Error fetching joining confirmations' });
@@ -101,8 +140,37 @@ export const createDocumentChecklist = async (req: AuthRequest, res: Response) =
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const checklist = await DocumentChecklist.create({ ...req.body, tenantId });
-    await advanceStep(req, tenantId, req.body.candidateId, 'documentChecklist', 'in_progress', (checklist as any)._id);
+    let candidateId = req.body.candidateId;
+    if (!candidateId && req.body.candidateName) {
+      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
+      const lastName = lastNameParts.join(' ') || 'Unknown';
+      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
+      const candidate = await Candidate.findOne({ email, tenantId });
+      if (candidate) {
+        candidateId = candidate._id;
+      } else {
+        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.position || 'Candidate' });
+        candidateId = newCandidate._id;
+      }
+    }
+
+    const items = [];
+    if (req.body.aadharStatus) items.push({ documentName: 'Aadhar Card', status: req.body.aadharStatus });
+    if (req.body.panStatus) items.push({ documentName: 'PAN Card', status: req.body.panStatus });
+    if (req.body.eduStatus) items.push({ documentName: 'Educational Certificates', status: req.body.eduStatus });
+
+    const allSubmitted = items.every(i => i.status === 'Submitted' || i.status === 'Verified');
+
+    const checklist = await DocumentChecklist.create({
+      tenantId,
+      candidateId,
+      ...(items.length > 0 ? { items } : {}),
+      overallStatus: allSubmitted ? 'Complete' : 'Incomplete'
+    });
+
+    if (candidateId) {
+      await advanceStep(req, tenantId, candidateId, 'documentChecklist', 'in_progress', (checklist as any)._id);
+    }
     await logAudit(tenantId, req.user!._id, 'CREATE_DOC_CHECKLIST', req, { checklistId: (checklist as any)._id });
     res.status(201).json(checklist);
   } catch (error: any) {
@@ -118,8 +186,28 @@ export const getDocumentChecklists = async (req: AuthRequest, res: Response) => 
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const checklists = await DocumentChecklist.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(checklists);
+    const checklists = await DocumentChecklist.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const mapped = checklists.map((c: any) => {
+      const items = c.items || [];
+      const submittedCount = items.filter((i: any) => i.status === 'Submitted' || i.status === 'Verified').length;
+      
+      return {
+        _id: c._id,
+        candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : 'Unknown',
+        position: (c.candidateId as any)?.jobRole || 'N/A',
+        documentsSubmitted: `${submittedCount}/${items.length || 3}`,
+        bgvStatus: 'Pending', // BGV is a separate schema, so we keep pending or pull if needed
+        status: c.overallStatus || 'Pending',
+        createdBy: null,
+        updatedAt: c.updatedAt
+      };
+    });
+
+    res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching document checklists:', error);
     res.status(500).json({ message: 'Error fetching document checklists' });

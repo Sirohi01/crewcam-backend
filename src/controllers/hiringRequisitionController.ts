@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { ManpowerRequest } from '../models/ManpowerRequest';
 import { InterviewEvaluation } from '../models/InterviewEvaluation';
 import { SelectionApproval } from '../models/SelectionApproval';
+import { Candidate } from '../models/Candidate';
 import { AuditLog } from '../models/AuditLog';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
 import { getSignedCloudinaryPdfUrl, savePdfToCloudinary } from '../utils/pdfGenerator';
@@ -237,8 +238,38 @@ export const createInterviewEvaluation = async (req: AuthRequest, res: Response)
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const evaluation = await InterviewEvaluation.create({ ...req.body, tenantId, interviewerId: req.user!._id });
-    await advanceStep(req, tenantId, req.body.candidateId, 'interviewEvaluation', 'completed', (evaluation as any)._id);
+    let candidateId = req.body.candidateId;
+    if (!candidateId && req.body.candidateName) {
+      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
+      const lastName = lastNameParts.join(' ') || 'Unknown';
+      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
+      const candidate = await Candidate.findOne({ email, tenantId });
+      if (candidate) {
+        candidateId = candidate._id;
+      } else {
+        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: 'Candidate' });
+        candidateId = newCandidate._id;
+      }
+    }
+
+    const evaluation = await InterviewEvaluation.create({
+      ...req.body,
+      tenantId,
+      candidateId,
+      interviewerId: req.user!._id,
+      roundType: req.body.round === 'HR' ? 'HR' : 'Technical',
+      evaluationCriteria: [{ criterion: 'General', score: parseInt(req.body.score) || 3 }],
+      overallScore: parseInt(req.body.score) || 3,
+      recommendation: 'Recommend',
+      interviewerDecision: req.body.hrDecision,
+      strengths: req.body.strengths,
+      improvementAreas: req.body.areasOfImprovement,
+      comments: req.body.interviewer,
+    });
+    
+    if (candidateId) {
+      await advanceStep(req, tenantId, candidateId, 'interviewEvaluation', 'completed', (evaluation as any)._id);
+    }
     await logAudit(tenantId, req.user!._id, 'CREATE_INTERVIEW_EVALUATION', req, { evaluationId: (evaluation as any)._id });
 
     res.status(201).json(evaluation);
@@ -257,8 +288,22 @@ export const getInterviewEvaluations = async (req: AuthRequest, res: Response) =
 
     const evaluations = await InterviewEvaluation.find(filter)
       .populate('interviewerId', 'firstName lastName email')
-      .sort({ createdAt: -1 });
-    res.status(200).json(evaluations);
+      .populate('candidateId', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .lean();
+      
+    const mapped = evaluations.map((ev: any) => ({
+      _id: ev._id,
+      candidateName: ev.candidateId ? `${(ev.candidateId as any).firstName} ${(ev.candidateId as any).lastName}`.trim() : 'Unknown',
+      round: ev.roundType,
+      interviewer: ev.comments || ((ev.interviewerId as any)?.firstName ? `${(ev.interviewerId as any).firstName} ${(ev.interviewerId as any).lastName}` : 'Admin'),
+      score: ev.overallScore ? `${ev.overallScore}/10` : 'N/A',
+      decision: ev.interviewerDecision || 'Pending',
+      createdBy: ev.interviewerId,
+      updatedAt: ev.updatedAt
+    }));
+
+    res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching interview evaluations:', error);
     res.status(500).json({ message: 'Error fetching interview evaluations' });
@@ -271,8 +316,35 @@ export const createSelectionApproval = async (req: AuthRequest, res: Response) =
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const approval = await SelectionApproval.create({ ...req.body, tenantId });
-    await advanceStep(req, tenantId, req.body.candidateId, 'selectionApproval', 'completed', (approval as any)._id);
+    let candidateId = req.body.candidateId;
+    if (!candidateId && req.body.candidateName) {
+      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
+      const lastName = lastNameParts.join(' ') || 'Unknown';
+      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
+      const candidate = await Candidate.findOne({ email, tenantId });
+      if (candidate) {
+        candidateId = candidate._id;
+      } else {
+        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.proposedPosition || 'Candidate' });
+        candidateId = newCandidate._id;
+      }
+    }
+
+    const approval = await SelectionApproval.create({
+      ...req.body,
+      tenantId,
+      candidateId,
+      position: req.body.proposedPosition,
+      proposedCTC: parseFloat(req.body.proposedAnnualCTC?.replace(/,/g, '') || '0') || 0,
+      budgetedCTC: parseFloat(req.body.budgetedCTC?.replace(/,/g, '') || '0') || 0,
+      recruitmentSource: req.body.recruitmentSource,
+      justificationForVariance: req.body.justification,
+      finalStatus: 'Pending'
+    });
+    
+    if (candidateId) {
+      await advanceStep(req, tenantId, candidateId, 'selectionApproval', 'completed', (approval as any)._id);
+    }
     await logAudit(tenantId, req.user!._id, 'CREATE_SELECTION_APPROVAL', req, { approvalId: (approval as any)._id });
 
     res.status(201).json(approval);
@@ -291,8 +363,21 @@ export const getSelectionApprovals = async (req: AuthRequest, res: Response) => 
 
     const approvals = await SelectionApproval.find(filter)
       .populate('approvedBy', 'firstName lastName email')
-      .sort({ createdAt: -1 });
-    res.status(200).json(approvals);
+      .populate('candidateId', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const mapped = approvals.map((app: any) => ({
+      _id: app._id,
+      candidateName: app.candidateId ? `${(app.candidateId as any).firstName} ${(app.candidateId as any).lastName}`.trim() : 'Unknown',
+      proposedPosition: app.position || 'N/A',
+      proposedAnnualCTC: app.proposedCTC?.toLocaleString() || 'N/A',
+      decision: app.finalStatus || 'Pending',
+      createdBy: app.approvedBy,
+      updatedAt: app.updatedAt
+    }));
+
+    res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching selection approvals:', error);
     res.status(500).json({ message: 'Error fetching selection approvals' });
