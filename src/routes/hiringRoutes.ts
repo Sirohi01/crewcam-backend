@@ -17,9 +17,11 @@ import {
 import {
   createManpowerRequest,
   getManpowerRequests,
+  getManpowerRequestById,
   updateManpowerRequest,
   updateManpowerRequestStatus,
   generateManpowerRequestPdf,
+  streamHiringPdf,
   createInterviewEvaluation,
   getInterviewEvaluations,
   createSelectionApproval,
@@ -95,6 +97,8 @@ const router = Router();
 router.use(authenticate);
 router.use(tenantResolver);
 
+router.get('/pdf-view', checkPermission('ORG_READ'), streamHiringPdf);
+
 // ATS Candidate Pipeline
 router.post('/candidates', checkPermission('ORG_WRITE'), createCandidate);
 router.get('/candidates', checkPermission('ORG_READ'), getCandidates);
@@ -111,6 +115,7 @@ router.put('/interviews/:id/feedback', checkPermission('ATS_WRITE'), submitInter
 // Manpower Requests
 router.post('/manpower-request', checkPermission('ORG_WRITE'), createManpowerRequest);
 router.get('/manpower-request', checkPermission('ORG_READ'), getManpowerRequests);
+router.get('/manpower-request/:id', checkPermission('ORG_READ'), getManpowerRequestById);
 router.put('/manpower-request/:id', checkPermission('ORG_WRITE'), updateManpowerRequest);
 router.put('/manpower-request/:id/status', checkPermission('ORG_WRITE'), updateManpowerRequestStatus);
 router.post('/manpower-request/:id/generate-pdf', checkPermission('ORG_READ'), generateManpowerRequestPdf);

@@ -7,7 +7,8 @@ import { NDADocument } from '../models/NDADocument';
 import { AppointmentLetter } from '../models/AppointmentLetter';
 import { Candidate } from '../models/Candidate';
 import { AuditLog } from '../models/AuditLog';
-import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { savePdfToCloudinary } from '../utils/pdfGenerator';
+import { generateCandidateHiringPdfBuffer } from '../utils/candidatePdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
 
@@ -108,7 +109,7 @@ export const generateLOIPdf = async (req: AuthRequest, res: Response) => {
     const candidate = await Candidate.findOne({ _id: loi.candidateId, tenantId } as any);
     const branding = await getCompanyDocumentBranding(tenantId);
 
-    const buffer = await generatePdfBuffer({
+    const buffer = await generateCandidateHiringPdfBuffer({
       ...branding,
       title: 'Letter of Intent',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
@@ -122,7 +123,7 @@ export const generateLOIPdf = async (req: AuthRequest, res: Response) => {
       footerNote: branding.footerNote
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `loi-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `loi-${id}.pdf`);
     loi.pdfUrl = pdfUrl;
     loi.status = 'Sent';
     loi.sentDate = new Date();
@@ -181,7 +182,7 @@ export const generateOfferLetterPdf = async (req: AuthRequest, res: Response) =>
     const candidate = await Candidate.findOne({ _id: offer.candidateId, tenantId } as any);
     const branding = await getCompanyDocumentBranding(tenantId);
 
-    const buffer = await generatePdfBuffer({
+    const buffer = await generateCandidateHiringPdfBuffer({
       ...branding,
       title: 'Offer Letter',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
@@ -194,7 +195,7 @@ export const generateOfferLetterPdf = async (req: AuthRequest, res: Response) =>
       footerNote: branding.footerNote
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `offer-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `offer-${id}.pdf`);
     offer.pdfUrl = pdfUrl;
     offer.status = 'Sent';
     offer.sentDate = new Date();
@@ -277,7 +278,7 @@ export const generateNDAPdf = async (req: AuthRequest, res: Response) => {
     const candidate = await Candidate.findOne({ _id: nda.candidateId, tenantId } as any);
     const branding = await getCompanyDocumentBranding(tenantId);
 
-    const buffer = await generatePdfBuffer({
+    const buffer = await generateCandidateHiringPdfBuffer({
       ...branding,
       title: 'Non-Disclosure Agreement',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
@@ -287,7 +288,7 @@ export const generateNDAPdf = async (req: AuthRequest, res: Response) => {
       footerNote: branding.footerNote
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `nda-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `nda-${id}.pdf`);
     nda.pdfUrl = pdfUrl;
     await nda.save();
 
@@ -363,7 +364,7 @@ export const generateAppointmentLetterPdf = async (req: AuthRequest, res: Respon
     const candidate = await Candidate.findOne({ _id: letter.candidateId, tenantId } as any);
     const branding = await getCompanyDocumentBranding(tenantId);
 
-    const buffer = await generatePdfBuffer({
+    const buffer = await generateCandidateHiringPdfBuffer({
       ...branding,
       title: 'Appointment Letter',
       recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
@@ -376,7 +377,7 @@ export const generateAppointmentLetterPdf = async (req: AuthRequest, res: Respon
       footerNote: branding.footerNote
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `appointment-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `appointment-${id}.pdf`);
     letter.pdfUrl = pdfUrl;
     letter.status = 'Issued';
     letter.issuedDate = new Date();

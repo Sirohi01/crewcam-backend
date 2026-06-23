@@ -5,7 +5,7 @@ import { HiringPerformanceEval } from '../models/HiringPerformanceEval';
 import { IDCard } from '../models/IDCard';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
-import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStepForEmployee } from '../utils/hiringPipelineHelpers';
 
@@ -196,7 +196,7 @@ export const generateIDCardPdf = async (req: AuthRequest, res: Response) => {
       footerNote: branding.footerNote
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `idcard-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `idcard-${id}.pdf`);
     card.pdfUrl = pdfUrl;
     card.status = 'Generated';
     await card.save();

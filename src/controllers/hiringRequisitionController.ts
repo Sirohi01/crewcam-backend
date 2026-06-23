@@ -5,7 +5,8 @@ import { InterviewEvaluation } from '../models/InterviewEvaluation';
 import { SelectionApproval } from '../models/SelectionApproval';
 import { AuditLog } from '../models/AuditLog';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
-import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { getSignedCloudinaryPdfUrl, savePdfToCloudinary } from '../utils/pdfGenerator';
+import { generateManpowerRequisitionPdfBuffer } from '../utils/manpowerPdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
@@ -19,6 +20,31 @@ const logAudit = async (tenantId: any, userId: any, action: string, req: AuthReq
     userAgent: req.headers['user-agent'] as string,
     details
   } as any);
+};
+
+export const streamHiringPdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const url = String(req.query.url || '');
+    if (!url) return res.status(400).json({ message: 'PDF URL is required' });
+
+    const signedUrl = getSignedCloudinaryPdfUrl(url);
+    const response = await fetch(signedUrl);
+    if (!response.ok) {
+      return res.status(response.status).json({
+        message: 'Unable to load PDF from Cloudinary',
+        cloudinaryError: response.headers.get('x-cld-error') || undefined,
+      });
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="hiring-document.pdf"');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.status(200).send(buffer);
+  } catch (error: any) {
+    console.error('Error streaming hiring PDF:', error);
+    res.status(500).json({ message: error.message || 'Error streaming hiring PDF' });
+  }
 };
 
 // Step 1: Manpower Request Form
@@ -40,21 +66,44 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
 export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { status } = req.query;
+    const { status, page, limit } = req.query;
     const filter: any = { tenantId };
     if (status) filter.status = status;
 
-    const requests = await ManpowerRequest.find(filter)
+    const query = ManpowerRequest.find(filter)
       .populate('departmentId', 'name')
       .populate('locationBranchId', 'name city state')
       .populate('reportingTo', 'firstName lastName email')
       .populate('requestedBy', 'firstName lastName email')
       .populate('approvedBy', 'firstName lastName email')
       .sort({ createdAt: -1 });
+    if (page || limit) {
+      const resolvedPage = Math.max(1, Number(page) || 1);
+      const resolvedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+      const [requests, total] = await Promise.all([query.skip((resolvedPage - 1) * resolvedLimit).limit(resolvedLimit), ManpowerRequest.countDocuments(filter)]);
+      return res.status(200).json({ data: requests, meta: { page: resolvedPage, limit: resolvedLimit, total, totalPages: Math.ceil(total / resolvedLimit) } });
+    }
+    const requests = await query;
     res.status(200).json(requests);
   } catch (error: any) {
     console.error('Error fetching manpower requests:', error);
     res.status(500).json({ message: 'Error fetching manpower requests' });
+  }
+};
+
+export const getManpowerRequestById = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const request = await ManpowerRequest.findOne({ _id: req.params.id, tenantId } as any)
+      .populate('departmentId', 'name')
+      .populate('locationBranchId', 'name city state')
+      .populate('reportingTo', 'firstName lastName email')
+      .populate('requestedBy', 'firstName lastName email')
+      .populate('approvedBy', 'firstName lastName email');
+    if (!request) return res.status(404).json({ message: 'Manpower request not found' });
+    res.status(200).json(request);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching manpower request' });
   }
 };
 
@@ -113,7 +162,10 @@ export const generateManpowerRequestPdf = async (req: AuthRequest, res: Response
     const request = await ManpowerRequest.findOne({ _id: req.params.id, tenantId } as any)
       .populate('departmentId', 'name')
       .populate('locationBranchId', 'name city state')
-      .populate('reportingTo', 'firstName lastName');
+      .populate('reportingTo', 'firstName lastName')
+      .populate('requestedBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName')
+      .populate('budgetApprovedBy', 'firstName lastName');
     if (!request) return res.status(404).json({ message: 'Manpower request not found' });
 
     const branding = await getCompanyDocumentBranding(tenantId);
@@ -135,8 +187,40 @@ export const generateManpowerRequestPdf = async (req: AuthRequest, res: Response
       { label: 'Justification', value: request.detailedJustification || request.justification || 'N/A' },
       { label: 'Recruitment status', value: request.recruitmentStatus || request.status },
     ];
-    const buffer = await generatePdfBuffer({ ...branding, title: 'Manpower Requisition Form', lines, footerNote: branding.footerNote });
-    const pdfUrl = savePdfToLocalDisk(buffer, `manpower-request-${request._id}.pdf`);
+    const fullName = (user: any) => user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '';
+    const formatDate = (date?: Date) => date ? new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const buffer = await generateManpowerRequisitionPdfBuffer({
+      ...branding,
+      department,
+      requestDate: formatDate(request.requestDate),
+      requestedBy: fullName(request.requestedBy),
+      designation: request.designation || request.jobTitle,
+      jobTitle: request.jobTitle,
+      position: request.designation || request.jobTitle,
+      employmentType: (request.employmentTypes?.length ? request.employmentTypes : [request.employmentType]).filter(Boolean).join(', '),
+      reportingTo: fullName(request.reportingTo),
+      locationOfPosting: branch,
+      reasonForHiring: (request.hiringReasons?.length ? request.hiringReasons : [request.reasonForHiring]).filter(Boolean).join(', '),
+      replacementName: request.replacementName || '',
+      detailedJustification: request.detailedJustification || request.justification || '',
+      jobDescriptionSummary: request.jobDescriptionSummary || '',
+      kraReport: request.kraReport || (request.keyResponsibilities || []).map((item) => `• ${item}`).join('\n'),
+      salaryCtcMin: request.salaryCtcMin ? String(request.salaryCtcMin) : '',
+      salaryCtcMax: request.salaryCtcMax || request.budgetCTC ? String(request.salaryCtcMax || request.budgetCTC) : '',
+      budgetApprovedBy: fullName(request.budgetApprovedBy),
+      benefits: request.benefits || [],
+      otherBenefits: request.otherBenefits || '',
+      requiredJoiningDate: formatDate(request.requiredJoiningDate),
+      isUrgent: request.isUrgent ? 'Yes' : 'No',
+      requestReceivedOn: formatDate(request.requestReceivedOn),
+      approvedBy: fullName(request.approvedBy),
+      recruitmentStartDate: formatDate(request.recruitmentStartDate),
+      recruitmentStatus: request.recruitmentStatus || request.status,
+      departmentHeadSignature: request.departmentHeadSignature || '',
+      hrHeadSignature: request.hrHeadSignature || '',
+      directorApprovalSignature: request.directorApprovalSignature || '',
+    });
+    const pdfUrl = await savePdfToCloudinary(buffer, `manpower-request-${request._id}.pdf`);
     request.pdfUrl = pdfUrl;
     await request.save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_MANPOWER_REQUEST_PDF', req, { requestId: request._id });

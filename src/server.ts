@@ -30,6 +30,7 @@ import employeeQueryRoutes from './routes/employeeQueryRoutes';
 import liveTrackingRoutes from './routes/liveTrackingRoutes';
 import aiHiringRoutes from './routes/aiHiringRoutes';
 import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
+import locationRoutes from './routes/locationRoutes';
 import path from 'path';
 import { startRetentionJobs } from './utils/retentionJobs';
 import { startCronJobs } from './utils/cronJobs';
@@ -88,6 +89,7 @@ app.use('/api/v1/permissions', permissionAdminRoutes);
 app.use('/api/v1/todos', todoRoutes);
 app.use('/api/v1/queries', employeeQueryRoutes);
 app.use('/api/v1/tracking', liveTrackingRoutes);
+app.use('/api/v1/locations', locationRoutes);
 app.use('/api/v1/ai', aiHiringRoutes);
 app.use('/api/v1/ai', aiEmployeeRoutes);
 
