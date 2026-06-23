@@ -30,8 +30,8 @@ export const syncSidebarDefaults = async (tenantId: string) => {
   const flatRouteUpdates = DEFAULT_SIDEBAR_ITEMS.filter((item) => {
     const current = existingByKey.get(`${item.section}::${item.label}`);
     return current && current.href !== item.href && (
-      current.href.includes('/attendance/') || 
-      current.href.includes('/leaves/') || 
+      current.href.includes('/attendance/') ||
+      current.href.includes('/leaves/') ||
       current.href.includes('/communication/')
     );
   });
@@ -49,6 +49,15 @@ export const syncSidebarDefaults = async (tenantId: string) => {
   });
   await Promise.all(
     hiringRouteGraduations.map((item) =>
+      SidebarConfig.updateOne({ tenantId, section: item.section, label: item.label } as any, { href: item.href })
+    )
+  );
+  const hiringStepHrefFixes = DEFAULT_SIDEBAR_ITEMS.filter((item) => {
+    const current = existingByKey.get(`${item.section}::${item.label}`);
+    return item.section === 'Hiring Process' && item.label.startsWith('Step ') && current && current.href !== item.href;
+  });
+  await Promise.all(
+    hiringStepHrefFixes.map((item) =>
       SidebarConfig.updateOne({ tenantId, section: item.section, label: item.label } as any, { href: item.href })
     )
   );

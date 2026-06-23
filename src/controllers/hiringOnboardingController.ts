@@ -11,7 +11,10 @@ import { EngagementConfirmation } from '../models/EngagementConfirmation';
 import { InductionForm } from '../models/InductionForm';
 import { TeamIntro } from '../models/TeamIntro';
 import { AuditLog } from '../models/AuditLog';
+import { Candidate } from '../models/Candidate';
 import { advanceStep, linkEmployeeId } from '../utils/hiringPipelineHelpers';
+import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
+import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -63,6 +66,16 @@ export const createNomination = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    // Validate that nominee shares sum to exactly 100%
+    const nominees: any[] = req.body.nominees || [];
+    if (nominees.length > 0) {
+      const totalShare = nominees.reduce((sum: number, n: any) => sum + (Number(n.sharePercentage) || 0), 0);
+      if (Math.abs(totalShare - 100) > 0.01) {
+        return res.status(400).json({ message: `Nominee share percentages must total 100%. Current total: ${totalShare}%` });
+      }
+    }
+
     const nomination = await Nomination.create({ ...req.body, tenantId, status: 'Submitted' });
     await advanceStep(req, tenantId, req.body.candidateId, 'nomination', 'completed', (nomination as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_NOMINATION', req, { nominationId: (nomination as any)._id });
@@ -355,3 +368,322 @@ export const getTeamIntros = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Error fetching team intros' });
   }
 };
+
+// ── WP3 Action: Verify Joining Form ───────────────────────────────────────────
+export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const form = await JoiningForm.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      {
+        status: 'Verified', approvalStatus: 'Verified',
+        'declaration.hrVerifiedBy': req.body.hrVerifiedBy,
+        'declaration.hrDesignation': req.body.hrDesignation,
+        'declaration.hrDate': new Date(),
+        'declaration.hrRemarks': req.body.hrRemarks,
+      },
+      { returnDocument: 'after' }
+    );
+    if (!form) return res.status(404).json({ message: 'Joining form not found' });
+    await advanceStep(req, tenantId, String(form.candidateId), 'joiningForm', 'approved', form._id as any);
+    await logAudit(tenantId, req.user!._id, 'VERIFY_JOINING_FORM', req, { formId: id });
+    res.status(200).json(form);
+  } catch (error: any) {
+    console.error('Error verifying joining form:', error);
+    res.status(500).json({ message: 'Error verifying joining form' });
+  }
+};
+
+// ── WP3 Action: Generate Joining Form PDF ─────────────────────────────────────
+export const generateJoiningFormPdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const form = await JoiningForm.findOne({ _id: id, tenantId } as any);
+    if (!form) return res.status(404).json({ message: 'Joining form not found' });
+    const candidate = await Candidate.findOne({ _id: form.candidateId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
+    const pd = form.personalDetails as any;
+    const cd = form.contactDetails as any;
+    const pos = form.positionDetails as any;
+    const idf = form.identificationDetails as any;
+
+    const eduRows = (form.educationDetails || []).flatMap((e: any, i: number) => [
+      { label: `Education ${i + 1}: Qualification`, value: e.qualification || '—' },
+      { label: `Education ${i + 1}: Institution`, value: e.institution || '—' },
+      { label: `Education ${i + 1}: Year / Grade`, value: `${e.yearOfPassing || '—'} / ${e.percentage || '—'}` },
+    ]);
+    const empRows = (form.previousEmployment || []).flatMap((e: any, i: number) => [
+      { label: `Employment ${i + 1}: Company`, value: e.companyName || '—' },
+      { label: `Employment ${i + 1}: Designation`, value: e.designation || '—' },
+      { label: `Employment ${i + 1}: Period`, value: `${e.fromDate ? new Date(e.fromDate).toDateString() : '—'} – ${e.toDate ? new Date(e.toDate).toDateString() : 'Present'}` },
+      { label: `Employment ${i + 1}: Reason for Leaving`, value: e.reasonForLeaving || '—' },
+    ]);
+
+    const buffer = await generatePdfBuffer({
+      ...branding,
+      title: 'Employee Joining Form',
+      recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : pd?.fullName,
+      lines: [
+        // Personal
+        { label: 'Full Name', value: pd?.fullName || '—' },
+        { label: 'Date of Birth', value: pd?.dob ? new Date(pd.dob).toDateString() : '—' },
+        { label: 'Gender', value: pd?.gender || '—' },
+        { label: 'Blood Group', value: pd?.bloodGroup || '—' },
+        { label: 'Marital Status', value: pd?.maritalStatus || '—' },
+        { label: 'Nationality', value: pd?.nationality || '—' },
+        { label: 'Father / Mother', value: pd?.fatherMotherName || '—' },
+        // Contact
+        { label: 'Mobile', value: cd?.mobileNumber || '—' },
+        { label: 'Personal Email', value: cd?.personalEmail || '—' },
+        { label: 'Current Address', value: cd?.currentAddress || '—' },
+        { label: 'Permanent Address', value: cd?.permanentAddress || '—' },
+        // Position
+        { label: 'Designation', value: pos?.designation || '—' },
+        { label: 'Department', value: pos?.department || '—' },
+        { label: 'Joining Date', value: pos?.joiningDate ? new Date(pos.joiningDate).toDateString() : '—' },
+        { label: 'Employee Category', value: pos?.employeeCategory || '—' },
+        { label: 'Work Location', value: pos?.workLocation || '—' },
+        { label: 'Employee Code', value: pos?.empCode || '—' },
+        // Identification (masked)
+        { label: 'PAN', value: idf?.panNumber ? `XXXXX${String(idf.panNumber).slice(-4)}` : '—' },
+        { label: 'Aadhaar', value: idf?.aadhaarNumber ? `XXXX XXXX ${String(idf.aadhaarNumber).slice(-4)}` : '—' },
+        { label: 'UAN', value: idf?.uanNumber || '—' },
+        { label: 'PF Number', value: idf?.pfNumber || '—' },
+        // Education
+        ...(eduRows.length > 0 ? [{ value: '\n— Education Details —' }, ...eduRows] : []),
+        // Employment
+        ...(empRows.length > 0 ? [{ value: '\n— Previous Employment —' }, ...empRows] : []),
+        // Status
+        { label: 'Form Status', value: (form as any).approvalStatus || '—' },
+        // Declaration
+        { value: '\n\nDeclaration: I hereby declare that the information provided above is true and correct to the best of my knowledge.\n\nEmployee Signature: ________________________    Date: ________________________\n\nHR Verified By: ________________________    Designation: ________________________    Date: ________________________' },
+      ],
+      footerNote: branding.footerNote,
+    });
+
+    const pdfUrl = await savePdfToCloudinary(buffer, `joining-form-${id}.pdf`);
+    (form as any).pdfUrl = pdfUrl;
+    await (form as any).save();
+    await logAudit(tenantId, req.user!._id, 'GENERATE_JOINING_FORM_PDF', req, { formId: id });
+    res.status(200).json({ pdfUrl, form });
+  } catch (error: any) {
+    console.error('Error generating joining form PDF:', error);
+    res.status(500).json({ message: 'Error generating joining form PDF' });
+  }
+};
+
+// ── WP3 Action: Verify Nomination ─────────────────────────────────────────────
+export const verifyNomination = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const nom = await Nomination.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { status: 'Verified', hrVerifiedBy: req.body.hrVerifiedBy, hrVerifiedDate: new Date(), hrRemarks: req.body.hrRemarks },
+      { returnDocument: 'after' }
+    );
+    if (!nom) return res.status(404).json({ message: 'Nomination not found' });
+    await advanceStep(req, tenantId, String(nom.candidateId), 'nomination', 'approved', nom._id as any);
+    await logAudit(tenantId, req.user!._id, 'VERIFY_NOMINATION', req, { nominationId: id });
+    res.status(200).json(nom);
+  } catch (error: any) {
+    console.error('Error verifying nomination:', error);
+    res.status(500).json({ message: 'Error verifying nomination' });
+  }
+};
+
+// ── WP3 Action: Generate Nomination PDF ───────────────────────────────────────
+export const generateNominationPdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const nom = await Nomination.findOne({ _id: id, tenantId } as any);
+    if (!nom) return res.status(404).json({ message: 'Nomination not found' });
+    const candidate = await Candidate.findOne({ _id: nom.candidateId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
+    const nominees = (nom.nominees || []);
+    const totalShare = nominees.reduce((s: number, n: any) => s + (n.sharePercentage || 0), 0);
+
+    const buffer = await generatePdfBuffer({
+      ...branding,
+      title: `Nomination Form — ${nom.nominationType}`,
+      recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
+      lines: [
+        { label: 'Nomination Type', value: nom.nominationType },
+        { label: 'Total Share Allocated', value: `${totalShare}%` },
+        ...nominees.flatMap((n: any, i: number) => ([
+          { label: `Nominee ${i + 1}`, value: n.name },
+          { label: 'Relationship', value: n.relationship || '—' },
+          { label: 'DOB', value: n.dob ? new Date(n.dob).toDateString() : '—' },
+          { label: 'Share %', value: `${n.sharePercentage || 0}%` },
+          { label: 'Minor', value: n.isMinor ? `Yes — Guardian: ${n.guardianName || '—'}` : 'No' },
+        ])),
+        { value: '\n\nDeclaration: I hereby nominate the above person(s).\n\nEmployee Signature: ________________________    Date: ________________________\n\nWitness: ________________________    HR Verification: ________________________' },
+      ],
+      footerNote: branding.footerNote,
+    });
+
+    const pdfUrl = await savePdfToCloudinary(buffer, `nomination-${id}.pdf`);
+    (nom as any).pdfUrl = pdfUrl;
+    await nom.save();
+    await logAudit(tenantId, req.user!._id, 'GENERATE_NOMINATION_PDF', req, { nominationId: id });
+    res.status(200).json({ pdfUrl, nom });
+  } catch (error: any) {
+    console.error('Error generating nomination PDF:', error);
+    res.status(500).json({ message: 'Error generating nomination PDF' });
+  }
+};
+
+// ── WP3 Action: Verify Bank & Payroll ─────────────────────────────────────────
+export const verifyBankPayrollInfo = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const info = await BankPayrollInfo.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { status: 'Verified', hrVerifiedBy: req.body.hrVerifiedBy, hrVerifiedDate: new Date(), hrRemarks: req.body.hrRemarks },
+      { returnDocument: 'after' }
+    );
+    if (!info) return res.status(404).json({ message: 'Bank/payroll record not found' });
+    await advanceStep(req, tenantId, String(info.candidateId), 'bankPayrollInfo', 'approved', info._id as any);
+    await logAudit(tenantId, req.user!._id, 'VERIFY_BANK_PAYROLL', req, { infoId: id });
+    res.status(200).json(info);
+  } catch (error: any) {
+    console.error('Error verifying bank/payroll info:', error);
+    res.status(500).json({ message: 'Error verifying bank/payroll info' });
+  }
+};
+
+// ── WP3 Action: Generate Bank & Payroll PDF ───────────────────────────────────
+export const generateBankPayrollPdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const info = await BankPayrollInfo.findOne({ _id: id, tenantId } as any);
+    if (!info) return res.status(404).json({ message: 'Bank/payroll record not found' });
+    const candidate = await Candidate.findOne({ _id: info.candidateId, tenantId } as any);
+    const branding = await getCompanyDocumentBranding(tenantId);
+
+    const buffer = await generatePdfBuffer({
+      ...branding,
+      title: 'Bank & Payroll Information',
+      recipientName: candidate ? `${candidate.firstName} ${candidate.lastName}` : undefined,
+      lines: [
+        { label: 'Bank Name', value: info.bankName },
+        { label: 'Account Holder', value: info.accountHolderName },
+        { label: 'Account Number', value: `XXXXXX${(info as any).getDecryptedAccountNumber?.().slice(-4) || '****'}` },
+        { label: 'IFSC Code', value: info.ifscCode },
+        { label: 'Branch', value: info.branchName || '—' },
+        { label: 'Account Type', value: info.accountType },
+        { label: 'PAN', value: `XXXXX${(info as any).getDecryptedPan?.()?.slice(-4) || '****'}` },
+        { label: 'UAN', value: info.uanNumber || '—' },
+        { label: 'Payment Mode', value: (info as any).paymentMode || '—' },
+        { label: 'PF Applicable', value: (info as any).pfApplicable ? 'Yes' : 'No' },
+        { label: 'ESI Applicable', value: (info as any).esiApplicable ? 'Yes' : 'No' },
+        { label: 'Status', value: info.status },
+        { value: '\n\nEmployee Declaration: I hereby declare the above details are correct.\n\nEmployee Signature: ________________________    Date: ________________________\n\nHR Verification: ________________________    Date: ________________________' },
+      ],
+      footerNote: branding.footerNote,
+    });
+
+    const pdfUrl = await savePdfToCloudinary(buffer, `bank-payroll-${id}.pdf`);
+    (info as any).pdfUrl = pdfUrl;
+    await (info as any).save();
+    await logAudit(tenantId, req.user!._id, 'GENERATE_BANK_PAYROLL_PDF', req, { infoId: id });
+    res.status(200).json({ pdfUrl, info });
+  } catch (error: any) {
+    console.error('Error generating bank/payroll PDF:', error);
+    res.status(500).json({ message: 'Error generating bank/payroll PDF' });
+  }
+};
+
+// ── WP3 Action: Verify Emergency Contact ──────────────────────────────────────
+export const verifyEmergencyContact = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const contact = await EmergencyContact.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { status: 'Verified', hrVerifiedBy: req.body.hrVerifiedBy, hrVerifiedDate: new Date(), hrRemarks: req.body.hrRemarks },
+      { returnDocument: 'after' }
+    );
+    if (!contact) return res.status(404).json({ message: 'Emergency contact not found' });
+    await advanceStep(req, tenantId, String(contact.candidateId), 'emergencyContact', 'approved', contact._id as any);
+    await logAudit(tenantId, req.user!._id, 'VERIFY_EMERGENCY_CONTACT', req, { contactId: id });
+    res.status(200).json(contact);
+  } catch (error: any) {
+    console.error('Error verifying emergency contact:', error);
+    res.status(500).json({ message: 'Error verifying emergency contact' });
+  }
+};
+
+// ── WP3 Action: Generate Policy Acceptance PDF ────────────────────────────────
+export const generatePolicyAcceptancePdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const acc = await PolicyAcceptance.findOne({ _id: id, tenantId } as any);
+    if (!acc) return res.status(404).json({ message: 'Policy acceptance not found' });
+    const branding = await getCompanyDocumentBranding(tenantId);
+
+    const buffer = await generatePdfBuffer({
+      ...branding,
+      title: `IT Policy Acknowledgement${acc.policyTitle ? ` — ${acc.policyTitle}` : ''}`,
+      lines: [
+        { label: 'Policy Version', value: acc.policyVersion || '—' },
+        { label: 'Signer', value: acc.signerName || '—' },
+        { label: 'Designation', value: acc.signerDesignation || '—' },
+        { label: 'Accepted At', value: acc.acceptedAt ? new Date(acc.acceptedAt).toLocaleString() : '—' },
+        { value: acc.policyContentSnapshot || 'Refer to the company IT Policy document.' },
+        { value: '\n\nI acknowledge that I have read, understood and agree to comply with the IT Policy.\n\nSignature: ________________________    Date: ________________________' },
+      ],
+      footerNote: branding.footerNote,
+    });
+
+    const pdfUrl = await savePdfToCloudinary(buffer, `it-policy-accept-${id}.pdf`);
+    (acc as any).pdfUrl = pdfUrl;
+    await (acc as any).save();
+    await logAudit(tenantId, req.user!._id, 'GENERATE_POLICY_ACCEPTANCE_PDF', req, { acceptanceId: id });
+    res.status(200).json({ pdfUrl, acc });
+  } catch (error: any) {
+    console.error('Error generating policy acceptance PDF:', error);
+    res.status(500).json({ message: 'Error generating policy acceptance PDF' });
+  }
+};
+
+// ── WP3 Action: Generate Conduct Acceptance PDF ───────────────────────────────
+export const generateConductAcceptancePdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const acc = await ConductAcceptance.findOne({ _id: id, tenantId } as any);
+    if (!acc) return res.status(404).json({ message: 'Conduct acceptance not found' });
+    const branding = await getCompanyDocumentBranding(tenantId);
+
+    const buffer = await generatePdfBuffer({
+      ...branding,
+      title: `Code of Conduct Acknowledgement${acc.conductTitle ? ` — ${acc.conductTitle}` : ''}`,
+      lines: [
+        { label: 'Version', value: acc.version || '—' },
+        { label: 'Signer', value: acc.signerName || '—' },
+        { label: 'Designation', value: acc.signerDesignation || '—' },
+        { label: 'Accepted At', value: acc.acceptedAt ? new Date(acc.acceptedAt).toLocaleString() : '—' },
+        { value: acc.conductContentSnapshot || 'Refer to the company Code of Conduct document.' },
+        { value: '\n\nI acknowledge that I have read, understood and agree to abide by the Code of Conduct.\n\nSignature: ________________________    Date: ________________________' },
+      ],
+      footerNote: branding.footerNote,
+    });
+
+    const pdfUrl = await savePdfToCloudinary(buffer, `conduct-accept-${id}.pdf`);
+    (acc as any).pdfUrl = pdfUrl;
+    await (acc as any).save();
+    await logAudit(tenantId, req.user!._id, 'GENERATE_CONDUCT_ACCEPTANCE_PDF', req, { acceptanceId: id });
+    res.status(200).json({ pdfUrl, acc });
+  } catch (error: any) {
+    console.error('Error generating conduct acceptance PDF:', error);
+    res.status(500).json({ message: 'Error generating conduct acceptance PDF' });
+  }
+};
+

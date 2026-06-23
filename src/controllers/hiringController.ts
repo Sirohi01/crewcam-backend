@@ -49,7 +49,33 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
 export const getCandidates = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const candidates = await Candidate.find({ tenantId } as any).sort({ createdAt: -1 });
+    const { status, page, limit, search } = req.query;
+    const filter: any = { tenantId };
+    if (status) filter.status = status;
+    if (search && String(search).trim()) {
+      const term = String(search).trim();
+      filter.$or = [
+        { firstName: { $regex: term, $options: 'i' } },
+        { lastName: { $regex: term, $options: 'i' } },
+        { email: { $regex: term, $options: 'i' } },
+        { phone: { $regex: term, $options: 'i' } },
+        { jobRole: { $regex: term, $options: 'i' } },
+        { source: { $regex: term, $options: 'i' } },
+      ];
+    }
+
+    const query = Candidate.find(filter).sort({ createdAt: -1 });
+    if (page || limit) {
+      const resolvedPage = Math.max(1, Number(page) || 1);
+      const resolvedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+      const [candidates, total] = await Promise.all([
+        query.skip((resolvedPage - 1) * resolvedLimit).limit(resolvedLimit),
+        Candidate.countDocuments(filter),
+      ]);
+      return res.status(200).json({ data: candidates, meta: { page: resolvedPage, limit: resolvedLimit, total, totalPages: Math.ceil(total / resolvedLimit) } });
+    }
+
+    const candidates = await query;
     res.status(200).json(candidates);
   } catch (error: any) {
     console.error('Error fetching candidates:', error);
@@ -203,12 +229,38 @@ export const getAllInterviews = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+    const { status, roundType, page, limit, search } = req.query;
+    const filter: any = { tenantId };
+    if (status) filter.status = status;
+    if (roundType) filter.roundType = roundType;
+    if (search && String(search).trim()) {
+      const term = String(search).trim();
+      filter.$or = [
+        { roundType: { $regex: term, $options: 'i' } },
+        { status: { $regex: term, $options: 'i' } },
+        { mode: { $regex: term, $options: 'i' } },
+        { location: { $regex: term, $options: 'i' } },
+        { meetingLink: { $regex: term, $options: 'i' } },
+        { feedback: { $regex: term, $options: 'i' } },
+      ];
+    }
 
-    const interviews = await Interview.find({ tenantId } as any)
+    const query = Interview.find(filter)
       .populate('candidateId', 'firstName lastName email jobRole status')
       .populate('interviewerId', 'firstName lastName email')
       .sort({ scheduledDate: -1 });
 
+    if (page || limit) {
+      const resolvedPage = Math.max(1, Number(page) || 1);
+      const resolvedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+      const [interviews, total] = await Promise.all([
+        query.skip((resolvedPage - 1) * resolvedLimit).limit(resolvedLimit),
+        Interview.countDocuments(filter),
+      ]);
+      return res.status(200).json({ data: interviews, meta: { page: resolvedPage, limit: resolvedLimit, total, totalPages: Math.ceil(total / resolvedLimit) } });
+    }
+
+    const interviews = await query;
     res.status(200).json(interviews);
   } catch (error: any) {
     console.error('Error fetching interviews:', error);
