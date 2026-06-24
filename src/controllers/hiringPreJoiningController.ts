@@ -4,6 +4,9 @@ import { JoiningConfirmation } from '../models/JoiningConfirmation';
 import { DocumentChecklist } from '../models/DocumentChecklist';
 import { BGVRequest } from '../models/BGVRequest';
 import { Candidate } from '../models/Candidate';
+import { LetterOfIntent } from '../models/LetterOfIntent';
+import { ManpowerRequest } from '../models/ManpowerRequest';
+import { HiringPipelineState } from '../models/HiringPipelineState';
 import { AuditLog } from '../models/AuditLog';
 import { notificationService } from '../services/notificationService';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
@@ -32,11 +35,26 @@ export const createJoiningConfirmation = async (req: AuthRequest, res: Response)
     
     if (!candidateId || !candidate) return res.status(404).json({ message: 'Candidate not found' });
 
+    // Step 6 must be safe even when it is called directly: derive all known
+    // joining details from the already-saved LOI and approved manpower request.
+    const pipeline = await HiringPipelineState.findOne({ tenantId, candidateId } as any).lean();
+    const manpowerRef = pipeline?.steps?.find((step: any) => step.key === 'manpowerRequest')?.refId;
+    const [loi, manpower] = await Promise.all([
+      LetterOfIntent.findOne({ tenantId, candidateId } as any).sort({ createdAt: -1 }).lean(),
+      manpowerRef ? ManpowerRequest.findOne({ _id: manpowerRef, tenantId } as any)
+        .populate('reportingTo', 'firstName lastName')
+        .lean() : Promise.resolve(null),
+    ]);
+
     const confirmation = await JoiningConfirmation.create({
       ...req.body,
       tenantId,
       candidateId,
-      confirmedJoiningDate: req.body.confirmedJoiningDate || req.body.joiningDate,
+      confirmedJoiningDate: req.body.confirmedJoiningDate || req.body.joiningDate || loi?.joiningDate || manpower?.requiredJoiningDate,
+      reportingManagerId: req.body.reportingManagerId || (manpower?.reportingTo as any)?._id || manpower?.reportingTo,
+      reportingManagerName: req.body.reportingManagerName || `${(manpower?.reportingTo as any)?.firstName || ''} ${(manpower?.reportingTo as any)?.lastName || ''}`.trim() || undefined,
+      reportingTime: req.body.reportingTime || '09:30 AM',
+      reportingLocation: req.body.reportingLocation || manpower?.workLocation,
       sentBy: req.user!._id,
       emailSentTo: candidate.email,
       status: req.body.confirmationStatus || 'Sent'

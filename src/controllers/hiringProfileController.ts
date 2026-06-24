@@ -28,7 +28,10 @@ export const getCandidateHiringProfile = async (req: AuthRequest, res: Response)
     const state = await HiringPipelineState.findOne({ tenantId, candidateId } as any).lean();
     const manpowerRef = state?.steps?.find((step: any) => step.key === 'manpowerRequest')?.refId;
     const [manpower, interview, evaluation, selectionApproval, ctcBreakup, loi, joiningConfirmation, joiningForm] = await Promise.all([
-      manpowerRef ? ManpowerRequest.findOne({ _id: manpowerRef, tenantId }).lean() : null,
+      manpowerRef ? ManpowerRequest.findOne({ _id: manpowerRef, tenantId })
+        .populate('reportingTo', 'firstName lastName employeeCode')
+        .populate('locationBranchId', 'name location address city state country')
+        .lean() : null,
       Interview.findOne({ tenantId, candidateId } as any).sort({ scheduledAt: -1, createdAt: -1 }).lean(),
       InterviewEvaluation.findOne({ tenantId, candidateId } as any).sort({ createdAt: -1 }).lean(),
       SelectionApproval.findOne({ tenantId, candidateId } as any).sort({ createdAt: -1 }).lean(),
