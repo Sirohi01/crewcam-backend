@@ -4,6 +4,7 @@ import { ManpowerRequest } from '../models/ManpowerRequest';
 import { InterviewEvaluation } from '../models/InterviewEvaluation';
 import { SelectionApproval } from '../models/SelectionApproval';
 import { Candidate } from '../models/Candidate';
+import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
 import { getSignedCloudinaryPdfUrl, savePdfToCloudinary } from '../utils/pdfGenerator';
@@ -248,33 +249,59 @@ export const createInterviewEvaluation = async (req: AuthRequest, res: Response)
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    let candidateId = req.body.candidateId;
-    if (!candidateId && req.body.candidateName) {
-      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Unknown';
-      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
-      const candidate = await Candidate.findOne({ email, tenantId });
-      if (candidate) {
-        candidateId = candidate._id;
-      } else {
-        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: 'Candidate' });
-        candidateId = newCandidate._id;
-      }
-    }
+    const { candidateId } = req.body;
+    if (!candidateId) return res.status(400).json({ message: 'Candidate is required for an interview evaluation' });
+
+    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+
+    const permittedRounds = ['Telephonic', 'Technical', 'HR', 'Managerial', 'Final'];
+    const roundType = permittedRounds.includes(req.body.roundType)
+      ? req.body.roundType
+      : (permittedRounds.includes(req.body.round) ? req.body.round : 'HR');
+    const permittedRecommendations = ['Strongly Recommend', 'Recommend', 'Neutral', 'Not Recommend', 'Strongly Reject'];
+    const recommendation = permittedRecommendations.includes(req.body.recommendation)
+      ? req.body.recommendation
+      : 'Recommend';
+    const criteriaInput = Array.isArray(req.body.evaluationCriteria)
+      ? req.body.evaluationCriteria
+      : (Array.isArray(req.body.competencyRatings) ? req.body.competencyRatings : []);
+    const evaluationCriteria = criteriaInput.length
+      ? criteriaInput.map((row: any) => ({
+          criterion: String(row.criterion || 'General'),
+          score: Math.min(5, Math.max(1, Number(row.score) || 3)),
+          ...(row.remarks ? { remarks: String(row.remarks) } : {}),
+        }))
+      : [{ criterion: 'General', score: Math.min(5, Math.max(1, Number(req.body.overallScore || req.body.score) || 3)) }];
+    const calculatedOverall = Math.round((evaluationCriteria.reduce((sum: number, row: any) => sum + row.score, 0) / evaluationCriteria.length) * 10) / 10;
+    const suppliedOverall = Number(req.body.overallScore);
 
     const evaluation = await InterviewEvaluation.create({
-      ...req.body,
       tenantId,
       candidateId,
       interviewerId: req.user!._id,
-      roundType: req.body.round === 'HR' ? 'HR' : 'Technical',
-      evaluationCriteria: [{ criterion: 'General', score: parseInt(req.body.score) || 3 }],
-      overallScore: parseInt(req.body.score) || 3,
-      recommendation: 'Recommend',
-      interviewerDecision: req.body.hrDecision,
-      strengths: req.body.strengths,
-      improvementAreas: req.body.areasOfImprovement,
-      comments: req.body.interviewer,
+      ...(req.body.interviewId ? { interviewId: req.body.interviewId } : {}),
+      roundType,
+      evaluationCriteria,
+      competencyRatings: evaluationCriteria,
+      overallScore: Number.isFinite(suppliedOverall) && suppliedOverall > 0 ? Math.min(5, Math.max(1, suppliedOverall)) : calculatedOverall,
+      recommendation,
+      ...(req.body.strengths ? { strengths: req.body.strengths } : {}),
+      ...(req.body.weaknesses ? { weaknesses: req.body.weaknesses } : {}),
+      ...(req.body.comments ? { comments: req.body.comments } : {}),
+      ...(req.body.candidateSnapshot ? { candidateSnapshot: req.body.candidateSnapshot } : {}),
+      ...(req.body.improvementAreas || req.body.areasOfImprovement ? { improvementAreas: req.body.improvementAreas || req.body.areasOfImprovement } : {}),
+      ...(req.body.proposedSalaryMin !== '' && req.body.proposedSalaryMin !== undefined ? { proposedSalaryMin: Number(req.body.proposedSalaryMin) } : {}),
+      ...(req.body.proposedSalaryMax !== '' && req.body.proposedSalaryMax !== undefined ? { proposedSalaryMax: Number(req.body.proposedSalaryMax) } : {}),
+      ...(req.body.earliestJoiningDate ? { earliestJoiningDate: req.body.earliestJoiningDate } : {}),
+      ...(req.body.interviewerDecision || req.body.hrDecision ? { interviewerDecision: req.body.interviewerDecision || req.body.hrDecision } : {}),
+      ...(req.body.interviewerRemarks ? { interviewerRemarks: req.body.interviewerRemarks } : {}),
+      ...(req.body.hrStatus ? { hrStatus: req.body.hrStatus } : {}),
+      ...(req.body.hrName ? { hrName: req.body.hrName } : {}),
+      ...(req.body.hrRemarks ? { hrRemarks: req.body.hrRemarks } : {}),
+      ...(req.body.hodDecision ? { hodDecision: req.body.hodDecision } : {}),
+      ...(req.body.hodName ? { hodName: req.body.hodName } : {}),
+      ...(req.body.hodRemarks ? { hodRemarks: req.body.hodRemarks } : {}),
     });
     
     if (candidateId) {
@@ -301,6 +328,8 @@ export const getInterviewEvaluations = async (req: AuthRequest, res: Response) =
       .populate('candidateId', 'firstName lastName')
       .sort({ createdAt: -1 })
       .lean();
+
+    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: evaluations });
       
     const mapped = evaluations.map((ev: any) => ({
       _id: ev._id,
@@ -326,29 +355,26 @@ export const createSelectionApproval = async (req: AuthRequest, res: Response) =
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    let candidateId = req.body.candidateId;
-    if (!candidateId && req.body.candidateName) {
-      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Unknown';
-      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
-      const candidate = await Candidate.findOne({ email, tenantId });
-      if (candidate) {
-        candidateId = candidate._id;
-      } else {
-        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.proposedPosition || 'Candidate' });
-        candidateId = newCandidate._id;
-      }
-    }
+    const candidateId = req.body.candidateId;
+    if (!candidateId) return res.status(400).json({ message: 'Candidate is required for selection approval' });
+    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+
+    const approvalChain = Array.isArray(req.body.approvalChain) ? req.body.approvalChain.filter((entry: any) => entry?.approverId) : [];
+    if (!approvalChain.length) return res.status(400).json({ message: 'Add at least one approver from the employee list' });
+    const approverIds = approvalChain.map((entry: any) => entry.approverId);
+    const employees = await User.find({ tenantId, _id: { $in: approverIds } } as any).select('_id').lean();
+    if (employees.length !== approverIds.length) return res.status(400).json({ message: 'Every approval-chain approver must be an employee from this company' });
 
     const approval = await SelectionApproval.create({
       ...req.body,
       tenantId,
       candidateId,
-      position: req.body.proposedPosition,
-      proposedCTC: parseFloat(req.body.proposedAnnualCTC?.replace(/,/g, '') || '0') || 0,
-      budgetedCTC: parseFloat(req.body.budgetedCTC?.replace(/,/g, '') || '0') || 0,
-      recruitmentSource: req.body.recruitmentSource,
-      justificationForVariance: req.body.justification,
+      approvalChain,
+      jobRole: req.body.jobRole || req.body.proposedPosition || 'Candidate',
+      proposedCTC: Number(req.body.proposedCTC ?? String(req.body.proposedAnnualCTC || '0').replace(/,/g, '')) || 0,
+      budgetedCTC: Number(String(req.body.budgetedCTC || '0').replace(/,/g, '')) || 0,
+      justificationForVariance: req.body.justificationForVariance || req.body.justification || undefined,
       finalStatus: 'Pending'
     });
     
@@ -374,13 +400,16 @@ export const getSelectionApprovals = async (req: AuthRequest, res: Response) => 
     const approvals = await SelectionApproval.find(filter)
       .populate('approvedBy', 'firstName lastName email')
       .populate('candidateId', 'firstName lastName')
+      .populate('approvalChain.approverId', 'firstName lastName employeeCode')
       .sort({ createdAt: -1 })
       .lean();
+
+    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: approvals });
 
     const mapped = approvals.map((app: any) => ({
       _id: app._id,
       candidateName: app.candidateId ? `${(app.candidateId as any).firstName} ${(app.candidateId as any).lastName}`.trim() : 'Unknown',
-      proposedPosition: app.position || 'N/A',
+      proposedPosition: app.jobRole || 'N/A',
       proposedAnnualCTC: app.proposedCTC?.toLocaleString() || 'N/A',
       decision: app.finalStatus || 'Pending',
       createdBy: app.approvedBy,
@@ -399,6 +428,7 @@ export const updateSelectionApprovalDecision = async (req: AuthRequest, res: Res
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
     const { finalStatus } = req.body;
+    if (!['Approved', 'Rejected'].includes(finalStatus)) return res.status(400).json({ message: 'Decision must be Approved or Rejected' });
 
     const approval = await SelectionApproval.findOneAndUpdate(
       { _id: id, tenantId } as any,
@@ -406,6 +436,13 @@ export const updateSelectionApprovalDecision = async (req: AuthRequest, res: Res
       { returnDocument: 'after' }
     );
     if (!approval) return res.status(404).json({ message: 'Selection approval not found' });
+
+    const chainEntry = (approval.approvalChain || []).find((entry: any) => String(entry.approverId) === String(req.user!._id));
+    if (chainEntry) {
+      chainEntry.status = finalStatus;
+      chainEntry.actionDate = new Date();
+      await approval.save();
+    }
 
     if (finalStatus === 'Approved') {
       await advanceStep(req, tenantId, String(approval.candidateId), 'selectionApproval', 'approved', approval._id as any);

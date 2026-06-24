@@ -6,6 +6,7 @@ import { IDCard } from '../models/IDCard';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
+import { generateIdCardPdfBuffer } from '../utils/idCardPdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStepForEmployee } from '../utils/hiringPipelineHelpers';
 
@@ -182,22 +183,24 @@ export const generateIDCardPdf = async (req: AuthRequest, res: Response) => {
     const employee = await User.findOne({ _id: card.employeeId, tenantId } as any);
     const branding = await getCompanyDocumentBranding(tenantId);
 
-    const buffer = await generatePdfBuffer({
-      ...branding,
-      title: card.cardType,
-      recipientName: employee ? `${employee.firstName} ${employee.lastName}` : undefined,
-      lines: [
-        { label: 'Employee Code', value: card.employeeCode || 'N/A' },
-        { label: 'Designation', value: card.designation || 'N/A' },
-        { label: 'Blood Group', value: card.bloodGroup || 'N/A' },
-        { label: 'Valid From', value: card.validFrom ? new Date(card.validFrom).toDateString() : 'N/A' },
-        { label: 'Valid To', value: card.validTo ? new Date(card.validTo).toDateString() : 'N/A' }
-      ],
-      footerNote: branding.footerNote
+    const qrPayload = card.qrPayload || JSON.stringify({ employeeId: String(card.employeeId), employeeCode: card.employeeCode || employee?.employeeCode || '', company: branding.companyName });
+    const buffer = await generateIdCardPdfBuffer({
+      companyName: branding.companyName,
+      employeeName: employee ? `${employee.firstName} ${employee.lastName}` : 'Employee',
+      employeeCode: card.employeeCode || employee?.employeeCode || '',
+      designation: card.designation || '',
+      ...(card.bloodGroup ? { bloodGroup: card.bloodGroup } : {}),
+      ...(card.validTo ? { validTo: card.validTo } : {}),
+      cardType: card.cardType,
+      theme: card.cardTheme || '#0e4778',
+      frontLabel: card.frontLabel || 'EMPLOYEE IDENTITY CARD',
+      backNote: card.backNote || 'Scan this QR code to verify employee identity.',
+      qrPayload,
     });
 
     const pdfUrl = await savePdfToCloudinary(buffer, `idcard-${id}.pdf`);
     card.pdfUrl = pdfUrl;
+    card.qrPayload = qrPayload;
     card.status = 'Generated';
     await card.save();
 

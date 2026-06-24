@@ -10,11 +10,13 @@ import { AssetAccessForm } from '../models/AssetAccessForm';
 import { EngagementConfirmation } from '../models/EngagementConfirmation';
 import { InductionForm } from '../models/InductionForm';
 import { TeamIntro } from '../models/TeamIntro';
+import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { Candidate } from '../models/Candidate';
 import { advanceStep, linkEmployeeId } from '../utils/hiringPipelineHelpers';
-import { generatePdfBuffer, savePdfToLocalDisk } from '../utils/pdfGenerator';
+import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
+import bcrypt from 'bcrypt';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -386,9 +388,62 @@ export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
       { returnDocument: 'after' }
     );
     if (!form) return res.status(404).json({ message: 'Joining form not found' });
+
+    // A verified joining form is the only candidate-to-employee handoff.
+    // Re-use an already linked employee when this verification is retried.
+    const candidate = await Candidate.findOne({ _id: form.candidateId, tenantId } as any);
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found for joining form' });
+
+    let employeeId = form.employeeId as any;
+    let employeeCreated = false;
+    if (!employeeId) {
+      const existingEmployee = await User.findOne({ tenantId, email: candidate.email } as any);
+      if (existingEmployee) {
+        employeeId = existingEmployee._id;
+      } else {
+        const [firstName, ...rest] = String((form.personalDetails as any)?.fullName || `${candidate.firstName} ${candidate.lastName}`).trim().split(/\s+/);
+        const position = form.positionDetails as any;
+        const contact = form.contactDetails as any;
+        const identity = form.identificationDetails as any;
+        const emergency = form.emergencyContact as any;
+        const employee = await User.create({
+          tenantId,
+          firstName: firstName || candidate.firstName,
+          lastName: rest.join(' ') || candidate.lastName || 'Employee',
+          email: candidate.email,
+          passwordHash: await bcrypt.hash(`Joining-${String(candidate._id).slice(-8)}!`, 10),
+          profilePictureUrl: candidate.profileImageUrl,
+          employeeCode: position?.empCode || undefined,
+          mobileNumber: contact?.mobileNumber || candidate.phone,
+          dateOfJoining: position?.joiningDate || undefined,
+          dateOfBirth: (form.personalDetails as any)?.dob || undefined,
+          gender: String((form.personalDetails as any)?.gender || '').toLowerCase() || undefined,
+          bloodGroup: (form.personalDetails as any)?.bloodGroup || undefined,
+          maritalStatus: String((form.personalDetails as any)?.maritalStatus || '').toLowerCase() || undefined,
+          currentAddress: contact?.currentAddress || undefined,
+          permanentAddress: contact?.permanentAddress || undefined,
+          panNumber: identity?.panNumber || undefined,
+          aadhaarNumber: identity?.aadhaarNumber || undefined,
+          uanNumber: identity?.uanNumber || undefined,
+          emergencyContactName: emergency?.name || undefined,
+          emergencyContactRelation: emergency?.relationship || undefined,
+          emergencyContactNumber: emergency?.mobileNumber || undefined,
+          employmentStatus: 'active',
+          isActive: true,
+          createdBy: req.user?._id,
+        } as any);
+        employeeId = employee._id;
+        employeeCreated = true;
+      }
+
+      form.employeeId = employeeId;
+      await form.save();
+    }
+
+    await linkEmployeeId(tenantId, String(form.candidateId), String(employeeId));
     await advanceStep(req, tenantId, String(form.candidateId), 'joiningForm', 'approved', form._id as any);
-    await logAudit(tenantId, req.user!._id, 'VERIFY_JOINING_FORM', req, { formId: id });
-    res.status(200).json(form);
+    await logAudit(tenantId, req.user!._id, 'VERIFY_JOINING_FORM', req, { formId: id, employeeId, employeeCreated });
+    res.status(200).json({ form, employeeId });
   } catch (error: any) {
     console.error('Error verifying joining form:', error);
     res.status(500).json({ message: 'Error verifying joining form' });
@@ -463,7 +518,7 @@ export const generateJoiningFormPdf = async (req: AuthRequest, res: Response) =>
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `joining-form-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `joining-form-${id}.pdf`);
     (form as any).pdfUrl = pdfUrl;
     await (form as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_JOINING_FORM_PDF', req, { formId: id });
@@ -525,7 +580,7 @@ export const generateNominationPdf = async (req: AuthRequest, res: Response) => 
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `nomination-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `nomination-${id}.pdf`);
     (nom as any).pdfUrl = pdfUrl;
     await nom.save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_NOMINATION_PDF', req, { nominationId: id });
@@ -588,7 +643,7 @@ export const generateBankPayrollPdf = async (req: AuthRequest, res: Response) =>
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `bank-payroll-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `bank-payroll-${id}.pdf`);
     (info as any).pdfUrl = pdfUrl;
     await (info as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_BANK_PAYROLL_PDF', req, { infoId: id });
@@ -642,7 +697,7 @@ export const generatePolicyAcceptancePdf = async (req: AuthRequest, res: Respons
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `it-policy-accept-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `it-policy-accept-${id}.pdf`);
     (acc as any).pdfUrl = pdfUrl;
     await (acc as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_POLICY_ACCEPTANCE_PDF', req, { acceptanceId: id });
@@ -676,7 +731,7 @@ export const generateConductAcceptancePdf = async (req: AuthRequest, res: Respon
       footerNote: branding.footerNote,
     });
 
-    const pdfUrl = savePdfToLocalDisk(buffer, `conduct-accept-${id}.pdf`);
+    const pdfUrl = await savePdfToCloudinary(buffer, `conduct-accept-${id}.pdf`);
     (acc as any).pdfUrl = pdfUrl;
     await (acc as any).save();
     await logAudit(tenantId, req.user!._id, 'GENERATE_CONDUCT_ACCEPTANCE_PDF', req, { acceptanceId: id });

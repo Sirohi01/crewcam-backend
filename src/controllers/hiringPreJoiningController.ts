@@ -4,6 +4,9 @@ import { JoiningConfirmation } from '../models/JoiningConfirmation';
 import { DocumentChecklist } from '../models/DocumentChecklist';
 import { BGVRequest } from '../models/BGVRequest';
 import { Candidate } from '../models/Candidate';
+import { LetterOfIntent } from '../models/LetterOfIntent';
+import { ManpowerRequest } from '../models/ManpowerRequest';
+import { HiringPipelineState } from '../models/HiringPipelineState';
 import { AuditLog } from '../models/AuditLog';
 import { notificationService } from '../services/notificationService';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
@@ -27,30 +30,31 @@ export const createJoiningConfirmation = async (req: AuthRequest, res: Response)
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    let candidateId = req.body.candidateId;
-    let candidate;
-    if (!candidateId && req.body.candidateName) {
-      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Unknown';
-      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
-      candidate = await Candidate.findOne({ email, tenantId });
-      if (candidate) {
-        candidateId = candidate._id;
-      } else {
-        candidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: 'Candidate' });
-        candidateId = candidate._id;
-      }
-    } else if (candidateId) {
-      candidate = await Candidate.findOne({ _id: candidateId, tenantId } as any);
-    }
+    const candidateId = req.body.candidateId;
+    const candidate = candidateId ? await Candidate.findOne({ _id: candidateId, tenantId } as any) : null;
     
     if (!candidateId || !candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    // Step 6 must be safe even when it is called directly: derive all known
+    // joining details from the already-saved LOI and approved manpower request.
+    const pipeline = await HiringPipelineState.findOne({ tenantId, candidateId } as any).lean();
+    const manpowerRef = pipeline?.steps?.find((step: any) => step.key === 'manpowerRequest')?.refId;
+    const [loi, manpower] = await Promise.all([
+      LetterOfIntent.findOne({ tenantId, candidateId } as any).sort({ createdAt: -1 }).lean(),
+      manpowerRef ? ManpowerRequest.findOne({ _id: manpowerRef, tenantId } as any)
+        .populate('reportingTo', 'firstName lastName')
+        .lean() : Promise.resolve(null),
+    ]);
 
     const confirmation = await JoiningConfirmation.create({
       ...req.body,
       tenantId,
       candidateId,
-      confirmedJoiningDate: req.body.joiningDate,
+      confirmedJoiningDate: req.body.confirmedJoiningDate || req.body.joiningDate || loi?.joiningDate || manpower?.requiredJoiningDate,
+      reportingManagerId: req.body.reportingManagerId || (manpower?.reportingTo as any)?._id || manpower?.reportingTo,
+      reportingManagerName: req.body.reportingManagerName || `${(manpower?.reportingTo as any)?.firstName || ''} ${(manpower?.reportingTo as any)?.lastName || ''}`.trim() || undefined,
+      reportingTime: req.body.reportingTime || '09:30 AM',
+      reportingLocation: req.body.reportingLocation || manpower?.workLocation,
       sentBy: req.user!._id,
       emailSentTo: candidate.email,
       status: req.body.confirmationStatus || 'Sent'
@@ -93,6 +97,8 @@ export const getJoiningConfirmations = async (req: AuthRequest, res: Response) =
       .populate('sentBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .lean();
+
+    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: confirmations });
 
     const mapped = confirmations.map((c: any) => ({
       _id: c._id,
@@ -140,26 +146,26 @@ export const createDocumentChecklist = async (req: AuthRequest, res: Response) =
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    let candidateId = req.body.candidateId;
-    if (!candidateId && req.body.candidateName) {
-      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Unknown';
-      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
-      const candidate = await Candidate.findOne({ email, tenantId });
-      if (candidate) {
-        candidateId = candidate._id;
-      } else {
-        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.position || 'Candidate' });
-        candidateId = newCandidate._id;
-      }
-    }
+    const candidateId = req.body.candidateId;
+    if (!candidateId) return res.status(400).json({ message: 'Candidate is required for document checklist' });
+    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
 
-    const items = [];
-    if (req.body.aadharStatus) items.push({ documentName: 'Aadhar Card', status: req.body.aadharStatus });
-    if (req.body.panStatus) items.push({ documentName: 'PAN Card', status: req.body.panStatus });
-    if (req.body.eduStatus) items.push({ documentName: 'Educational Certificates', status: req.body.eduStatus });
+    const items = Array.isArray(req.body.items) && req.body.items.length
+      ? req.body.items.map((item: any) => ({
+          documentName: String(item.documentName || 'Document'),
+          isMandatory: item.isMandatory !== 'false' && item.isMandatory !== false,
+          status: item.status || 'Pending',
+          fileUrl: item.fileUrl || undefined,
+          remarks: item.remarks || undefined,
+        }))
+      : [
+          ...(req.body.aadharStatus ? [{ documentName: 'Aadhaar Card', status: req.body.aadharStatus }] : []),
+          ...(req.body.panStatus ? [{ documentName: 'PAN Card', status: req.body.panStatus }] : []),
+          ...(req.body.eduStatus ? [{ documentName: 'Educational Certificates', status: req.body.eduStatus }] : []),
+        ];
 
-    const allSubmitted = items.every(i => i.status === 'Submitted' || i.status === 'Verified');
+    const allSubmitted = items.every((i: { status: string }) => i.status === 'Submitted' || i.status === 'Verified');
 
     const checklist = await DocumentChecklist.create({
       tenantId,
@@ -190,6 +196,8 @@ export const getDocumentChecklists = async (req: AuthRequest, res: Response) => 
       .populate('candidateId', 'firstName lastName jobRole')
       .sort({ createdAt: -1 })
       .lean();
+
+    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: checklists });
 
     const mapped = checklists.map((c: any) => {
       const items = c.items || [];
