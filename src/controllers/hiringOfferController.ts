@@ -161,6 +161,31 @@ export const getLOIs = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateLOIStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const { status } = req.body;
+    const allowed = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired'];
+    if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid LOI status' });
+
+    const loi = await LetterOfIntent.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { status, ...(status === 'Sent' ? { sentDate: new Date() } : {}), ...(status === 'Accepted' || status === 'Declined' ? { respondedDate: new Date() } : {}) },
+      { returnDocument: 'after' }
+    );
+    if (!loi) return res.status(404).json({ message: 'LOI not found' });
+
+    if (status === 'Sent' || status === 'Accepted') await advanceStep(req, tenantId, String(loi.candidateId), 'loi', 'completed', loi._id as any);
+    if (status === 'Declined' || status === 'Expired') await advanceStep(req, tenantId, String(loi.candidateId), 'loi', 'rejected', loi._id as any);
+    await logAudit(tenantId, req.user!._id, 'UPDATE_LOI_STATUS', req, { loiId: id, status });
+    res.json(loi);
+  } catch (error: any) {
+    console.error('Error updating LOI status:', error);
+    res.status(500).json({ message: 'Error updating LOI status' });
+  }
+};
+
 export const generateLOIPdf = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;

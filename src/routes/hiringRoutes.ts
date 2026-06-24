@@ -35,6 +35,7 @@ import {
   getCTCBreakups,
   createLOI,
   getLOIs,
+  updateLOIStatus,
   generateLOIPdf,
   createOfferLetter,
   getOfferLetters,
@@ -162,6 +163,7 @@ router.post('/ctc-breakup/:id/generate-pdf', checkPermission('ORG_READ'), genera
 // Step 5: Letter of Intent (LOI)
 router.post('/loi', checkPermission('ORG_WRITE'), requireStepUnlocked('loi'), createLOI);
 router.get('/loi', checkPermission('ORG_READ'), getLOIs);
+router.put('/loi/:id/status', checkPermission('ORG_WRITE'), updateLOIStatus);
 router.post('/loi/:id/generate-pdf', checkPermission('ORG_WRITE'), generateLOIPdf);
 
 // Step 6: Joining Confirmation Mail
