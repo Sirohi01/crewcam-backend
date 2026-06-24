@@ -14,6 +14,11 @@ export interface ISelectionApproval extends ITenantScoped {
   jobRole: string;
   departmentId?: Types.ObjectId;
   proposedCTC?: number;
+  budgetedCTC?: number;
+  recruitmentSource?: string;
+  recruitmentSummary?: string;
+  justificationForVariance?: string;
+  approvalNotes?: string;
   approvalChain: IApprovalStep[];
   finalStatus: 'Pending' | 'Approved' | 'Rejected';
   approvedBy?: Types.ObjectId;
@@ -25,6 +30,11 @@ const selectionApprovalSchema = new Schema<ISelectionApproval>({
   jobRole: { type: String, required: true },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
   proposedCTC: { type: Number },
+  budgetedCTC: { type: Number },
+  recruitmentSource: { type: String },
+  recruitmentSummary: { type: String },
+  justificationForVariance: { type: String },
+  approvalNotes: { type: String },
   approvalChain: [{
     approverId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     role: { type: String },

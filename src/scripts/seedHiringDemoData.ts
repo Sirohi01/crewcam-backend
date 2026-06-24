@@ -41,7 +41,9 @@ import { TeamIntro } from '../models/TeamIntro';
 import { ProbationReview } from '../models/ProbationReview';
 import { HiringPerformanceEval } from '../models/HiringPerformanceEval';
 import { IDCard } from '../models/IDCard';
+import { ManpowerRequest } from '../models/ManpowerRequest';
 import { advanceStep, advanceStepForEmployee, linkEmployeeId } from '../utils/hiringPipelineHelpers';
+import bcrypt from 'bcrypt';
 
 const days = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000);
 
@@ -73,6 +75,16 @@ async function seedCandidate(candidate: any, actor: any, employee: any) {
   console.log(`\n--- Seeding ${label} ---`);
 
   let ctcId: any;
+
+  await runStep('Step 1 - Approved Manpower Request', async () => {
+    const manpower = await ManpowerRequest.create({
+      tenantId, jobTitle: candidate.jobRole, designation: candidate.jobRole,
+      numberOfPositions: 1, employmentType: 'Full-time', reasonForHiring: 'New Position',
+      workLocation: 'Head Office', status: 'Approved', requestedBy: actor._id, approvedBy: actor._id,
+      requestDate: days(-14), requiredJoiningDate: days(21), budgetCTC: 1200000,
+    });
+    await advanceStep(req, tenantId, candidateId, 'manpowerRequest', 'approved', manpower._id as any);
+  });
 
   await runStep('Step 0/2 - Interview + Evaluation', async () => {
     const interview = await Interview.create({
@@ -339,7 +351,7 @@ async function main() {
 
   const candidates = (await Candidate.find({}).setOptions({ bypassTenantIsolation: true }).sort({ createdAt: 1 }))
     .filter((c) => !!c.tenantId)
-    .slice(0, 4);
+    .slice(0, 1);
   if (!candidates.length) throw new Error('No candidates with a valid tenantId found to seed');
 
   const usersByTenant = new Map<string, any[]>();
@@ -359,7 +371,23 @@ async function main() {
       continue;
     }
     const actor = users[0];
-    const employee = users[1] || users[0];
+    let employee = await User.findOne({ tenantId, email: candidate.email } as any);
+    if (!employee) {
+      employee = await User.create({
+        tenantId,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        email: candidate.email,
+        passwordHash: await bcrypt.hash('SeedHiring@123', 10),
+        profilePictureUrl: candidate.profileImageUrl,
+        mobileNumber: candidate.phone,
+        employeeCode: `SEED-${String(candidate._id).slice(-6).toUpperCase()}`,
+        employmentStatus: 'active',
+        isActive: true,
+        createdBy: actor._id,
+      } as any);
+      console.log(`Created seeded employee ${employee._id} for ${candidate.email}`);
+    }
     await seedCandidate(candidate, actor, employee);
   }
 

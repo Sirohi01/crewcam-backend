@@ -11,6 +11,10 @@ export interface IIDCard extends ITenantScoped {
   validFrom?: Date;
   validTo?: Date;
   photoUrl?: string;
+  cardTheme?: string;
+  frontLabel?: string;
+  backNote?: string;
+  qrPayload?: string;
   pdfUrl?: string;
   status: 'Pending' | 'Generated' | 'Printed' | 'Issued';
   issuedDate?: Date;
@@ -27,6 +31,10 @@ const idCardSchema = new Schema<IIDCard>({
   validFrom: { type: Date },
   validTo: { type: Date },
   photoUrl: { type: String },
+  cardTheme: { type: String, default: '#0e4778' },
+  frontLabel: { type: String, default: 'EMPLOYEE IDENTITY CARD' },
+  backNote: { type: String, default: 'Scan this QR code to verify employee identity.' },
+  qrPayload: { type: String },
   pdfUrl: { type: String },
   status: { type: String, enum: ['Pending', 'Generated', 'Printed', 'Issued'], default: 'Pending' },
   issuedDate: { type: Date },

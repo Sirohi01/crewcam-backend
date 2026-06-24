@@ -31,31 +31,22 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    let candidateId = req.body.candidateId;
-    if (!candidateId && req.body.candidateName) {
-      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Unknown';
-      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
-      const candidate = await Candidate.findOne({ email, tenantId });
-      if (candidate) {
-        candidateId = candidate._id;
-      } else {
-        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.department || 'Candidate' });
-        candidateId = newCandidate._id;
-      }
-    }
+    const candidateId = req.body.candidateId;
+    if (!candidateId) return res.status(400).json({ message: 'Candidate is required for CTC breakup' });
+    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
 
-    const b = req.body.breakup || {};
     const annualCTC = parseFloat(String(req.body.annualCTC || '0').replace(/,/g, '')) || 0;
     const monthlyGross = annualCTC / 12;
-    const pfDeduction = parseFloat(String(req.body.pfDeduction || '0').replace(/,/g, '')) || 0;
-    const monthlyDeductions = pfDeduction;
+    const breakup = Object.fromEntries(Object.entries(req.body.breakup || {}).map(([key, value]) => [key, Number(value) || 0]));
+    const monthlyDeductions = ((breakup.pfEmployee || 0) + (breakup.otherDeductions || 0)) / 12;
 
     const ctcBreakup = await CTCBreakup.create({
       ...req.body,
       tenantId,
       candidateId,
       annualCTC,
+      breakup,
       preparedBy: req.user!._id,
       monthlyGross,
       monthlyTakeHome: monthlyGross - monthlyDeductions,
@@ -86,6 +77,8 @@ export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: breakups });
+
     const mapped = breakups.map((b: any) => ({
       _id: b._id,
       candidateName: b.candidateId ? `${(b.candidateId as any).firstName} ${(b.candidateId as any).lastName}`.trim() : 'Unknown',
@@ -110,25 +103,16 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    let candidateId = req.body.candidateId;
-    if (!candidateId && req.body.candidateName) {
-      const [firstName, ...lastNameParts] = req.body.candidateName.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Unknown';
-      const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'candidate'}@example.com`;
-      const candidate = await Candidate.findOne({ email, tenantId });
-      if (candidate) {
-        candidateId = candidate._id;
-      } else {
-        const newCandidate = await Candidate.create({ tenantId, firstName, lastName, email, phone: '0000000000', jobRole: req.body.position || 'Candidate' });
-        candidateId = newCandidate._id;
-      }
-    }
+    const candidateId = req.body.candidateId;
+    if (!candidateId) return res.status(400).json({ message: 'Candidate is required for LOI' });
+    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
 
     const loi = await LetterOfIntent.create({
       ...req.body,
       tenantId,
       candidateId,
-      designation: req.body.position,
+      designation: req.body.designation || req.body.position,
       joiningDate: req.body.joiningDate,
       issuedBy: req.user!._id,
       status: 'Issued'
@@ -157,6 +141,7 @@ export const getLOIs = async (req: AuthRequest, res: Response) => {
       .populate('issuedBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .lean();
+    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: lois });
       
     const mapped = lois.map((l: any) => ({
       _id: l._id,
