@@ -115,7 +115,7 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
       designation: req.body.designation || req.body.position,
       joiningDate: req.body.joiningDate,
       issuedBy: req.user!._id,
-      status: 'Issued'
+      status: 'Draft'
     });
     
     if (candidateId) {
