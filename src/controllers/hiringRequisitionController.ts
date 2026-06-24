@@ -400,6 +400,7 @@ export const getSelectionApprovals = async (req: AuthRequest, res: Response) => 
     const approvals = await SelectionApproval.find(filter)
       .populate('approvedBy', 'firstName lastName email')
       .populate('candidateId', 'firstName lastName')
+      .populate('approvalChain.approverId', 'firstName lastName employeeCode')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -427,6 +428,7 @@ export const updateSelectionApprovalDecision = async (req: AuthRequest, res: Res
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
     const { finalStatus } = req.body;
+    if (!['Approved', 'Rejected'].includes(finalStatus)) return res.status(400).json({ message: 'Decision must be Approved or Rejected' });
 
     const approval = await SelectionApproval.findOneAndUpdate(
       { _id: id, tenantId } as any,
@@ -434,6 +436,13 @@ export const updateSelectionApprovalDecision = async (req: AuthRequest, res: Res
       { returnDocument: 'after' }
     );
     if (!approval) return res.status(404).json({ message: 'Selection approval not found' });
+
+    const chainEntry = (approval.approvalChain || []).find((entry: any) => String(entry.approverId) === String(req.user!._id));
+    if (chainEntry) {
+      chainEntry.status = finalStatus;
+      chainEntry.actionDate = new Date();
+      await approval.save();
+    }
 
     if (finalStatus === 'Approved') {
       await advanceStep(req, tenantId, String(approval.candidateId), 'selectionApproval', 'approved', approval._id as any);
