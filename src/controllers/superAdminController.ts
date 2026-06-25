@@ -60,7 +60,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     try {
       passwordSchema.parse(adminPassword);
     } catch (zodError: any) {
-      return res.status(400).json({ message: zodError.errors[0].message });
+      return res.status(400).json({ message: zodError?.errors?.[0]?.message || 'Invalid password format' });
     }
 
     const tenant = new Tenant({
@@ -180,7 +180,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
         try {
           passwordSchema.parse(adminPassword);
         } catch (zodError: any) {
-          return res.status(400).json({ message: zodError.errors[0].message });
+          return res.status(400).json({ message: zodError?.errors?.[0]?.message || 'Invalid password format' });
         }
         const salt = await bcrypt.genSalt(10);
         adminUser.passwordHash = await bcrypt.hash(adminPassword, salt);
