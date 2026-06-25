@@ -67,7 +67,7 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
       status: 'Present',
       locationIp: req.ip || '',
       clockInLocation: { lat, lng }
-    });
+    } as any);
 
     res.status(201).json({ message: 'Clocked in successfully', attendance });
   } catch (error: any) {
@@ -291,7 +291,7 @@ export const hrOverrideAttendance = async (req: AuthRequest, res: Response) => {
           payload.totalHours = duration.asHours();
         }
       }
-      const attendance = await Attendance.create(payload);
+      const attendance = await Attendance.create(payload as any);
       return res.status(201).json({ message: 'Attendance created successfully', attendance });
     }
   } catch (error: any) {

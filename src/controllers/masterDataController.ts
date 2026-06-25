@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
 import { LeaveType } from '../models/LeaveType';
 import { Degree } from '../models/Degree';
@@ -195,7 +195,7 @@ const makeShiftTimingHandlers = () => {
       try {
         const tenantId = requireTenantId(req);
         const { name, code, description, checkInTime, checkOutTime, gracePeriodLC, gracePeriodEG, halfDayThresholdMHD, absentThreshold, isSandwichRuleApplicable, weekOffDays, workOnWeekOffMultiplier, workOnHolidayMultiplier } = req.body;
-        const duplicate = await (ShiftTiming as any).findOne({ tenantId, isActive: true, $or: [{ name }, { code: code || undefined }] } as any);
+        const duplicate = await mongoose.model('ShiftTiming').findOne({ tenantId, isActive: true, $or: [{ name }, { code: code || undefined }] } as any);
         if (duplicate) return res.status(400).json({ message: 'Shift timing with same name or code already exists' });
         const item = new ShiftTiming({
           name, code, description, checkInTime, checkOutTime, gracePeriodLC: Number(gracePeriodLC), gracePeriodEG: Number(gracePeriodEG), halfDayThresholdMHD: Number(halfDayThresholdMHD), absentThreshold, isSandwichRuleApplicable, weekOffDays, workOnWeekOffMultiplier: Number(workOnWeekOffMultiplier), workOnHolidayMultiplier: Number(workOnHolidayMultiplier),
@@ -211,10 +211,10 @@ const makeShiftTimingHandlers = () => {
     update: async (req: AuthRequest, res: Response) => {
       try {
         const { name, code, description, checkInTime, checkOutTime, gracePeriodLC, gracePeriodEG, halfDayThresholdMHD, absentThreshold, isSandwichRuleApplicable, weekOffDays, workOnWeekOffMultiplier, workOnHolidayMultiplier, isActive } = req.body;
-        const item = await (ShiftTiming as any).findOneAndUpdate(
+        const item = await mongoose.model('ShiftTiming').findOneAndUpdate(
           { _id: req.params.id, tenantId: requireTenantId(req) } as any,
-          { $set: { name, code, description, checkInTime, checkOutTime, gracePeriodLC: Number(gracePeriodLC), gracePeriodEG: Number(gracePeriodEG), halfDayThresholdMHD: Number(halfDayThresholdMHD), absentThreshold, isSandwichRuleApplicable, weekOffDays, workOnWeekOffMultiplier: Number(workOnWeekOffMultiplier), workOnHolidayMultiplier: Number(workOnHolidayMultiplier), isActive, updatedBy: req.user?._id } },
-          { returnDocument: 'after', runValidators: true }
+          { $set: { name, code, description, checkInTime, checkOutTime, gracePeriodLC: Number(gracePeriodLC), gracePeriodEG: Number(gracePeriodEG), halfDayThresholdMHD: Number(halfDayThresholdMHD), absentThreshold, isSandwichRuleApplicable, weekOffDays, workOnWeekOffMultiplier: Number(workOnWeekOffMultiplier), workOnHolidayMultiplier: Number(workOnHolidayMultiplier), isActive, updatedBy: req.user?._id } } as any,
+          { returnDocument: 'after', runValidators: true } as any
         );
         if (!item) return res.status(404).json({ message: 'Shift timing not found' });
         res.status(200).json(item);

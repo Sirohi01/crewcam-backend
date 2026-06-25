@@ -117,7 +117,7 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
       issuedBy: req.user!._id,
       status: 'Draft'
     });
-    
+
     if (candidateId) {
       await advanceStep(req, tenantId, candidateId, 'loi', 'in_progress', (loi as any)._id);
     }
@@ -142,7 +142,7 @@ export const getLOIs = async (req: AuthRequest, res: Response) => {
       .sort({ createdAt: -1 })
       .lean();
     if (candidateId || req.query.details === 'true') return res.status(200).json({ data: lois });
-      
+
     const mapped = lois.map((l: any) => ({
       _id: l._id,
       candidateName: l.candidateId ? `${(l.candidateId as any).firstName} ${(l.candidateId as any).lastName}`.trim() : 'Unknown',
