@@ -21,6 +21,7 @@ import {
 import {
   createManpowerRequest,
   getManpowerRequests,
+  getManpowerRequestStats,
   getManpowerRequestById,
   updateManpowerRequest,
   updateManpowerRequestStatus,
@@ -143,6 +144,7 @@ router.put('/interviews/:id/feedback', checkPermission('ATS_WRITE'), submitInter
 // Manpower Requests
 router.post('/manpower-request', checkPermission('ORG_WRITE'), createManpowerRequest);
 router.get('/manpower-request', checkPermission('ORG_READ'), getManpowerRequests);
+router.get('/manpower-request/stats', checkPermission('ORG_READ'), getManpowerRequestStats);
 router.get('/manpower-request/:id', checkPermission('ORG_READ'), getManpowerRequestById);
 router.put('/manpower-request/:id', checkPermission('ORG_WRITE'), updateManpowerRequest);
 router.put('/manpower-request/:id/status', checkPermission('ORG_WRITE'), updateManpowerRequestStatus);

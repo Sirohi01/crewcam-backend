@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { Types } from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
 import { ManpowerRequest } from '../models/ManpowerRequest';
 import { InterviewEvaluation } from '../models/InterviewEvaluation';
@@ -68,9 +69,15 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
 export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { status, page, limit, search } = req.query;
+    const { status, departmentId, page, limit, search, dateFrom, dateTo } = req.query;
     const filter: any = { tenantId };
-    if (status) filter.status = status;
+    if (status && status !== 'All') filter.status = status;
+    if (departmentId) filter.departmentId = departmentId;
+    if (dateFrom || dateTo) {
+      filter.requestDate = {};
+      if (dateFrom) filter.requestDate.$gte = new Date(String(dateFrom));
+      if (dateTo) filter.requestDate.$lte = new Date(String(dateTo));
+    }
     if (search && String(search).trim()) {
       const term = String(search).trim();
       filter.$or = [
@@ -100,6 +107,26 @@ export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching manpower requests:', error);
     res.status(500).json({ message: 'Error fetching manpower requests' });
+  }
+};
+
+/** Lightweight summary cards for the register (counts are tenant-wide, not page-limited). */
+export const getManpowerRequestStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const [total, approved, pending, positionsAgg] = await Promise.all([
+      ManpowerRequest.countDocuments({ tenantId } as any),
+      ManpowerRequest.countDocuments({ tenantId, status: 'Approved' } as any),
+      ManpowerRequest.countDocuments({ tenantId, status: 'Pending' } as any),
+      ManpowerRequest.aggregate([{ $match: { tenantId: new Types.ObjectId(String(tenantId)) } }, { $group: { _id: null, total: { $sum: '$numberOfPositions' } } }]),
+    ]);
+
+    res.status(200).json({ total, approved, pending, totalPositions: positionsAgg[0]?.total || 0 });
+  } catch (error: any) {
+    console.error('Error fetching manpower request stats:', error);
+    res.status(500).json({ message: 'Error fetching manpower request stats' });
   }
 };
 
