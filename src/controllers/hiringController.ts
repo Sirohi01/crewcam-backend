@@ -246,7 +246,7 @@ export const getAllInterviews = async (req: AuthRequest, res: Response) => {
     }
 
     const query = Interview.find(filter)
-      .populate('candidateId', 'firstName lastName email jobRole status profileImageUrl')
+      .populate('candidateId', 'firstName lastName email phone jobRole status profileImageUrl source rating comments resumeUrl')
       .populate('interviewerId', 'firstName lastName email')
       .sort({ scheduledDate: -1 });
 
@@ -323,7 +323,7 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
     } as any);
 
     const populated = await Interview.findById(id)
-      .populate('candidateId', 'firstName lastName email jobRole status profileImageUrl')
+      .populate('candidateId', 'firstName lastName email phone jobRole status profileImageUrl source rating comments resumeUrl')
       .populate('interviewerId', 'firstName lastName email');
     res.status(200).json(populated);
   } catch (error: any) {
@@ -336,7 +336,7 @@ export const getInterviewById = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
     const interview = await Interview.findOne({ _id: id, tenantId } as any)
-      .populate('candidateId', 'firstName lastName email jobRole status profileImageUrl')
+      .populate('candidateId', 'firstName lastName email phone jobRole status profileImageUrl source rating comments resumeUrl')
       .populate('interviewerId', 'firstName lastName email');
     if (!interview) return res.status(404).json({ message: 'Interview not found' });
     res.status(200).json(interview);
@@ -385,6 +385,30 @@ export const deleteInterviewQuestion = async (req: AuthRequest, res: Response) =
   } catch (error: any) {
     console.error('Error deleting interview question:', error);
     res.status(500).json({ message: 'Error deleting interview question' });
+  }
+};
+
+export const saveInterviewQuestionNote = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id, index } = req.params;
+    const { note } = req.body;
+    const questionIndex = Number(index);
+    if (!Number.isInteger(questionIndex) || questionIndex < 0) return res.status(400).json({ message: 'Invalid question index' });
+
+    const interview = await Interview.findOne({ _id: id, tenantId } as any);
+    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+    const questionEntry = interview.interviewQuestions?.[questionIndex];
+    if (!questionEntry) return res.status(404).json({ message: 'Question not found on this interview' });
+
+    questionEntry.transcript = String(note || '').trim();
+    questionEntry.answeredAt = new Date();
+    await interview.save();
+
+    res.status(200).json({ question: questionEntry });
+  } catch (error: any) {
+    console.error('Error saving interview question note:', error);
+    res.status(500).json({ message: 'Error saving interview question note' });
   }
 };
 

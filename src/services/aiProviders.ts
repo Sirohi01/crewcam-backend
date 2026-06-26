@@ -95,6 +95,49 @@ const callGeminiJson = async ({ apiKey, model, systemPrompt, userPrompt, jsonSch
   };
 };
 
+interface CallGeminiMultimodalArgs {
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  mediaBuffer: Buffer;
+  mimeType: string;
+  jsonSchema: JsonSchemaDef;
+}
+
+/**
+ * Gemini-only: sends an audio/video clip inline alongside the prompt so it can transcribe
+ * and analyze it in one call, no separate speech-to-text step. Not folded into callAiJson's
+ * provider switch because OpenAI/Anthropic aren't wired for multimodal input here yet.
+ */
+export const callGeminiMultimodal = async ({
+  apiKey, model, systemPrompt, userPrompt, mediaBuffer, mimeType, jsonSchema,
+}: CallGeminiMultimodalArgs): Promise<AiCallResult> => {
+  const client = new GoogleGenerativeAI(apiKey);
+  const genModel = client.getGenerativeModel({
+    model,
+    systemInstruction: systemPrompt,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: toGeminiSchema(jsonSchema.schema),
+    },
+  });
+
+  const result = await genModel.generateContent([
+    { text: userPrompt },
+    { inlineData: { mimeType, data: mediaBuffer.toString('base64') } },
+  ]);
+  const raw = result.response.text();
+  if (!raw) throw new Error('AI returned an empty response');
+
+  const usage = result.response.usageMetadata;
+  return {
+    raw,
+    promptTokens: usage?.promptTokenCount ?? 0,
+    completionTokens: usage?.candidatesTokenCount ?? 0,
+  };
+};
+
 const callAnthropicJson = async ({ apiKey, model, systemPrompt, userPrompt, jsonSchema }: CallAiJsonArgs): Promise<AiCallResult> => {
   const client = new Anthropic({ apiKey });
   const message = await client.messages.create({

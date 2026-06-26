@@ -12,9 +12,9 @@ import { DisciplinaryAction } from '../models/DisciplinaryAction';
 import { EmployeeQuery } from '../models/EmployeeQuery';
 import { EmployeeAiSummary, IEmployeeAiSummary } from '../models/EmployeeAiSummary';
 import { PlatformAiProvider } from '../models/PlatformAiProvider';
-import { Interview } from '../models/Interview';
+import { Interview, IInterview, IInterviewQuestion, IAnswerAnalysis } from '../models/Interview';
 import { ManpowerRequest } from '../models/ManpowerRequest';
-import { callAiJson, AiProviderName, JsonSchemaDef } from './aiProviders';
+import { callAiJson, callGeminiMultimodal, AiProviderName, JsonSchemaDef } from './aiProviders';
 import { toSignedCloudinaryUrl } from '../utils/cloudinarySign';
 import { getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
 const MAX_RESUME_CHARS = 32_000;
@@ -654,5 +654,194 @@ export const generateInterviewAnswer = async (
       metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
     } as any);
     throw err instanceof AiFeatureError ? err : new AiFeatureError('AI interview answer generation failed', 502);
+  }
+};
+
+export const startInterviewSession = async (
+  tenantId: string,
+  interviewId: string,
+): Promise<{ status: string }> => {
+  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any);
+  if (!interview) throw new AiFeatureError('Interview not found', 404);
+  if (interview.status !== 'Scheduled') throw new AiFeatureError('This interview is not in a startable state', 400);
+
+  interview.status = 'In_Progress';
+  interview.recordingSessionStartedAt = new Date();
+  await interview.save();
+
+  return { status: interview.status };
+};
+
+interface AnswerAnalysisAiResult {
+  transcript: string;
+  verdict: 'strong' | 'adequate' | 'weak' | 'no_answer';
+  reasoning: string;
+  followUpSuggestion?: string;
+}
+
+const ANSWER_ANALYSIS_JSON_SCHEMA: JsonSchemaDef = {
+  name: 'answer_analysis',
+  schema: {
+    type: 'object',
+    properties: {
+      transcript: { type: 'string', description: 'Verbatim transcript of what the candidate said in this clip' },
+      verdict: { type: 'string', enum: ['strong', 'adequate', 'weak', 'no_answer'] },
+      reasoning: { type: 'string', description: '2-4 sentence explanation of the verdict, referencing what was/was not covered' },
+      followUpSuggestion: { type: 'string', description: 'An optional on-screen-only follow-up question the interviewer could ask now, if the answer left a gap worth probing. Omit if not needed.' },
+    },
+    required: ['transcript', 'verdict', 'reasoning'],
+    additionalProperties: false,
+  },
+};
+
+export const analyzeAnswerRecording = async (
+  tenantId: string,
+  interviewId: string,
+  questionIndex: number,
+  recording: { recordingUrl: string; recordingPublicId?: string | undefined; mimeType: string },
+  triggeredBy: string,
+): Promise<{ question: IInterviewQuestion }> => {
+  const resolved = await resolveTenantAiProvider(tenantId);
+  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
+  if (resolved.provider !== 'Gemini') {
+    throw new AiFeatureError('The active AI provider for this account does not support video/audio analysis yet.', 400);
+  }
+
+  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId', 'jobRole');
+  if (!interview) throw new AiFeatureError('Interview not found', 404);
+  const questionEntry = interview.interviewQuestions?.[questionIndex];
+  if (!questionEntry) throw new AiFeatureError('Question not found on this interview', 404);
+
+  try {
+    const candidate = interview.candidateId as any;
+    const mediaBuffer = await fetchFileBuffer(recording.recordingUrl);
+
+    const { raw, promptTokens, completionTokens } = await callGeminiMultimodal({
+      apiKey: resolved.apiKey,
+      model: resolved.model,
+      systemPrompt:
+        'You are assisting a live interviewer. Watch/listen to this single answer clip and (1) transcribe what the ' +
+        'candidate said, (2) judge how well it answers the given question for the given role, (3) optionally suggest ' +
+        'ONE on-screen follow-up question the interviewer could ask right now if there is a clear gap. Be concise and fair.',
+      userPrompt: `Role: ${candidate?.jobRole || 'Unknown role'}\nInterview question asked: "${questionEntry.question}"`,
+      mediaBuffer,
+      mimeType: recording.mimeType,
+      jsonSchema: ANSWER_ANALYSIS_JSON_SCHEMA,
+    });
+    const result = JSON.parse(raw) as AnswerAnalysisAiResult;
+
+    questionEntry.recordingUrl = recording.recordingUrl;
+    if (recording.recordingPublicId) questionEntry.recordingPublicId = recording.recordingPublicId;
+    questionEntry.transcript = result.transcript;
+    questionEntry.answerAnalysis = {
+      verdict: result.verdict,
+      reasoning: result.reasoning,
+      followUpSuggestion: result.followUpSuggestion,
+    } as IAnswerAnalysis;
+    questionEntry.answeredAt = new Date();
+    await interview.save();
+
+    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-answer-analysis', aiModel: resolved.model,
+      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+      metadata: { interviewId, questionIndex }, createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+
+    return { question: questionEntry };
+  } catch (err: any) {
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-answer-analysis', status: 'FAILURE',
+      metadata: { interviewId, questionIndex, error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    throw err instanceof AiFeatureError ? err : new AiFeatureError('AI answer analysis failed', 502);
+  }
+};
+
+interface OverallAnalysisAiResult {
+  summary: string;
+  strengths: string[];
+  concerns: string[];
+  recommendation: 'strong_hire' | 'hire' | 'lean_no' | 'no_hire';
+}
+
+const OVERALL_ANALYSIS_JSON_SCHEMA: JsonSchemaDef = {
+  name: 'overall_interview_analysis',
+  schema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string', description: 'A holistic narrative summary of the whole interview for the hiring file' },
+      strengths: { type: 'array', items: { type: 'string' } },
+      concerns: { type: 'array', items: { type: 'string' } },
+      recommendation: { type: 'string', enum: ['strong_hire', 'hire', 'lean_no', 'no_hire'] },
+    },
+    required: ['summary', 'strengths', 'concerns', 'recommendation'],
+    additionalProperties: false,
+  },
+};
+
+export const generateOverallInterviewAnalysis = async (
+  tenantId: string,
+  interviewId: string,
+  triggeredBy: string,
+): Promise<{ overallAnalysis: NonNullable<IInterview['overallAnalysis']> }> => {
+  const resolved = await resolveTenantAiProvider(tenantId);
+  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
+
+  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId', 'firstName lastName jobRole');
+  if (!interview) throw new AiFeatureError('Interview not found', 404);
+  const candidate = interview.candidateId as any;
+
+  const answeredQuestions = (interview.interviewQuestions || []).filter((q) => q.transcript);
+  if (answeredQuestions.length === 0) throw new AiFeatureError('No answers were recorded or noted for this interview yet', 400);
+
+  const perQuestionBlock = answeredQuestions.map((q, i) =>
+    `Q${i + 1}: ${q.question}\nTranscript: ${q.transcript}\nVerdict: ${q.answerAnalysis?.verdict || 'n/a'} — ${q.answerAnalysis?.reasoning || ''}`
+  ).join('\n\n');
+
+  try {
+    const userPrompt = [
+      `Candidate: ${candidate?.firstName || ''} ${candidate?.lastName || ''}`.trim(),
+      `Role: ${candidate?.jobRole || 'Unknown role'}`,
+      `Interview round: ${interview.roundType}`,
+      `\nPer-question transcripts and per-answer verdicts:\n${perQuestionBlock}`,
+      '\nProduce a holistic summary and hiring recommendation for this round based ONLY on the above.',
+    ].join('\n');
+
+    const { raw, promptTokens, completionTokens } = await callAiJson({
+      provider: resolved.provider,
+      apiKey: resolved.apiKey,
+      model: resolved.model,
+      systemPrompt: 'You are an experienced interview panelist writing the closing summary for one interview round, based on per-question transcripts and per-answer assessments already collected. You produce an advisory recommendation only — the final hire/no-hire decision remains human.',
+      userPrompt,
+      jsonSchema: OVERALL_ANALYSIS_JSON_SCHEMA,
+    });
+    const result = JSON.parse(raw) as OverallAnalysisAiResult;
+
+    interview.overallAnalysis = { ...result, generatedAt: new Date() };
+    interview.status = 'Completed';
+    interview.recordingSessionEndedAt = new Date();
+    await interview.save();
+
+    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-summary-analysis', aiModel: resolved.model,
+      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+      metadata: { interviewId }, createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+
+    return { overallAnalysis: interview.overallAnalysis };
+  } catch (err: any) {
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-summary-analysis', status: 'FAILURE',
+      metadata: { interviewId, error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    throw err instanceof AiFeatureError ? err : new AiFeatureError('AI interview summary generation failed', 502);
   }
 };

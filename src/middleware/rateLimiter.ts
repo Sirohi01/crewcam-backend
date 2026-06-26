@@ -61,3 +61,16 @@ export const aiGenerationLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req, res) => process.env.NODE_ENV === 'development',
 });
+export const aiInterviewRecordingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20, // one interview's worth of per-question clips (8-10 questions) plus headroom for re-recording an answer
+  message: {
+    message: 'Too many interview recording analyses, please try again after 15 minutes',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // tenant-keyed (not pure-IP) so two interviewers on the same office network running separate
+  // interviews don't contend for the same bucket
+  keyGenerator: (req: any) => String(req.tenantId || req.user?.tenantId || req.ip),
+  skip: (req, res) => process.env.NODE_ENV === 'development',
+});
