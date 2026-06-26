@@ -13,7 +13,9 @@ import {
   updateCandidateStatus,
   scheduleInterview,
   getAllInterviews,
+  getInterviewStats,
   getInterviewsForCandidate,
+  updateInterview,
   submitInterviewFeedback
 } from '../controllers/hiringController';
 import {
@@ -133,7 +135,9 @@ router.put('/candidates/:id/status', checkPermission('ORG_WRITE'), updateCandida
 // Interviews
 router.post('/interviews', checkPermission('ATS_WRITE'), scheduleInterview);
 router.get('/interviews', checkPermission('ATS_READ'), getAllInterviews);
+router.get('/interviews/stats', checkPermission('ATS_READ'), getInterviewStats);
 router.get('/interviews/:candidateId', checkPermission('ATS_READ'), getInterviewsForCandidate);
+router.put('/interviews/:id', checkPermission('ATS_WRITE'), updateInterview);
 router.put('/interviews/:id/feedback', checkPermission('ATS_WRITE'), submitInterviewFeedback);
 
 // Manpower Requests

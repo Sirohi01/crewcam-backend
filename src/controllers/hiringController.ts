@@ -212,11 +212,11 @@ export const getInterviewsForCandidate = async (req: AuthRequest, res: Response)
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { candidateId } = req.params;
-    
+
     const interviews = await Interview.find({ tenantId, candidateId } as any)
       .populate('interviewerId', 'firstName lastName email')
       .sort({ scheduledDate: 1 });
-      
+
     res.status(200).json(interviews);
   } catch (error: any) {
     console.error('Error fetching interviews:', error);
@@ -246,7 +246,7 @@ export const getAllInterviews = async (req: AuthRequest, res: Response) => {
     }
 
     const query = Interview.find(filter)
-      .populate('candidateId', 'firstName lastName email jobRole status')
+      .populate('candidateId', 'firstName lastName email jobRole status profileImageUrl')
       .populate('interviewerId', 'firstName lastName email')
       .sort({ scheduledDate: -1 });
 
@@ -267,6 +267,70 @@ export const getAllInterviews = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Error fetching interviews' });
   }
 };
+export const getInterviewStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+    const { roundType } = req.query;
+    const filter: any = { tenantId };
+    if (roundType) filter.roundType = { $in: String(roundType).split(',') };
+
+    const now = new Date();
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const [total, upcoming, completed, interviewerIds] = await Promise.all([
+      Interview.countDocuments(filter),
+      Interview.countDocuments({ ...filter, status: 'Scheduled', scheduledDate: { $gte: now, $lte: in7Days } }),
+      Interview.countDocuments({ ...filter, status: 'Completed' }),
+      Interview.distinct('interviewerId', filter),
+    ]);
+
+    res.status(200).json({ total, upcoming, completed, interviewers: interviewerIds.length });
+  } catch (error: any) {
+    console.error('Error fetching interview stats:', error);
+    res.status(500).json({ message: 'Error fetching interview stats' });
+  }
+};
+export const updateInterview = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const { interviewerId, roundType, scheduledDate, mode, location, meetingLink } = req.body;
+
+    const existing = await Interview.findOne({ _id: id, tenantId } as any);
+    if (!existing) return res.status(404).json({ message: 'Interview not found' });
+    if (existing.status !== 'Scheduled') {
+      return res.status(400).json({ message: 'Only a still-scheduled interview can be edited — this one already has an outcome recorded' });
+    }
+
+    existing.interviewerId = interviewerId;
+    existing.roundType = roundType;
+    existing.scheduledDate = scheduledDate;
+    existing.mode = mode;
+    existing.location = location;
+    existing.meetingLink = meetingLink;
+    await existing.save();
+
+    await AuditLog.create({
+      tenantId,
+      userId: req.user!._id as any,
+      action: 'UPDATE_INTERVIEW',
+      module: 'ATS',
+      status: 'SUCCESS',
+      ipAddress: req.ip as string,
+      userAgent: req.headers['user-agent'] as string,
+      details: { interviewId: id },
+    } as any);
+
+    const populated = await Interview.findById(id)
+      .populate('candidateId', 'firstName lastName email jobRole status profileImageUrl')
+      .populate('interviewerId', 'firstName lastName email');
+    res.status(200).json(populated);
+  } catch (error: any) {
+    console.error('Error updating interview:', error);
+    res.status(500).json({ message: 'Error updating interview' });
+  }
+};
 
 export const submitInterviewFeedback = async (req: AuthRequest, res: Response) => {
   try {
@@ -283,8 +347,6 @@ export const submitInterviewFeedback = async (req: AuthRequest, res: Response) =
     if (!interview) return res.status(404).json({ message: 'Interview not found' });
 
     if (status === 'Completed') {
-      // Step 2's real prerequisite is "at least one completed interview" — only an upgrade,
-      // never downgrades the pipeline if an earlier interview already completed.
       await advanceStep(req, String(tenantId), String(interview.candidateId), 'interview', 'completed', (interview as any)._id);
     }
 
