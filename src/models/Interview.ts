@@ -12,6 +12,7 @@ export interface IInterview extends Document {
   mode?: 'In-person' | 'Phone' | 'Video';
   location?: string;
   meetingLink?: string;
+  interviewQuestions?: string[];
 }
 
 const interviewSchema = new Schema<IInterview>({
@@ -33,7 +34,8 @@ const interviewSchema = new Schema<IInterview>({
   feedback: { type: String },
   mode: { type: String, enum: ['In-person', 'Phone', 'Video'], default: 'Video' },
   location: { type: String },
-  meetingLink: { type: String }
+  meetingLink: { type: String },
+  interviewQuestions: [{ type: String }]
 }, {
   timestamps: true
 });

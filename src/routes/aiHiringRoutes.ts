@@ -6,7 +6,7 @@ import { requireFeature } from '../middleware/featureGate';
 import { requireAiCredits } from '../middleware/aiCreditGate';
 import { aiScreeningLimiter, aiGenerationLimiter } from '../middleware/rateLimiter';
 import { triggerResumeScreening, getResumeScreenings, getResumeScreeningQueue } from '../controllers/aiHiringController';
-import { triggerGenerateJd, triggerGenerateKra } from '../controllers/aiManpowerController';
+import { triggerGenerateJd, triggerGenerateKra, triggerGenerateInterviewQuestions } from '../controllers/aiManpowerController';
 
 const router = Router();
 router.use(authenticate);
@@ -46,6 +46,14 @@ router.post(
   requireAiCredits,
   aiGenerationLimiter,
   triggerGenerateKra,
+);
+router.post(
+  '/hiring/interviews/:id/generate-questions',
+  requireFeature('ai-hiring'),
+  checkPermission('ATS_WRITE'),
+  requireAiCredits,
+  aiGenerationLimiter,
+  triggerGenerateInterviewQuestions,
 );
 
 export default router;

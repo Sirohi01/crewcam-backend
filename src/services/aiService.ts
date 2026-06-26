@@ -12,8 +12,11 @@ import { DisciplinaryAction } from '../models/DisciplinaryAction';
 import { EmployeeQuery } from '../models/EmployeeQuery';
 import { EmployeeAiSummary, IEmployeeAiSummary } from '../models/EmployeeAiSummary';
 import { PlatformAiProvider } from '../models/PlatformAiProvider';
+import { Interview } from '../models/Interview';
+import { ManpowerRequest } from '../models/ManpowerRequest';
 import { callAiJson, AiProviderName, JsonSchemaDef } from './aiProviders';
 import { toSignedCloudinaryUrl } from '../utils/cloudinarySign';
+import { getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
 const MAX_RESUME_CHARS = 32_000;
 
 const MODEL_PRICING: Record<string, { promptPer1k: number; completionPer1k: number }> = {
@@ -471,5 +474,113 @@ export const generateKpa = async (
       metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
     } as any);
     throw err instanceof AiFeatureError ? err : new AiFeatureError('AI KPA generation failed', 502);
+  }
+};
+
+interface InterviewQuestionsResult {
+  questions: string[];
+}
+
+const INTERVIEW_QUESTIONS_JSON_SCHEMA: JsonSchemaDef = {
+  name: 'interview_questions',
+  schema: {
+    type: 'object',
+    properties: {
+      questions: { type: 'array', items: { type: 'string' }, description: '8-10 interview questions tailored to this round' },
+    },
+    required: ['questions'],
+    additionalProperties: false,
+  },
+};
+
+/** What each round should actually probe for — shapes question depth/focus, not just topic. */
+const ROUND_GUIDANCE: Record<string, string> = {
+  'Walk-In': 'Basic screening: confirm background accuracy, availability, and immediate fit. Keep questions simple and quick to answer.',
+  Telephonic: 'First-call screening: communication clarity, motivation, notice period, and a few high-level skill-check questions.',
+  Technical: 'Deep technical assessment: probe hands-on depth in the listed technical skills, problem-solving, and real scenarios from the responsibilities.',
+  HR: 'Behavioral and culture fit: past conduct, teamwork, conflict handling, and soft-skill scenarios.',
+  'HR & HOD': 'Combined behavioral + role fit: culture fit alongside whether their experience matches the qualification/experience requirements.',
+  Managerial: 'Ownership and leadership: decision-making, prioritization, stakeholder handling, and how they would approach the key responsibilities.',
+  Final: 'Closing round: career goals, compensation expectations, long-term fit, and any open concerns before an offer.',
+};
+
+/**
+ * Generates round-appropriate interview questions for one scheduled Interview, using
+ * whatever JD/skills context is available from the manpower requisition that justified
+ * this candidate's hire (resolved via the candidate's pipeline state refId — same link
+ * createCandidate() established). Falls back to just the candidate's job role if no
+ * requisition is found. Persists onto the Interview doc so reopening it doesn't require
+ * regenerating (the "Regenerate" action explicitly re-runs this).
+ */
+export const generateInterviewQuestions = async (
+  tenantId: string,
+  interviewId: string,
+  triggeredBy: string,
+): Promise<InterviewQuestionsResult> => {
+  const resolved = await resolveTenantAiProvider(tenantId);
+  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
+
+  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId', 'firstName lastName jobRole');
+  if (!interview) throw new AiFeatureError('Interview not found', 404);
+  const candidate = interview.candidateId as any;
+
+  let manpowerContext = '';
+  const pipelineState = await getOrCreatePipelineState(tenantId, String(candidate?._id || ''));
+  const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
+  if (manpowerStep?.refId) {
+    const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
+    if (manpowerRequest) {
+      manpowerContext = [
+        manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
+        manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
+        manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
+        manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
+        manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
+        manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
+      ].filter(Boolean).join('\n');
+    }
+  }
+
+  try {
+    const roundType = interview.roundType;
+    const userPrompt = [
+      `Candidate: ${candidate?.firstName || ''} ${candidate?.lastName || ''}`.trim(),
+      `Role: ${candidate?.jobRole || 'Unknown role'}`,
+      `Interview round: ${roundType}`,
+      `Round focus: ${ROUND_GUIDANCE[roundType] || 'General fit and skills assessment.'}`,
+      manpowerContext || 'No additional job description/skills context is available — base questions on the role title alone.',
+      '\nWrite interview questions for this specific round only — do not duplicate what earlier or later rounds would already cover.',
+    ].join('\n');
+
+    const { raw, promptTokens, completionTokens } = await callAiJson({
+      provider: resolved.provider,
+      apiKey: resolved.apiKey,
+      model: resolved.model,
+      systemPrompt: 'You are an experienced interview panelist preparing questions for one specific interview round. Be concrete and specific to the role and skills given.',
+      userPrompt,
+      jsonSchema: INTERVIEW_QUESTIONS_JSON_SCHEMA,
+    });
+    const result = JSON.parse(raw) as InterviewQuestionsResult;
+
+    interview.interviewQuestions = result.questions;
+    await interview.save();
+
+    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-question-generation', aiModel: resolved.model,
+      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+      createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+
+    return result;
+  } catch (err: any) {
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-question-generation', status: 'FAILURE',
+      metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    throw err instanceof AiFeatureError ? err : new AiFeatureError('AI interview question generation failed', 502);
   }
 };
