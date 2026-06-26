@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { Types } from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
 import { ResumeScreening } from '../models/ResumeScreening';
 import { Candidate } from '../models/Candidate';
@@ -54,30 +55,70 @@ export const getResumeScreenings = async (req: AuthRequest, res: Response) => {
   res.json(screenings);
 };
 
-/** HR queue: every candidate with a resume, clearly marked when a new/updated file needs screening. */
 export const getResumeScreeningQueue = async (req: AuthRequest, res: Response) => {
   const tenantId = (req.tenantId || req.user!.tenantId) as string;
-  const candidates = await Candidate.find({ tenantId, resumeUrl: { $exists: true, $ne: '' } } as any)
-    .select('firstName lastName email jobRole status resumeUrl resumeUpdatedAt updatedAt')
-    .sort({ resumeUpdatedAt: -1, updatedAt: -1 })
-    .lean();
-  const candidateIds = candidates.map((candidate: any) => candidate._id);
-  const screenings = await ResumeScreening.find({ tenantId, candidateId: { $in: candidateIds } } as any)
-    .select('-extractedText')
-    .sort({ createdAt: -1 })
-    .lean();
-  const latestByCandidate = new Map<string, any>();
-  screenings.forEach((screening: any) => {
-    const key = String(screening.candidateId);
-    if (!latestByCandidate.has(key)) latestByCandidate.set(key, screening);
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+  const search = String(req.query.search || '').trim();
+  const status = String(req.query.status || ''); // 'pending' | 'screened' | '' (all)
+
+  const match: any = { tenantId: new Types.ObjectId(tenantId), resumeUrl: { $exists: true, $ne: '' } };
+  if (search) {
+    match.$or = [
+      { firstName: { $regex: search, $options: 'i' } },
+      { lastName: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } },
+      { jobRole: { $regex: search, $options: 'i' } },
+    ];
+  }
+
+  const pipeline: any[] = [
+    { $match: match },
+    {
+      $lookup: {
+        from: 'resumescreenings',
+        let: { candidateId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$candidateId', '$$candidateId'] } } },
+          { $sort: { createdAt: -1 } },
+          { $limit: 1 },
+          { $project: { extractedText: 0 } },
+        ],
+        as: 'screenings',
+      },
+    },
+    { $addFields: { latestScreening: { $arrayElemAt: ['$screenings', 0] } } },
+    {
+      $addFields: {
+        needsScreening: {
+          $or: [
+            { $eq: ['$latestScreening', null] },
+            { $gt: [{ $ifNull: ['$resumeUpdatedAt', '$updatedAt'] }, '$latestScreening.createdAt'] },
+          ],
+        },
+      },
+    },
+  ];
+
+  if (status === 'pending') pipeline.push({ $match: { needsScreening: true } });
+  if (status === 'screened') pipeline.push({ $match: { needsScreening: false } });
+
+  pipeline.push(
+    { $project: { screenings: 0 } },
+    { $sort: { resumeUpdatedAt: -1, updatedAt: -1 } },
+    {
+      $facet: {
+        data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+        totalCount: [{ $count: 'count' }],
+      },
+    },
+  );
+
+  const [result] = await Candidate.aggregate(pipeline);
+  const total = result?.totalCount?.[0]?.count || 0;
+
+  res.json({
+    data: result?.data || [],
+    meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
   });
-  res.json(candidates.map((candidate: any) => {
-    const latestScreening = latestByCandidate.get(String(candidate._id));
-    const resumeChangedAt = candidate.resumeUpdatedAt || candidate.updatedAt;
-    return {
-      ...candidate,
-      latestScreening,
-      needsScreening: !latestScreening || new Date(resumeChangedAt) > new Date(latestScreening.createdAt),
-    };
-  }));
 };
