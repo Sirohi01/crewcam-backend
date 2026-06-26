@@ -331,6 +331,62 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Error updating interview' });
   }
 };
+export const getInterviewById = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const interview = await Interview.findOne({ _id: id, tenantId } as any)
+      .populate('candidateId', 'firstName lastName email jobRole status profileImageUrl')
+      .populate('interviewerId', 'firstName lastName email');
+    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+    res.status(200).json(interview);
+  } catch (error: any) {
+    console.error('Error fetching interview:', error);
+    res.status(500).json({ message: 'Error fetching interview' });
+  }
+};
+export const addInterviewQuestion = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const { question } = req.body;
+    if (!question || !String(question).trim()) return res.status(400).json({ message: 'question is required' });
+
+    const interview = await Interview.findOne({ _id: id, tenantId } as any);
+    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+
+    interview.interviewQuestions = [...(interview.interviewQuestions || []), { question: String(question).trim() }];
+    await interview.save();
+
+    res.status(200).json(interview);
+  } catch (error: any) {
+    console.error('Error adding interview question:', error);
+    res.status(500).json({ message: 'Error adding interview question' });
+  }
+};
+
+export const deleteInterviewQuestion = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id, index } = req.params;
+    const questionIndex = Number(index);
+    if (!Number.isInteger(questionIndex) || questionIndex < 0) return res.status(400).json({ message: 'Invalid question index' });
+
+    const interview = await Interview.findOne({ _id: id, tenantId } as any);
+    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+    if (!interview.interviewQuestions || questionIndex >= interview.interviewQuestions.length) {
+      return res.status(404).json({ message: 'Question not found on this interview' });
+    }
+
+    interview.interviewQuestions = interview.interviewQuestions.filter((_, i) => i !== questionIndex);
+    await interview.save();
+
+    res.status(200).json(interview);
+  } catch (error: any) {
+    console.error('Error deleting interview question:', error);
+    res.status(500).json({ message: 'Error deleting interview question' });
+  }
+};
 
 export const submitInterviewFeedback = async (req: AuthRequest, res: Response) => {
   try {

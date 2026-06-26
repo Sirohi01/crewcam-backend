@@ -1,5 +1,10 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+export interface IInterviewQuestion {
+  question: string;
+  suggestedAnswer?: string;
+}
+
 export interface IInterview extends Document {
   tenantId: Types.ObjectId;
   candidateId: Types.ObjectId;
@@ -12,7 +17,7 @@ export interface IInterview extends Document {
   mode?: 'In-person' | 'Phone' | 'Video';
   location?: string;
   meetingLink?: string;
-  interviewQuestions?: string[];
+  interviewQuestions?: IInterviewQuestion[];
 }
 
 const interviewSchema = new Schema<IInterview>({
@@ -35,7 +40,10 @@ const interviewSchema = new Schema<IInterview>({
   mode: { type: String, enum: ['In-person', 'Phone', 'Video'], default: 'Video' },
   location: { type: String },
   meetingLink: { type: String },
-  interviewQuestions: [{ type: String }]
+  interviewQuestions: [{
+    question: { type: String, required: true },
+    suggestedAnswer: { type: String },
+  }]
 }, {
   timestamps: true
 });

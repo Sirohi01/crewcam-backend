@@ -504,14 +504,26 @@ const ROUND_GUIDANCE: Record<string, string> = {
   Final: 'Closing round: career goals, compensation expectations, long-term fit, and any open concerns before an offer.',
 };
 
-/**
- * Generates round-appropriate interview questions for one scheduled Interview, using
- * whatever JD/skills context is available from the manpower requisition that justified
- * this candidate's hire (resolved via the candidate's pipeline state refId — same link
- * createCandidate() established). Falls back to just the candidate's job role if no
- * requisition is found. Persists onto the Interview doc so reopening it doesn't require
- * regenerating (the "Regenerate" action explicitly re-runs this).
- */
+
+const buildManpowerContext = async (tenantId: string, candidateId: string): Promise<string> => {
+  const pipelineState = await getOrCreatePipelineState(tenantId, candidateId);
+  const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
+  if (!manpowerStep?.refId) return '';
+
+  const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
+  if (!manpowerRequest) return '';
+
+  return [
+    manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
+    manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
+    manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
+    manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
+    manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
+    manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
+  ].filter(Boolean).join('\n');
+};
+
+
 export const generateInterviewQuestions = async (
   tenantId: string,
   interviewId: string,
@@ -523,23 +535,7 @@ export const generateInterviewQuestions = async (
   const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId', 'firstName lastName jobRole');
   if (!interview) throw new AiFeatureError('Interview not found', 404);
   const candidate = interview.candidateId as any;
-
-  let manpowerContext = '';
-  const pipelineState = await getOrCreatePipelineState(tenantId, String(candidate?._id || ''));
-  const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
-  if (manpowerStep?.refId) {
-    const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
-    if (manpowerRequest) {
-      manpowerContext = [
-        manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
-        manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
-        manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
-        manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
-        manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
-        manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
-      ].filter(Boolean).join('\n');
-    }
-  }
+  const manpowerContext = await buildManpowerContext(tenantId, String(candidate?._id || ''));
 
   try {
     const roundType = interview.roundType;
@@ -562,7 +558,7 @@ export const generateInterviewQuestions = async (
     });
     const result = JSON.parse(raw) as InterviewQuestionsResult;
 
-    interview.interviewQuestions = result.questions;
+    interview.interviewQuestions = result.questions.map((question) => ({ question }));
     await interview.save();
 
     const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
@@ -582,5 +578,81 @@ export const generateInterviewQuestions = async (
       metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
     } as any);
     throw err instanceof AiFeatureError ? err : new AiFeatureError('AI interview question generation failed', 502);
+  }
+};
+
+interface InterviewAnswerResult {
+  answer: string;
+}
+
+const INTERVIEW_ANSWER_JSON_SCHEMA: JsonSchemaDef = {
+  name: 'interview_answer',
+  schema: {
+    type: 'object',
+    properties: {
+      answer: { type: 'string', description: 'A benchmark answer (3-6 sentences) an interviewer can compare a candidate response against' },
+    },
+    required: ['answer'],
+    additionalProperties: false,
+  },
+};
+export const generateInterviewAnswer = async (
+  tenantId: string,
+  interviewId: string,
+  questionIndex: number,
+  triggeredBy: string,
+): Promise<InterviewAnswerResult> => {
+  const resolved = await resolveTenantAiProvider(tenantId);
+  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
+
+  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId', 'firstName lastName jobRole');
+  if (!interview) throw new AiFeatureError('Interview not found', 404);
+  const questionEntry = interview.interviewQuestions?.[questionIndex];
+  if (!questionEntry) throw new AiFeatureError('Question not found on this interview', 404);
+
+  const candidate = interview.candidateId as any;
+  const manpowerContext = await buildManpowerContext(tenantId, String(candidate?._id || ''));
+
+  try {
+    const roundType = interview.roundType;
+    const userPrompt = [
+      `Role: ${candidate?.jobRole || 'Unknown role'}`,
+      `Interview round: ${roundType}`,
+      `Round focus: ${ROUND_GUIDANCE[roundType] || 'General fit and skills assessment.'}`,
+      manpowerContext || 'No additional job description/skills context is available.',
+      `\nInterview question: "${questionEntry.question}"`,
+      '\nWrite a benchmark answer the interviewer can use to judge the candidate\'s actual response — describe what a strong answer covers, with a concrete example where useful.',
+    ].join('\n');
+
+    const { raw, promptTokens, completionTokens } = await callAiJson({
+      provider: resolved.provider,
+      apiKey: resolved.apiKey,
+      model: resolved.model,
+      systemPrompt: 'You are helping an interviewer prepare. For the given interview question, write a benchmark answer the interviewer can compare the candidate\'s real answer against — not a script for the candidate.',
+      userPrompt,
+      jsonSchema: INTERVIEW_ANSWER_JSON_SCHEMA,
+    });
+    const result = JSON.parse(raw) as InterviewAnswerResult;
+
+    questionEntry.suggestedAnswer = result.answer;
+    await interview.save();
+
+    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-answer-generation', aiModel: resolved.model,
+      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+      createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+
+    return result;
+  } catch (err: any) {
+    await AiUsageLog.create({
+      tenantId, feature: 'interview-answer-generation', status: 'FAILURE',
+      metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    throw err instanceof AiFeatureError ? err : new AiFeatureError('AI interview answer generation failed', 502);
   }
 };

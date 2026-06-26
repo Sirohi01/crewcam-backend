@@ -15,7 +15,10 @@ import {
   getAllInterviews,
   getInterviewStats,
   getInterviewsForCandidate,
+  getInterviewById,
   updateInterview,
+  addInterviewQuestion,
+  deleteInterviewQuestion,
   submitInterviewFeedback
 } from '../controllers/hiringController';
 import {
@@ -140,6 +143,9 @@ router.get('/interviews/stats', checkPermission('ATS_READ'), getInterviewStats);
 router.get('/interviews/:candidateId', checkPermission('ATS_READ'), getInterviewsForCandidate);
 router.put('/interviews/:id', checkPermission('ATS_WRITE'), updateInterview);
 router.put('/interviews/:id/feedback', checkPermission('ATS_WRITE'), submitInterviewFeedback);
+router.get('/interviews/detail/:id', checkPermission('ATS_READ'), getInterviewById);
+router.post('/interviews/:id/questions', checkPermission('ATS_WRITE'), addInterviewQuestion);
+router.delete('/interviews/:id/questions/:index', checkPermission('ATS_WRITE'), deleteInterviewQuestion);
 
 // Manpower Requests
 router.post('/manpower-request', checkPermission('ORG_WRITE'), createManpowerRequest);
