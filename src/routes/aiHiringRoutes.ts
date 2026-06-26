@@ -4,15 +4,13 @@ import { tenantResolver } from '../middleware/tenantResolver';
 import { checkPermission } from '../middleware/rbac';
 import { requireFeature } from '../middleware/featureGate';
 import { requireAiCredits } from '../middleware/aiCreditGate';
-import { aiScreeningLimiter } from '../middleware/rateLimiter';
+import { aiScreeningLimiter, aiGenerationLimiter } from '../middleware/rateLimiter';
 import { triggerResumeScreening, getResumeScreenings, getResumeScreeningQueue } from '../controllers/aiHiringController';
+import { triggerGenerateJd, triggerGenerateKra } from '../controllers/aiManpowerController';
 
 const router = Router();
 router.use(authenticate);
 router.use(tenantResolver);
-
-// Enterprise-only feature flag, gated before the RBAC/credit checks so a tenant
-// without the package can't even probe whether a candidate has been screened.
 router.post(
   '/hiring/resume-screen/:candidateId',
   requireFeature('ai-hiring'),
@@ -32,6 +30,22 @@ router.get(
   requireFeature('ai-hiring'),
   checkPermission('ATS_READ'),
   getResumeScreenings,
+);
+router.post(
+  '/hiring/generate-jd',
+  requireFeature('ai-hiring'),
+  checkPermission('ATS_WRITE'),
+  requireAiCredits,
+  aiGenerationLimiter,
+  triggerGenerateJd,
+);
+router.post(
+  '/hiring/generate-kra',
+  requireFeature('ai-hiring'),
+  checkPermission('ATS_WRITE'),
+  requireAiCredits,
+  aiGenerationLimiter,
+  triggerGenerateKra,
 );
 
 export default router;

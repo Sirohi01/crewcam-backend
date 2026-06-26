@@ -7,7 +7,9 @@ import {
   getWhitelabel,
   updateWhitelabel,
   getIntegrations,
-  configureIntegration
+  configureIntegration,
+  getTenantAiProviderOptions,
+  setTenantAiProvider
 } from '../controllers/settingsController';
 
 const router = Router();
@@ -25,5 +27,9 @@ router.put('/whitelabel', updateWhitelabel);
 // Integrations
 router.get('/integrations', getIntegrations);
 router.put('/integrations', configureIntegration);
+
+// AI Provider (tenant-side switch — no keys exposed)
+router.get('/ai-provider', getTenantAiProviderOptions);
+router.put('/ai-provider', setTenantAiProvider);
 
 export default router;

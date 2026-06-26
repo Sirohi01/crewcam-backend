@@ -30,6 +30,7 @@ import employeeQueryRoutes from './routes/employeeQueryRoutes';
 import liveTrackingRoutes from './routes/liveTrackingRoutes';
 import aiHiringRoutes from './routes/aiHiringRoutes';
 import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
+import jdKpaRoutes from './routes/jdKpaRoutes';
 import locationRoutes from './routes/locationRoutes';
 import path from 'path';
 import { startRetentionJobs } from './utils/retentionJobs';
@@ -63,7 +64,8 @@ const authLimiter = rateLimit({
   limit: 10, // Limit each IP to 10 requests per window
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  message: { message: 'Too many requests from this IP, please try again after 15 minutes' }
+  message: { message: 'Too many requests from this IP, please try again after 15 minutes' },
+  skip: (req, res) => process.env.NODE_ENV === 'development'
 });
 
 app.use('/api/v1/auth', authLimiter, authRoutes);
@@ -92,6 +94,7 @@ app.use('/api/v1/tracking', liveTrackingRoutes);
 app.use('/api/v1/locations', locationRoutes);
 app.use('/api/v1/ai', aiHiringRoutes);
 app.use('/api/v1/ai', aiEmployeeRoutes);
+app.use('/api/v1', jdKpaRoutes);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));

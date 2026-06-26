@@ -54,6 +54,7 @@ const BUILT_MASTER_DATA = new Set([
   'Add Nature of leave', 'Add IT Inventory', 'Add stationary', 'Add Degree', 'Add Marks',
   'Add Relaxation Rule', 'Add Attendance Rule', 'Expense Head', 'Add Office Holiday',
   'Add Option Question', 'Add Bank Name', 'Add Levels', 'Add Subjects', 'Add Policies',
+  'Add JD', 'Add KRA',
 ]);
 
 const ORGANIZATION_ITEMS = new Set(['Add Branch', 'Add Department', 'Add Designation']);
@@ -76,7 +77,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
     ['Providers', 'providers'], ['Brands', 'brands'], ['Services', 'services'],
     ['Mobile Services', 'mobile-services'], ['Utility Providers', 'utility-providers'],
     ['Question Papers', 'question-papers'], ['Option Questions', 'option-questions'],
-    ['Shift Timings', 'shift-timings']
+    ['Shift Timings', 'shift-timings'], ['JD Library', 'jd-library'], ['KPA Library', 'kpa-library']
   ].map(([label, endpointKey], i) => ({
     section: 'Company Setup',
     label: label as string,
@@ -90,7 +91,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // Company Assets lives on its own page (with allocation tracking) rather than the
   // generic master-data CRUD list, so it can't join the .map() above — same Master Data
   // grouping and href as the existing Support & Operations > Asset Management entry.
-  { section: 'Company Setup', label: 'Company Assets', href: '/dashboard/support/assets', icon: 'Briefcase', order: 27, parent: 'Master Data', requiredPermission: 'SUPPORT_READ', categories: ['hr_admin', 'admin', 'company_admin', 'developer'] },
+  { section: 'Company Setup', label: 'Company Assets', href: '/dashboard/support/assets', icon: 'Briefcase', order: 29, parent: 'Master Data', requiredPermission: 'SUPPORT_READ', categories: ['hr_admin', 'admin', 'company_admin', 'developer'] },
 
   // ---- People ----
   { section: 'People', label: 'Employees', href: '/dashboard/employees', icon: 'Users', order: 0, requiredPermission: 'EMPLOYEE_READ', categories: ['hr', 'hr_admin', 'admin', 'company_admin', 'hod', 'reporting_manager'] },

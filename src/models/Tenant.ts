@@ -7,6 +7,7 @@ export interface ITenant extends Document, IAuditable {
   isActive: boolean;
   packageId: mongoose.Types.ObjectId;
   aiCredits: number;
+  preferredAiProvider?: 'OpenAI' | 'Gemini' | 'Anthropic';
 }
 
 const TenantSchema = new Schema<ITenant>({
@@ -14,6 +15,7 @@ const TenantSchema = new Schema<ITenant>({
   isActive: { type: Boolean, default: true },
   packageId: { type: Schema.Types.ObjectId, ref: 'Package' },
   aiCredits: { type: Number, default: 0 },
+  preferredAiProvider: { type: String, enum: ['OpenAI', 'Gemini', 'Anthropic'] },
 }, { timestamps: true });
 
 TenantSchema.plugin(auditPlugin);

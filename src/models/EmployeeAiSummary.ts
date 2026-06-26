@@ -35,11 +35,10 @@ const EmployeeAiSummarySchema = new Schema<IEmployeeAiSummary>({
 
 EmployeeAiSummarySchema.index({ tenantId: 1, employeeId: 1, createdAt: -1 });
 
-EmployeeAiSummarySchema.pre('save' as any, function (this: any, next: any) {
+EmployeeAiSummarySchema.pre('save' as any, function (this: any) {
   if (this.isModified('summaryText') && this.summaryText && !this.summaryText.includes(':')) {
     this.summaryText = encrypt(this.summaryText);
   }
-  next();
 });
 
 EmployeeAiSummarySchema.methods.getDecryptedSummary = function (): string {

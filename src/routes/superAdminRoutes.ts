@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { createFeature, createPackage, createPermission, createTenant, deleteFeature, deleteTenant, getAiUsageLogs, getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, updateFeature, updatePackage, updateTenant } from '../controllers/superAdminController';
+import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { authenticate } from '../middleware/auth';
 import { checkPermission } from '../middleware/rbac';
 
@@ -21,5 +22,7 @@ router.post('/features', createFeature);
 router.put('/features/:id', updateFeature);
 router.delete('/features/:id', deleteFeature);
 router.get('/ai-usage-logs', getAiUsageLogs);
+router.get('/ai-providers', getAllAiProviders);
+router.put('/ai-providers', configureAiProvider);
 
 export default router;

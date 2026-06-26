@@ -3,6 +3,8 @@ import { AuthRequest } from '../middleware/auth';
 import { Session } from '../models/Session';
 import { WhiteLabel } from '../models/WhiteLabel';
 import { Integration } from '../models/Integration';
+import { PlatformAiProvider } from '../models/PlatformAiProvider';
+import { Tenant } from '../models/Tenant';
 
 // SESSIONS
 export const getActiveSessions = async (req: AuthRequest, res: Response) => {
@@ -10,11 +12,8 @@ export const getActiveSessions = async (req: AuthRequest, res: Response) => {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     const userId = req.user._id as any;
     const currentToken = req.headers.authorization?.split(' ')[1];
-    
-    // Using a simplistic approach: we'll fetch all refresh tokens for this user.
-    // In a real scenario, you decode the currentToken to mark "current device".
     const sessions = await Session.find({ userId, isActive: true, expiresAt: { $gt: new Date() } }).sort({ lastActive: -1 });
-    
+
     res.status(200).json(sessions);
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching sessions', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
@@ -51,7 +50,7 @@ export const updateWhitelabel = async (req: AuthRequest, res: Response) => {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     const tenantId = (req.tenantId || req.user.tenantId) as any;
     const { primaryColor, companyNameOverride, themeMode } = req.body;
-    
+
     const whitelabel = await WhiteLabel.findOneAndUpdate(
       { tenantId },
       { primaryColor, companyNameOverride, themeMode },
@@ -69,7 +68,7 @@ export const getIntegrations = async (req: AuthRequest, res: Response) => {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     const tenantId = (req.tenantId || req.user.tenantId) as any;
     const integrations = await Integration.find({ tenantId });
-    
+
     // We mask the credentials before sending to the frontend
     const masked = integrations.map(i => {
       const obj = i.toObject();
@@ -104,5 +103,39 @@ export const configureIntegration = async (req: AuthRequest, res: Response) => {
     res.status(200).json({ message: 'Integration updated successfully', integration: obj });
   } catch (error: any) {
     res.status(500).json({ message: 'Error configuring integration', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
+export const getTenantAiProviderOptions = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const tenantId = (req.tenantId || req.user.tenantId) as any;
+
+    const [activeProviders, tenant] = await Promise.all([
+      PlatformAiProvider.find({ tenantId, isActive: true }).select('provider'),
+      Tenant.findById(tenantId).select('preferredAiProvider'),
+    ]);
+
+    res.status(200).json({
+      available: activeProviders.map((p) => p.provider),
+      preferred: tenant?.preferredAiProvider || null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching AI provider options', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
+
+export const setTenantAiProvider = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const tenantId = (req.tenantId || req.user.tenantId) as any;
+    const { provider } = req.body;
+
+    const isActive = await PlatformAiProvider.exists({ tenantId, provider, isActive: true });
+    if (!isActive) return res.status(400).json({ message: 'That AI provider is not active for your company — contact your administrator' });
+
+    await Tenant.updateOne({ _id: tenantId }, { preferredAiProvider: provider });
+    res.status(200).json({ message: 'AI provider preference updated', preferred: provider });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating AI provider preference', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
 };

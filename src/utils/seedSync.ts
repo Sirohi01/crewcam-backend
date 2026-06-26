@@ -92,6 +92,8 @@ export const syncSidebarDefaults = async (tenantId: string) => {
   }
 
   const RETIRED_SECTION_LABELS: Array<{ section: string; label?: string }> = [
+    { section: 'Admin Section', label: 'Add JD' }, // replaced by Company Setup > Master Data > JD Library
+    { section: 'Admin Section', label: 'Add KRA' }, // replaced by Company Setup > Master Data > KPA Library
     { section: 'Company Setup', label: 'Organization' }, // split into branches, departments, designations
     { section: 'Support & Operations', label: 'Asset Management' }, // duplicate of Company Setup > Master Data > Company Assets (same /dashboard/support/assets page)
     { section: 'Attendance Section', label: 'All Crewcam Leave' }, // duplicate of "Add Employee Leave" (/dashboard/leaves)
