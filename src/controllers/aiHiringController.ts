@@ -55,12 +55,17 @@ export const getResumeScreenings = async (req: AuthRequest, res: Response) => {
   res.json(screenings);
 };
 
+const CANDIDATE_STATUSES = ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected'];
+
 export const getResumeScreeningQueue = async (req: AuthRequest, res: Response) => {
   const tenantId = (req.tenantId || req.user!.tenantId) as string;
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
   const search = String(req.query.search || '').trim();
-  const status = String(req.query.status || ''); // 'pending' | 'screened' | '' (all)
+  const screeningStatus = String(req.query.screeningStatus || ''); // 'pending' | 'screened' | '' (all)
+  const applicationStatus = String(req.query.applicationStatus || '');
+  const experienceMatch = String(req.query.experienceMatch || ''); // 'under' | 'match' | 'over' | ''
+  const minStars = Number(req.query.minStars) || 0; // 0 = no filter, else 1-5
 
   const match: any = { tenantId: new Types.ObjectId(tenantId), resumeUrl: { $exists: true, $ne: '' } };
   if (search) {
@@ -70,6 +75,9 @@ export const getResumeScreeningQueue = async (req: AuthRequest, res: Response) =
       { email: { $regex: search, $options: 'i' } },
       { jobRole: { $regex: search, $options: 'i' } },
     ];
+  }
+  if (applicationStatus && CANDIDATE_STATUSES.includes(applicationStatus)) {
+    match.status = applicationStatus;
   }
 
   const pipeline: any[] = [
@@ -100,8 +108,14 @@ export const getResumeScreeningQueue = async (req: AuthRequest, res: Response) =
     },
   ];
 
-  if (status === 'pending') pipeline.push({ $match: { needsScreening: true } });
-  if (status === 'screened') pipeline.push({ $match: { needsScreening: false } });
+  if (screeningStatus === 'pending') pipeline.push({ $match: { needsScreening: true } });
+  if (screeningStatus === 'screened') pipeline.push({ $match: { needsScreening: false } });
+  if (experienceMatch === 'under' || experienceMatch === 'match' || experienceMatch === 'over') {
+    pipeline.push({ $match: { 'latestScreening.experienceMatch': experienceMatch } });
+  }
+  if (minStars >= 1 && minStars <= 5) {
+    pipeline.push({ $match: { 'latestScreening.starRating': { $gte: minStars } } });
+  }
 
   pipeline.push(
     { $project: { screenings: 0 } },
