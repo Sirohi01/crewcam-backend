@@ -43,7 +43,12 @@ const MODERATION_JSON_SCHEMA: JsonSchemaDef = {
 };
 
 export const moderateImage = async (tenantId: string, buffer: Buffer, mimeType: string): Promise<ImageModerationResult> => {
-  const resolved = await resolveTenantAiProvider(tenantId);
+  let resolved: Awaited<ReturnType<typeof resolveTenantAiProvider>>;
+  try {
+    resolved = await resolveTenantAiProvider(tenantId);
+  } catch {
+    return { checked: false, safe: true, categories: [] };
+  }
   if (!resolved) return { checked: false, safe: true, categories: [] };
 
   try {
@@ -98,7 +103,12 @@ export const reviewDocument = async (
   mimeType: string,
   documentLabel?: string,
 ): Promise<DocumentReviewResult | null> => {
-  const resolved = await resolveTenantAiProvider(tenantId);
+  let resolved: Awaited<ReturnType<typeof resolveTenantAiProvider>>;
+  try {
+    resolved = await resolveTenantAiProvider(tenantId);
+  } catch {
+    return null;
+  }
   if (!resolved) return null;
 
   const text = await extractTextFromBuffer(buffer, mimeType);

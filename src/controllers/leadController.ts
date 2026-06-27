@@ -1,7 +1,10 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Lead } from '../models/Lead';
+import { LeadProposal } from '../models/LeadProposal';
 import { AuditLog } from '../models/AuditLog';
+import { generateProposalNumber, buildProposalPdf } from '../services/billingDocuments';
+import { sendMail } from '../services/mailer';
 import { z } from 'zod';
 
 const leadSchema = z.object({
@@ -54,9 +57,10 @@ export const getAllLeads = async (req: AuthRequest, res: Response) => {
 
 export const getLeadById = async (req: AuthRequest, res: Response) => {
   try {
-    const lead = await Lead.findById(req.params.id).lean();
+    const lead = await Lead.findById(req.params.id).populate('stageHistory.changedBy', 'firstName lastName email').lean();
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    res.status(200).json(lead);
+    const proposals = await LeadProposal.find({ leadId: lead._id }).sort({ createdAt: -1 }).lean();
+    res.status(200).json({ ...lead, proposals });
   } catch (error) {
     console.error('Error fetching lead:', error);
     res.status(500).json({ message: 'Internal server error while fetching lead' });
@@ -86,7 +90,11 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
     }
-    const lead = new Lead({ ...parsed.data, ...(req.user?._id && { createdBy: req.user._id }) });
+    const lead = new Lead({
+      ...parsed.data,
+      ...(req.user?._id && { createdBy: req.user._id }),
+      stageHistory: [{ toStage: parsed.data.stage, ...(req.user?._id && { changedBy: req.user._id }), changedAt: new Date() }],
+    });
     await lead.save();
     await writeAudit('CREATE_LEAD', req.user?._id, { companyName: lead.companyName });
     res.status(201).json(lead);
@@ -102,9 +110,28 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
     }
+
+    const existing = await Lead.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: 'Lead not found' });
+
+    const stageChanged = parsed.data.stage !== undefined && parsed.data.stage !== existing.stage;
+
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
-      { ...parsed.data, ...(req.user?._id && { updatedBy: req.user._id }) },
+      {
+        ...parsed.data,
+        ...(req.user?._id && { updatedBy: req.user._id }),
+        ...(stageChanged && {
+          $push: {
+            stageHistory: {
+              fromStage: existing.stage,
+              toStage: parsed.data.stage,
+              ...(req.user?._id && { changedBy: req.user._id }),
+              changedAt: new Date(),
+            },
+          },
+        }),
+      },
       { new: true, runValidators: true },
     );
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
@@ -125,5 +152,91 @@ export const deleteLead = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error deleting lead:', error);
     res.status(500).json({ message: 'Internal server error while deleting lead' });
+  }
+};
+
+const proposalItemSchema = z.object({ description: z.string().min(1), amount: z.coerce.number().min(0) });
+const generateProposalSchema = z.object({
+  items: z.array(proposalItemSchema).min(1, 'At least one line item is required'),
+  validDays: z.coerce.number().min(1).optional().default(14),
+});
+
+export const listLeadProposals = async (req: AuthRequest, res: Response) => {
+  try {
+    const proposals = await LeadProposal.find({ leadId: req.params.id as string }).sort({ createdAt: -1 }).lean();
+    res.status(200).json(proposals);
+  } catch (error) {
+    console.error('Error listing lead proposals:', error);
+    res.status(500).json({ message: 'Internal server error while listing proposals' });
+  }
+};
+
+export const generateLeadProposal = async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = generateProposalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
+    }
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const totalAmount = parsed.data.items.reduce((s, i) => s + i.amount, 0);
+    const proposalNumber = await generateProposalNumber();
+    const validUntil = new Date(Date.now() + parsed.data.validDays * 24 * 60 * 60 * 1000);
+
+    const pdfUrl = await buildProposalPdf({
+      proposalNumber, companyName: lead.companyName, items: parsed.data.items, totalAmount, currency: lead.currency, validUntil,
+    });
+
+    const proposal = await LeadProposal.create({
+      leadId: lead._id,
+      proposalNumber,
+      items: parsed.data.items,
+      totalAmount,
+      currency: lead.currency,
+      status: 'DRAFT',
+      validUntil,
+      pdfUrl,
+      ...(req.user?._id && { createdBy: req.user._id }),
+    });
+
+    await writeAudit('GENERATE_LEAD_PROPOSAL', req.user?._id, { companyName: lead.companyName, proposalNumber, totalAmount });
+    res.status(201).json(proposal);
+  } catch (error) {
+    console.error('Error generating lead proposal:', error);
+    res.status(500).json({ message: 'Internal server error while generating proposal' });
+  }
+};
+
+export const sendLeadProposal = async (req: AuthRequest, res: Response) => {
+  try {
+    const proposal = await LeadProposal.findOne({ _id: req.params.proposalId as string, leadId: req.params.id as string });
+    if (!proposal) return res.status(404).json({ message: 'Proposal not found' });
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const result = await sendMail({
+      to: lead.contactEmail,
+      subject: `Proposal ${proposal.proposalNumber} from CrewCam HR Cloud`,
+      html: `<p>Hi ${lead.contactName},</p><p>Please find your proposal <strong>${proposal.proposalNumber}</strong> from CrewCam HR Cloud.</p><p><a href="${proposal.pdfUrl}">Download Proposal PDF</a></p>`,
+    });
+
+    proposal.status = 'SENT';
+    proposal.sentAt = new Date();
+    await proposal.save();
+
+    const stageChanged = lead.stage !== 'PROPOSAL_SENT';
+    if (stageChanged) {
+      await Lead.findByIdAndUpdate(lead._id, {
+        stage: 'PROPOSAL_SENT',
+        $push: { stageHistory: { fromStage: lead.stage, toStage: 'PROPOSAL_SENT', ...(req.user?._id && { changedBy: req.user._id }), changedAt: new Date() } },
+      });
+    }
+
+    await writeAudit('SEND_LEAD_PROPOSAL', req.user?._id, { companyName: lead.companyName, proposalNumber: proposal.proposalNumber, emailSent: result.sent });
+    res.status(200).json({ proposal, emailSent: result.sent, emailError: result.error });
+  } catch (error) {
+    console.error('Error sending lead proposal:', error);
+    res.status(500).json({ message: 'Internal server error while sending proposal' });
   }
 };

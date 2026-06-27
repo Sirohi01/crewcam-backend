@@ -35,6 +35,7 @@ import locationRoutes from './routes/locationRoutes';
 import path from 'path';
 import { startRetentionJobs } from './utils/retentionJobs';
 import { startCronJobs } from './utils/cronJobs';
+import { startAutomationJobs } from './utils/automationJobs';
 
 dotenv.config();
 
@@ -115,6 +116,7 @@ mongoose.connect(MONGODB_URI)
     console.log('Connected to MongoDB');
     startRetentionJobs();
     startCronJobs();
+    startAutomationJobs();
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
