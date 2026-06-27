@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { ResumeScreening } from '../models/ResumeScreening';
 import { Candidate } from '../models/Candidate';
 import { AuditLog } from '../models/AuditLog';
-import { screenResume, AiFeatureError } from '../services/aiService';
+import { screenResume, extractCandidateProfile, AiFeatureError } from '../services/aiService';
 
 export const triggerResumeScreening = async (req: AuthRequest, res: Response) => {
   const tenantId = (req.tenantId || req.user!.tenantId) as string;
@@ -41,6 +41,25 @@ export const triggerResumeScreening = async (req: AuthRequest, res: Response) =>
     const statusCode = error instanceof AiFeatureError ? error.statusCode : 500;
     res.status(statusCode).json({
       message: error instanceof AiFeatureError ? error.message : 'AI resume screening failed',
+      ...(process.env.NODE_ENV === 'production' && !(error instanceof AiFeatureError) ? {} : { error: error.message }),
+    });
+  }
+};
+
+/** Runs during the candidate-create form flow, before any Candidate doc exists — just returns extracted fields for the frontend to apply to its draft form. */
+export const triggerExtractResumeProfile = async (req: AuthRequest, res: Response) => {
+  const tenantId = (req.tenantId || req.user!.tenantId) as string;
+  const { resumeUrl } = req.body;
+
+  if (!resumeUrl) return res.status(400).json({ message: 'resumeUrl is required' });
+
+  try {
+    const result = await extractCandidateProfile(tenantId, resumeUrl, String(req.user!._id));
+    res.status(200).json(result);
+  } catch (error: any) {
+    const statusCode = error instanceof AiFeatureError ? error.statusCode : 500;
+    res.status(statusCode).json({
+      message: error instanceof AiFeatureError ? error.message : 'AI resume extraction failed',
       ...(process.env.NODE_ENV === 'production' && !(error instanceof AiFeatureError) ? {} : { error: error.message }),
     });
   }

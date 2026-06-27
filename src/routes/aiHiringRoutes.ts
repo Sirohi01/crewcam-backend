@@ -9,7 +9,7 @@ import { checkPermission } from '../middleware/rbac';
 import { requireFeature } from '../middleware/featureGate';
 import { requireAiCredits } from '../middleware/aiCreditGate';
 import { aiScreeningLimiter, aiGenerationLimiter, aiInterviewRecordingLimiter } from '../middleware/rateLimiter';
-import { triggerResumeScreening, getResumeScreenings, getResumeScreeningQueue } from '../controllers/aiHiringController';
+import { triggerResumeScreening, getResumeScreenings, getResumeScreeningQueue, triggerExtractResumeProfile } from '../controllers/aiHiringController';
 import { triggerGenerateJdAndKra, triggerGenerateInterviewQuestions, triggerGenerateAnswer } from '../controllers/aiManpowerController';
 import { startInterviewSession, uploadAndAnalyzeAnswer, endInterviewSession } from '../controllers/interviewRecordingController';
 
@@ -72,6 +72,14 @@ router.get(
   requireFeature('ai-hiring'),
   checkPermission('ATS_READ'),
   getResumeScreenings,
+);
+router.post(
+  '/hiring/extract-resume-profile',
+  requireFeature('ai-hiring'),
+  checkPermission('ATS_WRITE'),
+  requireAiCredits,
+  aiGenerationLimiter,
+  triggerExtractResumeProfile,
 );
 router.post(
   '/hiring/generate-jd-kra',

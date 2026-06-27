@@ -424,6 +424,125 @@ export const generateJobDescriptionAndKra = async (
   }
 };
 
+interface CandidateProfileExtraction {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  gender: string;
+  dateOfBirth: string;
+  address: string;
+  country: string;
+  state: string;
+  city: string;
+  postalCode: string;
+  candidateType: 'Experienced' | 'Fresher';
+  currentOrMostRecentDesignation: string;
+  education: Array<{ qualification: string; university: string; institute: string; monthYear: string; result: string }>;
+  technicalSkills: string[];
+  employmentHistory: Array<{ employer: string; periodFrom: string; periodTo: string; designation: string; ctc: string }>;
+}
+
+const CANDIDATE_PROFILE_JSON_SCHEMA: JsonSchemaDef = {
+  name: 'candidate_profile_extraction',
+  schema: {
+    type: 'object',
+    properties: {
+      firstName: { type: 'string' },
+      lastName: { type: 'string' },
+      email: { type: 'string' },
+      phone: { type: 'string' },
+      gender: { type: 'string', description: 'Male/Female/Other, only if explicitly stated or unambiguous from name — else empty string' },
+      dateOfBirth: { type: 'string', description: 'YYYY-MM-DD if stated, else empty string' },
+      address: { type: 'string' },
+      country: { type: 'string' },
+      state: { type: 'string' },
+      city: { type: 'string' },
+      postalCode: { type: 'string' },
+      candidateType: { type: 'string', enum: ['Experienced', 'Fresher'], description: 'Fresher if no employment history is listed, else Experienced' },
+      currentOrMostRecentDesignation: { type: 'string', description: 'Their current or most recent job title, for suggesting a role applied for' },
+      education: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            qualification: { type: 'string' }, university: { type: 'string' }, institute: { type: 'string' }, monthYear: { type: 'string', description: 'YYYY-MM if known' }, result: { type: 'string' },
+          },
+          required: ['qualification', 'university', 'institute', 'monthYear', 'result'],
+          additionalProperties: false,
+        },
+      },
+      technicalSkills: { type: 'array', items: { type: 'string' }, description: 'Individual technical/IT skill or tool names mentioned' },
+      employmentHistory: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            employer: { type: 'string' }, periodFrom: { type: 'string', description: 'YYYY-MM' }, periodTo: { type: 'string', description: 'YYYY-MM, empty if current job' }, designation: { type: 'string' }, ctc: { type: 'string' },
+          },
+          required: ['employer', 'periodFrom', 'periodTo', 'designation', 'ctc'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['firstName', 'lastName', 'email', 'phone', 'gender', 'dateOfBirth', 'address', 'country', 'state', 'city', 'postalCode', 'candidateType', 'currentOrMostRecentDesignation', 'education', 'technicalSkills', 'employmentHistory'],
+    additionalProperties: false,
+  },
+};
+export const extractCandidateProfile = async (
+  tenantId: string,
+  resumeUrl: string,
+  triggeredBy: string,
+): Promise<CandidateProfileExtraction> => {
+  const resolved = await resolveTenantAiProvider(tenantId);
+  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
+
+  let resumeText: string;
+  try {
+    resumeText = await extractResumeText(resumeUrl);
+  } catch (err: any) {
+    throw new AiFeatureError('Could not read the resume file', 422);
+  }
+  if (!resumeText) throw new AiFeatureError('Resume contained no extractable text', 422);
+
+  try {
+    const { raw, promptTokens, completionTokens } = await callAiJson({
+      provider: resolved.provider,
+      apiKey: resolved.apiKey,
+      model: resolved.model,
+      systemPrompt:
+        'You extract structured candidate profile information from a resume, to auto-fill a job application ' +
+        'form. Only use information explicitly present in the resume text; leave a field as an empty string ' +
+        '(or empty array) if it is not stated — never invent or guess personal details.',
+      userPrompt: `Resume text:\n${resumeText.slice(0, MAX_RESUME_CHARS)}`,
+      jsonSchema: CANDIDATE_PROFILE_JSON_SCHEMA,
+    });
+    const result = JSON.parse(raw) as CandidateProfileExtraction;
+
+    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+    await AiUsageLog.create({
+      tenantId, feature: 'candidate-profile-extraction', aiModel: resolved.model,
+      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+      createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+
+    return result;
+  } catch (err: any) {
+    await AiUsageLog.create({
+      tenantId, feature: 'candidate-profile-extraction', status: 'FAILURE',
+      metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
+    } as any);
+    if (err instanceof AiFeatureError) throw err;
+    if (isQuotaError(err.message)) {
+      throw new AiFeatureError(`${describeQuotaError(err.message)} Please fill the form in manually for now.`, 429);
+    }
+    throw new AiFeatureError('AI resume extraction failed', 502);
+  }
+};
+
 interface InterviewQuestionsResult {
   questions: string[];
 }
