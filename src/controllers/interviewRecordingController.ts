@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { v2 as cloudinary } from 'cloudinary';
 import { AuthRequest } from '../middleware/auth';
 import { Interview } from '../models/Interview';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
@@ -50,6 +51,13 @@ export const uploadAndAnalyzeAnswer = async (req: AuthRequest, res: Response) =>
     );
     res.status(200).json(result);
   } catch (error: any) {
+    if (error instanceof AiFeatureError && error.code === 'UNSAFE_CONTENT' && recordingPublicId) {
+      try {
+        await cloudinary.uploader.destroy(recordingPublicId, { resource_type: 'video' });
+      } catch {
+        // best-effort cleanup — the flagged response below is what matters to the client
+      }
+    }
     sendError(res, error, 'AI answer analysis failed');
   }
 };

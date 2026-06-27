@@ -1,10 +1,12 @@
-import express from 'express';
+import express, { Response } from 'express';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import { authenticate } from '../middleware/auth';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs/promises';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import { uploadModerationLimiter } from '../middleware/rateLimiter';
+import { moderateImage, reviewDocument } from '../services/contentModerationService';
 
 dotenv.config();
 
@@ -19,39 +21,6 @@ if (hasCloudinaryConfig) {
   });
 }
 
-const cloudinaryStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
-    const ext = file.originalname.split('.').pop() || '';
-    const isImage = file.mimetype.startsWith('image/');
-    // Forcing format: 'jpg' on every upload (the old behavior) silently mangled non-image
-    // files — a PDF/DOCX resume would get coerced into a "jpg" asset and become unreadable.
-    // Documents need resource_type: 'raw' and their original extension preserved instead.
-    return isImage
-      ? {
-          folder: 'crewcam_uploads',
-          format: 'jpg',
-          public_id: `${Date.now()}-${file.originalname.split('.')[0]}`,
-        }
-      : {
-          folder: 'crewcam_uploads',
-          resource_type: 'raw',
-          format: ext,
-          public_id: `${Date.now()}-${file.originalname.split('.')[0]}`,
-        };
-  },
-});
-
-const localStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, path.join(process.cwd(), 'public', 'uploads'));
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `file-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-  },
-});
-
 const fileFilter = (_req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
   if (allowedTypes.includes(file.mimetype)) {
@@ -62,25 +31,67 @@ const fileFilter = (_req: express.Request, file: Express.Multer.File, cb: multer
     cb(error);
   }
 };
-
-const upload = multer({ 
-  storage: hasCloudinaryConfig ? cloudinaryStorage : localStorage,
+const upload = multer({
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter
+  fileFilter,
 });
 
+const uploadBufferToCloudinary = (buffer: Buffer, originalname: string, mimeType: string): Promise<string> => {
+  const isImage = mimeType.startsWith('image/');
+  const ext = originalname.split('.').pop() || '';
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      isImage
+        ? { folder: 'crewcam_uploads', format: 'jpg', public_id: `${Date.now()}-${originalname.split('.')[0]}` }
+        : { folder: 'crewcam_uploads', resource_type: 'raw', format: ext, public_id: `${Date.now()}-${originalname.split('.')[0]}` },
+      (error, result) => {
+        if (error || !result?.secure_url) {
+          reject(error || new Error('Cloudinary upload failed'));
+          return;
+        }
+        resolve(result.secure_url);
+      }
+    );
+    uploadStream.end(buffer);
+  });
+};
+
+const writeBufferToLocalDisk = async (buffer: Buffer, originalname: string, req: express.Request): Promise<string> => {
+  const ext = path.extname(originalname) || '.jpg';
+  const filename = `file-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  await fs.writeFile(path.join(process.cwd(), 'public', 'uploads', filename), buffer);
+  return `${req.protocol}://${req.get('host')}/uploads/${filename}`;
+};
+
 // Upload endpoint
-router.post('/', authenticate, upload.single('file'), (req, res) => {
+router.post('/', authenticate, uploadModerationLimiter, upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
-    
-    const uploadedPath = req.file.path;
+
+    const tenantId = String(req.tenantId || req.user?.tenantId || '');
+    const { buffer, mimetype, originalname } = req.file;
+    const documentLabel = typeof req.body?.documentLabel === 'string' ? req.body.documentLabel : undefined;
+
+    let review: { verdict: string; reason: string } | undefined;
+
+    if (mimetype.startsWith('image/')) {
+      const moderation = await moderateImage(tenantId, buffer, mimetype);
+      if (moderation.checked && !moderation.safe) {
+        return res.status(422).json({ message: 'This image cannot be uploaded.', categories: moderation.categories });
+      }
+    } else {
+      const docReview = await reviewDocument(tenantId, buffer, mimetype, documentLabel);
+      if (docReview) review = { verdict: docReview.verdict, reason: docReview.reason };
+    }
+
     const fileUrl = hasCloudinaryConfig
-      ? uploadedPath
-      : `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-    res.status(200).json({ url: fileUrl });
+      ? await uploadBufferToCloudinary(buffer, originalname, mimetype)
+      : await writeBufferToLocalDisk(buffer, originalname, req);
+
+    res.status(200).json({ url: fileUrl, ...(review ? { review } : {}) });
   } catch (error) {
     res.status(500).json({ message: 'Error uploading file', error: (error as any).message });
   }

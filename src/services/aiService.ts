@@ -1,5 +1,3 @@
-import { PDFParse } from 'pdf-parse';
-import mammoth from 'mammoth';
 import { Candidate } from '../models/Candidate';
 import { ResumeScreening, IResumeScreening } from '../models/ResumeScreening';
 import { AiUsageLog } from '../models/AiUsageLog';
@@ -16,21 +14,22 @@ import { Interview, IInterview, IInterviewQuestion, IAnswerAnalysis } from '../m
 import { ManpowerRequest } from '../models/ManpowerRequest';
 import { callAiJson, callGeminiMultimodal, AiProviderName, JsonSchemaDef } from './aiProviders';
 import { toSignedCloudinaryUrl } from '../utils/cloudinarySign';
+import { extractTextFromBuffer } from '../utils/documentText';
 import { getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
 const MAX_RESUME_CHARS = 32_000;
 
-const MODEL_PRICING: Record<string, { promptPer1k: number; completionPer1k: number }> = {
+export const MODEL_PRICING: Record<string, { promptPer1k: number; completionPer1k: number }> = {
   'gpt-4o-mini': { promptPer1k: 0.00015, completionPer1k: 0.0006 },
   'gemini-2.5-flash': { promptPer1k: 0.0001, completionPer1k: 0.0004 }, // free tier covers most usage
   'claude-3-5-haiku-20241022': { promptPer1k: 0.0008, completionPer1k: 0.004 },
 };
 
-interface ResolvedAiProvider {
+export interface ResolvedAiProvider {
   provider: AiProviderName;
   apiKey: string;
   model: string;
 }
-const resolveTenantAiProvider = async (tenantId: string): Promise<ResolvedAiProvider | null> => {
+export const resolveTenantAiProvider = async (tenantId: string): Promise<ResolvedAiProvider | null> => {
   const tenant = await Tenant.findById(tenantId).select('preferredAiProvider');
   const preferred = tenant?.preferredAiProvider;
 
@@ -48,7 +47,7 @@ const resolveTenantAiProvider = async (tenantId: string): Promise<ResolvedAiProv
 const NOT_CONFIGURED_MESSAGE = 'No AI provider is active for this account — contact your administrator.';
 
 export class AiFeatureError extends Error {
-  constructor(message: string, public readonly statusCode: number = 422) {
+  constructor(message: string, public readonly statusCode: number = 422, public readonly code?: string) {
     super(message);
   }
 }
@@ -70,19 +69,10 @@ const fetchFileBuffer = async (fileUrl: string): Promise<Buffer> => {
 
 export const extractResumeText = async (fileUrl: string): Promise<string> => {
   const buffer = await fetchFileBuffer(fileUrl);
-  const lowerUrl = fileUrl.toLowerCase();
-
-  if (lowerUrl.endsWith('.docx')) {
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value.trim();
-  }
-  const parser = new PDFParse({ data: buffer });
-  try {
-    const result = await parser.getText();
-    return result.text.trim();
-  } finally {
-    await parser.destroy();
-  }
+  const mimeType = fileUrl.toLowerCase().endsWith('.docx')
+    ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    : 'application/pdf';
+  return extractTextFromBuffer(buffer, mimeType);
 };
 
 interface ScreeningResult {
@@ -677,6 +667,8 @@ interface AnswerAnalysisAiResult {
   verdict: 'strong' | 'adequate' | 'weak' | 'no_answer';
   reasoning: string;
   followUpSuggestion?: string;
+  isSafe: boolean;
+  unsafeCategories?: string[];
 }
 
 const ANSWER_ANALYSIS_JSON_SCHEMA: JsonSchemaDef = {
@@ -688,8 +680,10 @@ const ANSWER_ANALYSIS_JSON_SCHEMA: JsonSchemaDef = {
       verdict: { type: 'string', enum: ['strong', 'adequate', 'weak', 'no_answer'] },
       reasoning: { type: 'string', description: '2-4 sentence explanation of the verdict, referencing what was/was not covered' },
       followUpSuggestion: { type: 'string', description: 'An optional on-screen-only follow-up question the interviewer could ask now, if the answer left a gap worth probing. Omit if not needed.' },
+      isSafe: { type: 'boolean', description: 'false if the clip shows nudity/sexual content, graphic violence, or hate symbols' },
+      unsafeCategories: { type: 'array', items: { type: 'string', enum: ['nudity', 'sexual', 'violence', 'hate', 'none'] } },
     },
-    required: ['transcript', 'verdict', 'reasoning'],
+    required: ['transcript', 'verdict', 'reasoning', 'isSafe'],
     additionalProperties: false,
   },
 };
@@ -722,13 +716,18 @@ export const analyzeAnswerRecording = async (
       systemPrompt:
         'You are assisting a live interviewer. Watch/listen to this single answer clip and (1) transcribe what the ' +
         'candidate said, (2) judge how well it answers the given question for the given role, (3) optionally suggest ' +
-        'ONE on-screen follow-up question the interviewer could ask right now if there is a clear gap. Be concise and fair.',
+        'ONE on-screen follow-up question the interviewer could ask right now if there is a clear gap, and (4) flag if ' +
+        'the clip itself shows nudity/sexual content, graphic violence, or hate symbols. Be concise and fair.',
       userPrompt: `Role: ${candidate?.jobRole || 'Unknown role'}\nInterview question asked: "${questionEntry.question}"`,
       mediaBuffer,
       mimeType: recording.mimeType,
       jsonSchema: ANSWER_ANALYSIS_JSON_SCHEMA,
     });
     const result = JSON.parse(raw) as AnswerAnalysisAiResult;
+
+    if (!result.isSafe) {
+      throw new AiFeatureError('This recording was flagged and could not be saved.', 422, 'UNSAFE_CONTENT');
+    }
 
     questionEntry.recordingUrl = recording.recordingUrl;
     if (recording.recordingPublicId) questionEntry.recordingPublicId = recording.recordingPublicId;

@@ -15,8 +15,6 @@ export interface ICandidate extends Document {
   rating?: number;
   comments?: string;
   profileImageUrl?: string;
-  /** Detailed application data captured during hiring intake. Kept on the candidate,
-   * while every downstream hiring step remains a separate model. */
   applicationDetails?: Record<string, unknown>;
 }
 
@@ -28,18 +26,18 @@ const candidateSchema = new Schema<ICandidate>({
   phone: { type: String, required: true },
   jobRole: { type: String, required: true },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
-  status: { 
-    type: String, 
-    enum: ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected'], 
-    default: 'Applied' 
+  status: {
+    type: String,
+    enum: ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected'],
+    default: 'Applied'
   },
   resumeUrl: { type: String },
   resumeUpdatedAt: { type: Date },
   source: { type: String },
   rating: { type: Number, min: 1, max: 5 },
   comments: { type: String }
-  ,profileImageUrl: { type: String }
-  ,applicationDetails: { type: Schema.Types.Mixed }
+  , profileImageUrl: { type: String }
+  , applicationDetails: { type: Schema.Types.Mixed }
 }, {
   timestamps: true
 });

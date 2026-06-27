@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -69,8 +69,23 @@ export const aiInterviewRecordingLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // tenant-keyed (not pure-IP) so two interviewers on the same office network running separate
-  // interviews don't contend for the same bucket
-  keyGenerator: (req: any) => String(req.tenantId || req.user?.tenantId || req.ip),
+  keyGenerator: (req: any) => {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    return tenantId ? String(tenantId) : ipKeyGenerator(req.ip);
+  },
+  skip: (req, res) => process.env.NODE_ENV === 'development',
+});
+export const uploadModerationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: {
+    message: 'Too many uploads from this account, please try again after 15 minutes',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    return tenantId ? String(tenantId) : ipKeyGenerator(req.ip);
+  },
   skip: (req, res) => process.env.NODE_ENV === 'development',
 });

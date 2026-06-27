@@ -158,3 +158,83 @@ const callAnthropicJson = async ({ apiKey, model, systemPrompt, userPrompt, json
     completionTokens: message.usage?.output_tokens ?? 0,
   };
 };
+
+interface CallAiJsonWithImageArgs {
+  provider: AiProviderName;
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  imageBuffer: Buffer;
+  mimeType: string;
+  jsonSchema: JsonSchemaDef;
+}
+export const callAiJsonWithImage = async (args: CallAiJsonWithImageArgs): Promise<AiCallResult> => {
+  switch (args.provider) {
+    case 'OpenAI':
+      return callOpenAiJsonWithImage(args);
+    case 'Gemini':
+      return callGeminiMultimodal({
+        apiKey: args.apiKey, model: args.model, systemPrompt: args.systemPrompt, userPrompt: args.userPrompt,
+        mediaBuffer: args.imageBuffer, mimeType: args.mimeType, jsonSchema: args.jsonSchema,
+      });
+    case 'Anthropic':
+      return callAnthropicJsonWithImage(args);
+    default:
+      throw new Error(`Unsupported AI provider: ${args.provider}`);
+  }
+};
+
+const callOpenAiJsonWithImage = async ({ apiKey, model, systemPrompt, userPrompt, imageBuffer, mimeType, jsonSchema }: CallAiJsonWithImageArgs): Promise<AiCallResult> => {
+  const client = new OpenAI({ apiKey });
+  const completion = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userPrompt },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBuffer.toString('base64')}` } },
+        ],
+      },
+    ],
+    response_format: { type: 'json_schema', json_schema: { name: jsonSchema.name, strict: true, schema: jsonSchema.schema } },
+  });
+
+  const raw = completion.choices[0]?.message?.content;
+  if (!raw) throw new Error('AI returned an empty response');
+
+  return {
+    raw,
+    promptTokens: completion.usage?.prompt_tokens ?? 0,
+    completionTokens: completion.usage?.completion_tokens ?? 0,
+  };
+};
+
+const callAnthropicJsonWithImage = async ({ apiKey, model, systemPrompt, userPrompt, imageBuffer, mimeType, jsonSchema }: CallAiJsonWithImageArgs): Promise<AiCallResult> => {
+  const client = new Anthropic({ apiKey });
+  const message = await client.messages.create({
+    model,
+    max_tokens: 2048,
+    system: systemPrompt,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mimeType as any, data: imageBuffer.toString('base64') } },
+        { type: 'text', text: userPrompt },
+      ],
+    }],
+    tools: [{ name: jsonSchema.name, description: `Return the result as ${jsonSchema.name}`, input_schema: jsonSchema.schema as any }],
+    tool_choice: { type: 'tool', name: jsonSchema.name },
+  });
+
+  const toolUse = message.content.find((block) => block.type === 'tool_use');
+  if (!toolUse || toolUse.type !== 'tool_use') throw new Error('AI returned an empty response');
+
+  return {
+    raw: JSON.stringify(toolUse.input),
+    promptTokens: message.usage?.input_tokens ?? 0,
+    completionTokens: message.usage?.output_tokens ?? 0,
+  };
+};
