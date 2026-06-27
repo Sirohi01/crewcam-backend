@@ -17,11 +17,18 @@ import { toSignedCloudinaryUrl } from '../utils/cloudinarySign';
 import { extractTextFromBuffer } from '../utils/documentText';
 import { getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
 const MAX_RESUME_CHARS = 32_000;
-
 export const MODEL_PRICING: Record<string, { promptPer1k: number; completionPer1k: number }> = {
   'gpt-4o-mini': { promptPer1k: 0.00015, completionPer1k: 0.0006 },
+  'gpt-4.1-mini': { promptPer1k: 0.0004, completionPer1k: 0.0016 },
+  'gpt-4o': { promptPer1k: 0.0025, completionPer1k: 0.01 },
+  'gpt-4.1': { promptPer1k: 0.002, completionPer1k: 0.008 },
   'gemini-2.5-flash': { promptPer1k: 0.0001, completionPer1k: 0.0004 }, // free tier covers most usage
+  'gemini-2.5-flash-lite': { promptPer1k: 0.00005, completionPer1k: 0.0002 },
+  'gemini-2.5-pro': { promptPer1k: 0.00125, completionPer1k: 0.005 },
   'claude-3-5-haiku-20241022': { promptPer1k: 0.0008, completionPer1k: 0.004 },
+  'claude-haiku-4-5-20251001': { promptPer1k: 0.001, completionPer1k: 0.005 },
+  'claude-sonnet-4-6': { promptPer1k: 0.003, completionPer1k: 0.015 },
+  'claude-opus-4-8': { promptPer1k: 0.015, completionPer1k: 0.075 },
 };
 
 export interface ResolvedAiProvider {

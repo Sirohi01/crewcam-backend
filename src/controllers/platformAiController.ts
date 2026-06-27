@@ -7,8 +7,25 @@ const DEFAULTS: Array<{ provider: 'OpenAI' | 'Gemini' | 'Anthropic'; modelName: 
   { provider: 'Gemini', modelName: 'gemini-2.5-flash' },
   { provider: 'Anthropic', modelName: 'claude-3-5-haiku-20241022' },
 ];
-
-/** Super-admin only — lists one tenant's provider docs (creating the three defaults on first read). */
+export const MODEL_OPTIONS: Record<'OpenAI' | 'Gemini' | 'Anthropic', Array<{ value: string; label: string }>> = {
+  OpenAI: [
+    { value: 'gpt-4o-mini', label: 'GPT-4o mini — cheap, fast (default)' },
+    { value: 'gpt-4.1-mini', label: 'GPT-4.1 mini — cheap, newer' },
+    { value: 'gpt-4o', label: 'GPT-4o — stronger reasoning' },
+    { value: 'gpt-4.1', label: 'GPT-4.1 — strongest, costliest' },
+  ],
+  Gemini: [
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — cheap, fast (default)' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite — cheapest' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro — stronger reasoning, costliest' },
+  ],
+  Anthropic: [
+    { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku — cheap, fast (default)' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 — newer, cheap' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — stronger reasoning' },
+    { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 — strongest, costliest' },
+  ],
+};
 export const getAllAiProviders = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.query.tenantId as string | undefined;
@@ -30,6 +47,7 @@ export const getAllAiProviders = async (req: AuthRequest, res: Response) => {
       isActive: p.isActive,
       hasApiKey: Boolean(p.apiKey),
       apiKey: p.getMaskedApiKey(),
+      availableModels: MODEL_OPTIONS[p.provider],
     })));
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching AI providers', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
