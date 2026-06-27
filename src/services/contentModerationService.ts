@@ -19,11 +19,19 @@ const logFailure = async (tenantId: string, feature: string, error: string) => {
 const isSafetyBlockError = (message: string): boolean =>
   message.includes('AI_SAFETY_BLOCK:') || message.includes('AI returned an empty response');
 
+const isQuotaError = (message: string): boolean =>
+  /429|quota|rate limit|too many requests/i.test(message);
+const describeQuotaError = (message: string): string =>
+  /perday/i.test(message)
+    ? 'Daily AI request limit for this provider has been reached — it will reset tomorrow.'
+    : 'AI request limit for this provider has been reached for now.';
+
 export interface ImageModerationResult {
   checked: boolean;
   safe: boolean;
   categories: string[];
   reason?: string;
+  warning?: string;
 }
 
 const MODERATION_JSON_SCHEMA: JsonSchemaDef = {
@@ -63,7 +71,10 @@ export const moderateImage = async (tenantId: string, buffer: Buffer, mimeType: 
     if (isSafetyBlockError(err.message)) {
       return { checked: true, safe: false, categories: ['unclear'], reason: 'Could not verify this image is safe; blocked as a precaution.' };
     }
-    return { checked: false, safe: true, categories: [] };
+    if (isQuotaError(err.message)) {
+      return { checked: false, safe: true, categories: [], warning: `${describeQuotaError(err.message)} This upload was not screened for unsafe content — please review it manually.` };
+    }
+    return { checked: false, safe: true, categories: [], warning: 'The AI safety check failed unexpectedly. This upload was not screened for unsafe content — please review it manually.' };
   }
 };
 

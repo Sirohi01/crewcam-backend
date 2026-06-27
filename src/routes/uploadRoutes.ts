@@ -76,6 +76,7 @@ router.post('/', authenticate, uploadModerationLimiter, upload.single('file'), a
     const documentLabel = typeof req.body?.documentLabel === 'string' ? req.body.documentLabel : undefined;
 
     let review: { verdict: string; reason: string } | undefined;
+    let warning: string | undefined;
 
     if (mimetype.startsWith('image/')) {
       const moderation = await moderateImage(tenantId, buffer, mimetype);
@@ -88,6 +89,7 @@ router.post('/', authenticate, uploadModerationLimiter, upload.single('file'), a
           reason: moderation.reason,
         });
       }
+      if (moderation.warning) warning = moderation.warning;
     } else {
       const docReview = await reviewDocument(tenantId, buffer, mimetype, documentLabel);
       if (docReview) review = { verdict: docReview.verdict, reason: docReview.reason };
@@ -97,7 +99,7 @@ router.post('/', authenticate, uploadModerationLimiter, upload.single('file'), a
       ? await uploadBufferToCloudinary(buffer, originalname, mimetype)
       : await writeBufferToLocalDisk(buffer, originalname, req);
 
-    res.status(200).json({ url: fileUrl, ...(review ? { review } : {}) });
+    res.status(200).json({ url: fileUrl, ...(review ? { review } : {}), ...(warning ? { warning } : {}) });
   } catch (error) {
     res.status(500).json({ message: 'Error uploading file', error: (error as any).message });
   }
