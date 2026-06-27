@@ -16,6 +16,8 @@ const logCost = async (tenantId: string, feature: string, model: string, promptT
 const logFailure = async (tenantId: string, feature: string, error: string) => {
   await AiUsageLog.create({ tenantId, feature, status: 'FAILURE', metadata: { error } } as any);
 };
+const isSafetyBlockError = (message: string): boolean =>
+  message.includes('AI_SAFETY_BLOCK:') || message.includes('AI returned an empty response');
 
 export interface ImageModerationResult {
   checked: boolean;
@@ -38,7 +40,6 @@ const MODERATION_JSON_SCHEMA: JsonSchemaDef = {
   },
 };
 
-/** Fails open (returns checked:false) when the tenant has no active AI provider — never blocks uploads on its own absence. */
 export const moderateImage = async (tenantId: string, buffer: Buffer, mimeType: string): Promise<ImageModerationResult> => {
   const resolved = await resolveTenantAiProvider(tenantId);
   if (!resolved) return { checked: false, safe: true, categories: [] };
@@ -59,7 +60,9 @@ export const moderateImage = async (tenantId: string, buffer: Buffer, mimeType: 
     return { checked: true, safe: result.safe, categories: result.categories || [], reason: result.reason };
   } catch (err: any) {
     await logFailure(tenantId, 'image-moderation', err.message);
-    // Fail open on AI errors too — a transient AI outage must not block every upload in the app.
+    if (isSafetyBlockError(err.message)) {
+      return { checked: true, safe: false, categories: ['unclear'], reason: 'Could not verify this image is safe; blocked as a precaution.' };
+    }
     return { checked: false, safe: true, categories: [] };
   }
 };

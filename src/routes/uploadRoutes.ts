@@ -80,7 +80,13 @@ router.post('/', authenticate, uploadModerationLimiter, upload.single('file'), a
     if (mimetype.startsWith('image/')) {
       const moderation = await moderateImage(tenantId, buffer, mimetype);
       if (moderation.checked && !moderation.safe) {
-        return res.status(422).json({ message: 'This image cannot be uploaded.', categories: moderation.categories });
+        const categoryLabel = moderation.categories.filter((c) => c !== 'none').join(', ');
+        const detail = moderation.reason || (categoryLabel ? `Detected: ${categoryLabel}` : undefined);
+        return res.status(422).json({
+          message: detail ? `This image cannot be uploaded: ${detail}` : 'This image cannot be uploaded.',
+          categories: moderation.categories,
+          reason: moderation.reason,
+        });
       }
     } else {
       const docReview = await reviewDocument(tenantId, buffer, mimetype, documentLabel);

@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SafetySetting } from '@google/generative-ai';
 import Anthropic from '@anthropic-ai/sdk';
 
 export interface JsonSchemaDef {
@@ -56,13 +56,6 @@ const callOpenAiJson = async ({ apiKey, model, systemPrompt, userPrompt, jsonSch
     completionTokens: completion.usage?.completion_tokens ?? 0,
   };
 };
-
-/**
- * Gemini's responseSchema is a restricted OpenAPI-3.0 subset, not full JSON Schema —
- * it rejects keywords like "additionalProperties" outright (400 Bad Request). Strip
- * those recursively; the keywords our schemas actually rely on (type, properties,
- * items, enum, required, description) are all supported as-is.
- */
 const toGeminiSchema = (node: any): any => {
   if (Array.isArray(node)) return node.map(toGeminiSchema);
   if (node && typeof node === 'object') {
@@ -103,20 +96,22 @@ interface CallGeminiMultimodalArgs {
   mediaBuffer: Buffer;
   mimeType: string;
   jsonSchema: JsonSchemaDef;
+  safetySettings?: SafetySetting[];
 }
-
-/**
- * Gemini-only: sends an audio/video clip inline alongside the prompt so it can transcribe
- * and analyze it in one call, no separate speech-to-text step. Not folded into callAiJson's
- * provider switch because OpenAI/Anthropic aren't wired for multimodal input here yet.
- */
+export const PERMISSIVE_SAFETY_SETTINGS: SafetySetting[] = [
+  HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+  HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+  HarmCategory.HARM_CATEGORY_HARASSMENT,
+  HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+].map((category) => ({ category, threshold: HarmBlockThreshold.BLOCK_NONE }));
 export const callGeminiMultimodal = async ({
-  apiKey, model, systemPrompt, userPrompt, mediaBuffer, mimeType, jsonSchema,
+  apiKey, model, systemPrompt, userPrompt, mediaBuffer, mimeType, jsonSchema, safetySettings,
 }: CallGeminiMultimodalArgs): Promise<AiCallResult> => {
   const client = new GoogleGenerativeAI(apiKey);
   const genModel = client.getGenerativeModel({
     model,
     systemInstruction: systemPrompt,
+    ...(safetySettings ? { safetySettings } : {}),
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: toGeminiSchema(jsonSchema.schema),
@@ -127,6 +122,9 @@ export const callGeminiMultimodal = async ({
     { text: userPrompt },
     { inlineData: { mimeType, data: mediaBuffer.toString('base64') } },
   ]);
+  const blockReason = result.response.promptFeedback?.blockReason;
+  if (blockReason) throw new Error(`AI_SAFETY_BLOCK:${blockReason}`);
+
   const raw = result.response.text();
   if (!raw) throw new Error('AI returned an empty response');
 
@@ -177,6 +175,7 @@ export const callAiJsonWithImage = async (args: CallAiJsonWithImageArgs): Promis
       return callGeminiMultimodal({
         apiKey: args.apiKey, model: args.model, systemPrompt: args.systemPrompt, userPrompt: args.userPrompt,
         mediaBuffer: args.imageBuffer, mimeType: args.mimeType, jsonSchema: args.jsonSchema,
+        safetySettings: PERMISSIVE_SAFETY_SETTINGS,
       });
     case 'Anthropic':
       return callAnthropicJsonWithImage(args);

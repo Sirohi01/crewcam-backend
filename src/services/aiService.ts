@@ -12,7 +12,7 @@ import { EmployeeAiSummary, IEmployeeAiSummary } from '../models/EmployeeAiSumma
 import { PlatformAiProvider } from '../models/PlatformAiProvider';
 import { Interview, IInterview, IInterviewQuestion, IAnswerAnalysis } from '../models/Interview';
 import { ManpowerRequest } from '../models/ManpowerRequest';
-import { callAiJson, callGeminiMultimodal, AiProviderName, JsonSchemaDef } from './aiProviders';
+import { callAiJson, callGeminiMultimodal, PERMISSIVE_SAFETY_SETTINGS, AiProviderName, JsonSchemaDef } from './aiProviders';
 import { toSignedCloudinaryUrl } from '../utils/cloudinarySign';
 import { extractTextFromBuffer } from '../utils/documentText';
 import { getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
@@ -722,11 +722,17 @@ export const analyzeAnswerRecording = async (
       mediaBuffer,
       mimeType: recording.mimeType,
       jsonSchema: ANSWER_ANALYSIS_JSON_SCHEMA,
+      safetySettings: PERMISSIVE_SAFETY_SETTINGS,
     });
     const result = JSON.parse(raw) as AnswerAnalysisAiResult;
 
     if (!result.isSafe) {
-      throw new AiFeatureError('This recording was flagged and could not be saved.', 422, 'UNSAFE_CONTENT');
+      const categoryLabel = (result.unsafeCategories || []).filter((c) => c !== 'none').join(', ');
+      throw new AiFeatureError(
+        `This recording was flagged and could not be saved${categoryLabel ? `: ${categoryLabel}` : ''}.`,
+        422,
+        'UNSAFE_CONTENT',
+      );
     }
 
     questionEntry.recordingUrl = recording.recordingUrl;
