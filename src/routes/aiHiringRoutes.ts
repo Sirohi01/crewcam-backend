@@ -10,7 +10,7 @@ import { requireFeature } from '../middleware/featureGate';
 import { requireAiCredits } from '../middleware/aiCreditGate';
 import { aiScreeningLimiter, aiGenerationLimiter, aiInterviewRecordingLimiter } from '../middleware/rateLimiter';
 import { triggerResumeScreening, getResumeScreenings, getResumeScreeningQueue } from '../controllers/aiHiringController';
-import { triggerGenerateJd, triggerGenerateKra, triggerGenerateInterviewQuestions, triggerGenerateAnswer } from '../controllers/aiManpowerController';
+import { triggerGenerateJdAndKra, triggerGenerateInterviewQuestions, triggerGenerateAnswer } from '../controllers/aiManpowerController';
 import { startInterviewSession, uploadAndAnalyzeAnswer, endInterviewSession } from '../controllers/interviewRecordingController';
 
 const hasCloudinaryConfig = Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
@@ -74,20 +74,12 @@ router.get(
   getResumeScreenings,
 );
 router.post(
-  '/hiring/generate-jd',
+  '/hiring/generate-jd-kra',
   requireFeature('ai-hiring'),
   checkPermission('ATS_WRITE'),
   requireAiCredits,
   aiGenerationLimiter,
-  triggerGenerateJd,
-);
-router.post(
-  '/hiring/generate-kra',
-  requireFeature('ai-hiring'),
-  checkPermission('ATS_WRITE'),
-  requireAiCredits,
-  aiGenerationLimiter,
-  triggerGenerateKra,
+  triggerGenerateJdAndKra,
 );
 router.post(
   '/hiring/interviews/:id/generate-questions',

@@ -2,6 +2,7 @@ import { AiUsageLog } from '../models/AiUsageLog';
 import { resolveTenantAiProvider, MODEL_PRICING } from './aiService';
 import { callAiJson, callAiJsonWithImage, JsonSchemaDef } from './aiProviders';
 import { extractTextFromBuffer } from '../utils/documentText';
+import { isQuotaError, describeQuotaError } from '../utils/aiErrorClassifier';
 
 const logCost = async (tenantId: string, feature: string, model: string, promptTokens: number, completionTokens: number) => {
   const pricing = MODEL_PRICING[model] ?? { promptPer1k: 0, completionPer1k: 0 };
@@ -18,13 +19,6 @@ const logFailure = async (tenantId: string, feature: string, error: string) => {
 };
 const isSafetyBlockError = (message: string): boolean =>
   message.includes('AI_SAFETY_BLOCK:') || message.includes('AI returned an empty response');
-
-const isQuotaError = (message: string): boolean =>
-  /429|quota|rate limit|too many requests/i.test(message);
-const describeQuotaError = (message: string): string =>
-  /perday/i.test(message)
-    ? 'Daily AI request limit for this provider has been reached — it will reset tomorrow.'
-    : 'AI request limit for this provider has been reached for now.';
 
 export interface ImageModerationResult {
   checked: boolean;

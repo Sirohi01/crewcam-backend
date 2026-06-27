@@ -16,6 +16,7 @@ import { callAiJson, callGeminiMultimodal, PERMISSIVE_SAFETY_SETTINGS, AiProvide
 import { toSignedCloudinaryUrl } from '../utils/cloudinarySign';
 import { extractTextFromBuffer } from '../utils/documentText';
 import { getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
+import { isQuotaError, describeQuotaError } from '../utils/aiErrorClassifier';
 const MAX_RESUME_CHARS = 32_000;
 export const MODEL_PRICING: Record<string, { promptPer1k: number; completionPer1k: number }> = {
   'gpt-4o-mini': { promptPer1k: 0.00015, completionPer1k: 0.0006 },
@@ -337,19 +338,23 @@ interface RoleContext {
   jobTitle: string;
   designation?: string;
   departmentName?: string;
+  /** Free-text extra guidance from the HR user — appended to the prompt, never replaces it. */
+  customPrompt?: string;
 }
 
-interface JdGenerationResult {
+interface JdKraGenerationResult {
   jobDescriptionSummary: string;
   keyResponsibilities: string[];
   qualificationReq: string;
   experienceReq: string;
   technicalSkills: string;
   softSkills: string;
+  kraReport: string;
+  kpis: string[];
 }
 
-const JD_JSON_SCHEMA: JsonSchemaDef = {
-  name: 'job_description',
+const JD_KRA_JSON_SCHEMA: JsonSchemaDef = {
+  name: 'job_description_and_kra',
   schema: {
     type: 'object',
     properties: {
@@ -359,25 +364,24 @@ const JD_JSON_SCHEMA: JsonSchemaDef = {
       experienceReq: { type: 'string', description: 'Required years/type of experience' },
       technicalSkills: { type: 'string', description: 'Comma-separated technical skills' },
       softSkills: { type: 'string', description: 'Comma-separated soft skills' },
+      kraReport: { type: 'string', description: 'A short narrative of the key result areas for this role' },
+      kpis: { type: 'array', items: { type: 'string' }, description: '4-6 concrete, measurable KPIs for this role' },
     },
-    required: ['jobDescriptionSummary', 'keyResponsibilities', 'qualificationReq', 'experienceReq', 'technicalSkills', 'softSkills'],
+    required: ['jobDescriptionSummary', 'keyResponsibilities', 'qualificationReq', 'experienceReq', 'technicalSkills', 'softSkills', 'kraReport', 'kpis'],
     additionalProperties: false,
   },
 };
 
 const buildRoleLine = (role: RoleContext) =>
-  `Job title: ${role.jobTitle}${role.designation ? `\nDesignation: ${role.designation}` : ''}${role.departmentName ? `\nDepartment: ${role.departmentName}` : ''}`;
+  `Job title: ${role.jobTitle}${role.designation ? `\nDesignation: ${role.designation}` : ''}${role.departmentName ? `\nDepartment: ${role.departmentName}` : ''}` +
+  (role.customPrompt ? `\n\nAdditional instructions from the requester: ${role.customPrompt}` : '');
 
-/**
- * On-demand JD drafting for a Manpower Request — HR can edit the result before
- * saving, and optionally save it into JdLibrary for reuse. No PII/resume involved,
- * so no stripPii step (unlike screenResume).
- */
-export const generateJobDescription = async (
+
+export const generateJobDescriptionAndKra = async (
   tenantId: string,
   role: RoleContext,
   triggeredBy: string,
-): Promise<JdGenerationResult> => {
+): Promise<JdKraGenerationResult> => {
   const resolved = await resolveTenantAiProvider(tenantId);
   if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
 
@@ -387,17 +391,19 @@ export const generateJobDescription = async (
       apiKey: resolved.apiKey,
       model: resolved.model,
       systemPrompt:
-        'You are an HR assistant drafting a job description for a manpower requisition. Be concrete and ' +
-        'realistic for the given role; do not invent company-specific details you were not given.',
-      userPrompt: `${buildRoleLine(role)}\n\nDraft a job description for this role.`,
-      jsonSchema: JD_JSON_SCHEMA,
+        'You are an HR assistant drafting a job description AND its Key Result Areas (KRA) / Key Performance ' +
+        'Indicators (KPI) for a manpower requisition, in one pass so they stay consistent with each other. Be ' +
+        'concrete and realistic for the given role; do not invent company-specific details you were not given. ' +
+        'If the requester gave additional instructions, follow them while staying realistic for the role.',
+      userPrompt: `${buildRoleLine(role)}\n\nDraft the job description and the KRA/KPIs for this role.`,
+      jsonSchema: JD_KRA_JSON_SCHEMA,
     });
-    const result = JSON.parse(raw) as JdGenerationResult;
+    const result = JSON.parse(raw) as JdKraGenerationResult;
 
     const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
     const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
     await AiUsageLog.create({
-      tenantId, feature: 'jd-generation', aiModel: resolved.model,
+      tenantId, feature: 'jd-kra-generation', aiModel: resolved.model,
       promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
       costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
       createdBy: triggeredBy, updatedBy: triggeredBy,
@@ -407,70 +413,14 @@ export const generateJobDescription = async (
     return result;
   } catch (err: any) {
     await AiUsageLog.create({
-      tenantId, feature: 'jd-generation', status: 'FAILURE',
+      tenantId, feature: 'jd-kra-generation', status: 'FAILURE',
       metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
     } as any);
-    throw err instanceof AiFeatureError ? err : new AiFeatureError('AI JD generation failed', 502);
-  }
-};
-
-interface KpaGenerationResult {
-  kraReport: string;
-  kpis: string[];
-}
-
-const KPA_JSON_SCHEMA: JsonSchemaDef = {
-  name: 'kpa_generation',
-  schema: {
-    type: 'object',
-    properties: {
-      kraReport: { type: 'string', description: 'A short narrative of the key result areas for this role' },
-      kpis: { type: 'array', items: { type: 'string' }, description: '4-6 concrete, measurable KPIs for this role' },
-    },
-    required: ['kraReport', 'kpis'],
-    additionalProperties: false,
-  },
-};
-
-/** On-demand KRA/KPA drafting for a Manpower Request — same shape as generateJobDescription. */
-export const generateKpa = async (
-  tenantId: string,
-  role: RoleContext,
-  triggeredBy: string,
-): Promise<KpaGenerationResult> => {
-  const resolved = await resolveTenantAiProvider(tenantId);
-  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
-
-  try {
-    const { raw, promptTokens, completionTokens } = await callAiJson({
-      provider: resolved.provider,
-      apiKey: resolved.apiKey,
-      model: resolved.model,
-      systemPrompt:
-        'You are an HR assistant drafting Key Result Areas (KRA) and Key Performance Indicators (KPI) for ' +
-        'a manpower requisition. Be concrete and measurable; do not invent company-specific targets.',
-      userPrompt: `${buildRoleLine(role)}\n\nDraft the KRA/KPIs for this role.`,
-      jsonSchema: KPA_JSON_SCHEMA,
-    });
-    const result = JSON.parse(raw) as KpaGenerationResult;
-
-    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
-    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
-    await AiUsageLog.create({
-      tenantId, feature: 'kpa-generation', aiModel: resolved.model,
-      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
-      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
-      createdBy: triggeredBy, updatedBy: triggeredBy,
-    } as any);
-    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
-
-    return result;
-  } catch (err: any) {
-    await AiUsageLog.create({
-      tenantId, feature: 'kpa-generation', status: 'FAILURE',
-      metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
-    } as any);
-    throw err instanceof AiFeatureError ? err : new AiFeatureError('AI KPA generation failed', 502);
+    if (err instanceof AiFeatureError) throw err;
+    if (isQuotaError(err.message)) {
+      throw new AiFeatureError(`${describeQuotaError(err.message)} Please try again later, or fill the job description and KRA in manually for now.`, 429);
+    }
+    throw new AiFeatureError('AI JD/KRA generation failed', 502);
   }
 };
 
