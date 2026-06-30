@@ -147,7 +147,7 @@ const callAnthropicJson = async ({ apiKey, model, systemPrompt, userPrompt, json
     tool_choice: { type: 'tool', name: jsonSchema.name },
   });
 
-  const toolUse = message.content.find((block) => block.type === 'tool_use');
+  const toolUse = message.content.find((block: { type: string }) => block.type === 'tool_use');
   if (!toolUse || toolUse.type !== 'tool_use') throw new Error('AI returned an empty response');
 
   return {

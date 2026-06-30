@@ -17,7 +17,7 @@ import { z } from 'zod';
 
 const DEFAULT_INDIA_GST_RATE = 18;
 
-async function resolveCompanyContactEmail(tenantId: string): Promise<string | null> {
+export async function resolveCompanyContactEmail(tenantId: string): Promise<string | null> {
   const adminRole = await Role.findOne({ tenantId, name: 'Company Admin' }).lean();
   if (adminRole) {
     const admin = await User.findOne({ tenantId, roleId: adminRole._id }).select('email').lean();
@@ -279,6 +279,39 @@ export const listAllInvoices = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error listing invoices:', error);
     res.status(500).json({ message: 'Internal server error while listing invoices' });
+  }
+};
+
+export const listAllPayments = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const query: any = {};
+    if (req.query.type) query.type = req.query.type;
+    if (req.query.tenantId) query.tenantId = req.query.tenantId;
+    if (req.query.from || req.query.to) {
+      query.paidAt = {};
+      if (req.query.from) query.paidAt.$gte = new Date(req.query.from as string);
+      if (req.query.to) query.paidAt.$lte = new Date(req.query.to as string);
+    }
+
+    const [payments, total] = await Promise.all([
+      Payment.find(query)
+        .populate('tenantId', 'name')
+        .populate('recordedBy', 'firstName lastName email')
+        .sort({ paidAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Payment.countDocuments(query),
+    ]);
+
+    res.status(200).json({ data: payments, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } });
+  } catch (error) {
+    console.error('Error listing payments:', error);
+    res.status(500).json({ message: 'Internal server error while listing payments' });
   }
 };
 

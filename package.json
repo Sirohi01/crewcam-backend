@@ -32,11 +32,14 @@
     "multer": "^2.2.0",
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.4.1",
+    "nodemailer": "^9.0.1",
     "openai": "^6.44.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.19.1",
     "qrcode": "^1.5.4",
+    "razorpay": "^2.9.6",
     "speakeasy": "^2.0.0",
+    "stripe": "^22.3.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -49,6 +52,7 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^25.9.3",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "@types/speakeasy": "^2.0.10",
     "nodemon": "^3.1.14",
