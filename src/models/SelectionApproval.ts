@@ -10,6 +10,19 @@ export interface IApprovalStep {
 }
 
 export interface ISelectionApproval extends ITenantScoped {
+  sourceOthers?: string;
+  dateOfInterview?: string;
+  interviewedBy?: string;
+  evaluationSummary?: string;
+  proposedMonthlyCTC?: string;
+  proposedAnnualCTC?: string;
+  salaryStructure?: string;
+  budgetAvailability?: string;
+  hrManagerName?: string;
+  deptHeadName?: string;
+  managementName?: string;
+  managementDecision?: string;
+
   candidateId: Types.ObjectId;
   jobRole: string;
   departmentId?: Types.ObjectId;
@@ -26,6 +39,19 @@ export interface ISelectionApproval extends ITenantScoped {
 }
 
 const selectionApprovalSchema = new Schema<ISelectionApproval>({
+  sourceOthers: { type: String },
+  dateOfInterview: { type: String },
+  interviewedBy: { type: String },
+  evaluationSummary: { type: String },
+  proposedMonthlyCTC: { type: String },
+  proposedAnnualCTC: { type: String },
+  salaryStructure: { type: String },
+  budgetAvailability: { type: String },
+  hrManagerName: { type: String },
+  deptHeadName: { type: String },
+  managementName: { type: String },
+  managementDecision: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   jobRole: { type: String, required: true },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },

@@ -2,6 +2,15 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IProbationReview extends ITenantScoped {
+  candidateName?: string;
+  uniqueId?: string;
+  department?: string;
+  designation?: string;
+  joiningDate?: string;
+  reportingManager?: string;
+  reportingManagerSignatureName?: string;
+  reportingManagerDate?: string;
+
   employeeId: Types.ObjectId;
   reviewPeriodStart?: Date;
   reviewPeriodEnd?: Date;
@@ -19,6 +28,15 @@ export interface IProbationReview extends ITenantScoped {
 }
 
 const probationReviewSchema = new Schema<IProbationReview>({
+  candidateName: { type: String },
+  uniqueId: { type: String },
+  department: { type: String },
+  designation: { type: String },
+  joiningDate: { type: String },
+  reportingManager: { type: String },
+  reportingManagerSignatureName: { type: String },
+  reportingManagerDate: { type: String },
+
   employeeId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   reviewPeriodStart: { type: Date },
   reviewPeriodEnd: { type: Date },

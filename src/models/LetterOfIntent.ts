@@ -2,6 +2,13 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface ILetterOfIntent extends ITenantScoped {
+  candidateName?: string;
+  department?: string;
+  position?: string;
+  reportingTime?: string;
+  reportingLocation?: string;
+  reportingTo?: string;
+
   candidateId: Types.ObjectId;
   designation: string;
   departmentId?: Types.ObjectId;
@@ -17,6 +24,13 @@ export interface ILetterOfIntent extends ITenantScoped {
 }
 
 const letterOfIntentSchema = new Schema<ILetterOfIntent>({
+  candidateName: { type: String },
+  department: { type: String },
+  position: { type: String },
+  reportingTime: { type: String },
+  reportingLocation: { type: String },
+  reportingTo: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   designation: { type: String, required: true },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },

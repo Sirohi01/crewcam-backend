@@ -17,6 +17,9 @@ import { advanceStep, linkEmployeeId } from '../utils/hiringPipelineHelpers';
 import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import { sendMail, buildEmployeeWelcomeEmail } from '../services/mailer';
+import { Tenant } from '../models/Tenant';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -406,12 +409,16 @@ export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
         const contact = form.contactDetails as any;
         const identity = form.identificationDetails as any;
         const emergency = form.emergencyContact as any;
+        
+        const generatedPassword = crypto.randomBytes(6).toString('hex') + 'A1!'; // e.g., 1a2b3c4d5e6fA1!
+        const finalFirstName = firstName || candidate.firstName;
+        
         const employee = await User.create({
           tenantId,
-          firstName: firstName || candidate.firstName,
+          firstName: finalFirstName,
           lastName: rest.join(' ') || candidate.lastName || 'Employee',
           email: candidate.email,
-          passwordHash: await bcrypt.hash(`Joining-${String(candidate._id).slice(-8)}!`, 10),
+          passwordHash: await bcrypt.hash(generatedPassword, 10),
           profilePictureUrl: candidate.profileImageUrl,
           employeeCode: position?.empCode || undefined,
           mobileNumber: contact?.mobileNumber || candidate.phone,
@@ -434,6 +441,25 @@ export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
         } as any);
         employeeId = employee._id;
         employeeCreated = true;
+        
+        // Send Welcome Email with Credentials
+        // try {
+        //   const tenant = await Tenant.findById(tenantId);
+        //   const companyName = tenant?.name || 'Your Company';
+        //   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        //   const loginUrl = `${frontendUrl}/login`;
+          
+        //   const emailContent = buildEmployeeWelcomeEmail({
+        //     companyName,
+        //     firstName: finalFirstName,
+        //     email: candidate.email,
+        //     password: generatedPassword,
+        //     loginUrl
+        //   });
+        //   await sendMail({ to: candidate.email, ...emailContent });
+        // } catch (mailError) {
+        //   console.error('Failed to send welcome email on candidate conversion:', mailError);
+        // }
       }
 
       form.employeeId = employeeId;

@@ -2,6 +2,31 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IBGVRequest extends ITenantScoped {
+  fullName?: string;
+  joiningDate?: string;
+  positionFor?: string;
+  homeNo?: string;
+  department?: string;
+  alternateNo?: string;
+  reportingTo?: string;
+  workLocation?: string;
+  emailId?: string;
+  mobileNo?: string;
+  currentAddress?: string;
+  currentState?: string;
+  currentCityPin?: string;
+  currentCountry?: string;
+  permanentAddress?: string;
+  permanentState?: string;
+  permanentCityPin?: string;
+  permanentCountry?: string;
+  requestDesignation?: string;
+  priorityLevel?: string;
+  reportCandidateName?: string;
+  reportDOJ?: string;
+  reportEmpCode?: string;
+  reportDepartment?: string;
+
   candidateId?: Types.ObjectId;
   employeeId?: Types.ObjectId;
   vendor?: string;
@@ -16,6 +41,31 @@ export interface IBGVRequest extends ITenantScoped {
 }
 
 const bgvRequestSchema = new Schema<IBGVRequest>({
+  fullName: { type: String },
+  joiningDate: { type: String },
+  positionFor: { type: String },
+  homeNo: { type: String },
+  department: { type: String },
+  alternateNo: { type: String },
+  reportingTo: { type: String },
+  workLocation: { type: String },
+  emailId: { type: String },
+  mobileNo: { type: String },
+  currentAddress: { type: String },
+  currentState: { type: String },
+  currentCityPin: { type: String },
+  currentCountry: { type: String },
+  permanentAddress: { type: String },
+  permanentState: { type: String },
+  permanentCityPin: { type: String },
+  permanentCountry: { type: String },
+  requestDesignation: { type: String },
+  priorityLevel: { type: String },
+  reportCandidateName: { type: String },
+  reportDOJ: { type: String },
+  reportEmpCode: { type: String },
+  reportDepartment: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate' },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
   vendor: { type: String },

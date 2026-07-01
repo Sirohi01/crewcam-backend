@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
 import { ManpowerRequest } from '../models/ManpowerRequest';
 import { InterviewEvaluation } from '../models/InterviewEvaluation';
@@ -56,7 +56,43 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const request = await ManpowerRequest.create({ ...req.body, tenantId, requestedBy: req.body.requestedBy || req.user!._id });
+    const requestedBy = req.body.requestedBy || req.user!._id;
+    let pendingApprovalFrom = null;
+
+    const requestUser = await User.findOne({ _id: requestedBy, tenantId }).populate('departmentId').populate('roleId');
+    const userRole = (requestUser?.roleId as any)?.category || (requestUser?.roleId as any)?.name;
+    const isHod = userRole.toLowerCase() === 'hod';
+    const isAdmin = userRole.toLowerCase() === 'company_admin' || userRole.toLowerCase() === 'admin';
+    const reqDepartmentId = req.body.departmentId || requestUser?.departmentId?._id || requestUser?.departmentId;
+
+    if (!isAdmin && reqDepartmentId) {
+      if (isHod) {
+        // If HOD created it, route to Company Admin / Director
+        const roles = await mongoose.model('Role').find({ tenantId, category: { $in: ['company_admin', 'admin', 'director'] } });
+        const superAdmin = await User.findOne({ roleId: { $in: roles.map(r => r._id) }, tenantId });
+        if (superAdmin) pendingApprovalFrom = superAdmin._id;
+      } else {
+        // If HR, Manager, Employee created it, route to HOD of that department
+        const roles = await mongoose.model('Role').find({ tenantId, category: { $in: ['hod', 'admin', 'company_admin'] } });
+        const hod = await User.findOne({ departmentId: reqDepartmentId, roleId: { $in: roles.map(r => r._id) }, tenantId });
+        if (hod) {
+          pendingApprovalFrom = hod._id;
+        } else {
+          // Fallback to super admin if no HOD found for that department
+          const adminRoles = await mongoose.model('Role').find({ tenantId, category: { $in: ['company_admin', 'admin'] } });
+          const superAdmin = await User.findOne({ roleId: { $in: adminRoles.map(r => r._id) }, tenantId });
+          if (superAdmin) pendingApprovalFrom = superAdmin._id;
+        }
+      }
+    }
+
+    const request = await ManpowerRequest.create({ 
+      ...req.body, 
+      tenantId, 
+      requestedBy, 
+      pendingApprovalFrom,
+      status: pendingApprovalFrom ? 'Pending' : 'Approved'
+    });
     await logAudit(tenantId, req.user!._id, 'CREATE_MANPOWER_REQUEST', req, { requestId: (request as any)._id });
 
     res.status(201).json(request);
@@ -95,6 +131,7 @@ export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
       .populate('reportingTo', 'firstName lastName email')
       .populate('requestedBy', 'firstName lastName email')
       .populate('approvedBy', 'firstName lastName email')
+      .populate('pendingApprovalFrom', 'firstName lastName email')
       .sort({ createdAt: -1 });
     if (page || limit) {
       const resolvedPage = Math.max(1, Number(page) || 1);
@@ -138,7 +175,8 @@ export const getManpowerRequestById = async (req: AuthRequest, res: Response) =>
       .populate('locationBranchId', 'name city state')
       .populate('reportingTo', 'firstName lastName email')
       .populate('requestedBy', 'firstName lastName email')
-      .populate('approvedBy', 'firstName lastName email');
+      .populate('approvedBy', 'firstName lastName email')
+      .populate('pendingApprovalFrom', 'firstName lastName email');
     if (!request) return res.status(404).json({ message: 'Manpower request not found' });
     res.status(200).json(request);
   } catch (error: any) {
@@ -174,7 +212,7 @@ export const updateManpowerRequestStatus = async (req: AuthRequest, res: Respons
     const { id } = req.params;
     const { status, rejectionReason } = req.body;
 
-    const update: any = { status };
+    const update: any = { status, pendingApprovalFrom: null };
     if (status === 'Approved') {
       update.approvedBy = req.user!._id;
       update.approvalDate = new Date();
