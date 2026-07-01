@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // The source URI given in your previous .env
-const SOURCE_URI = 'mongodb://expo_admin:Expo123@ac-pugeu5p-shard-00-00.je0urmy.mongodb.net:27017,ac-pugeu5p-shard-00-01.je0urmy.mongodb.net:27017,ac-pugeu5p-shard-00-02.je0urmy.mongodb.net:27017/namoCrewcam?ssl=true&replicaSet=atlas-d7y7x5-shard-0&authSource=admin&appName=Cluster0';
+const SOURCE_URI = process.env.OLD_MONGODB_URI'';
 
 // Target URI is the one currently active in .env
 const TARGET_URI = process.env.MONGODB_URI;
