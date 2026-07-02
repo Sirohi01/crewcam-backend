@@ -36,6 +36,7 @@ import {
   deleteInterviewEvaluation,
   createSelectionApproval,
   getSelectionApprovals,
+  updateSelectionApproval,
   updateSelectionApprovalDecision,
   deleteSelectionApproval
 } from '../controllers/hiringRequisitionController';
@@ -170,6 +171,7 @@ router.post('/evaluation/:id/generate-pdf', checkPermission('ORG_READ'), generat
 router.post('/selection-approval', checkPermission('ORG_WRITE'), requireStepUnlocked('selectionApproval'), createSelectionApproval);
 router.get('/selection-approval', checkPermission('ORG_READ'), getSelectionApprovals);
 router.get('/selection-approval-debug', getSelectionApprovals);
+router.put('/selection-approval/:id', checkPermission('ORG_WRITE'), updateSelectionApproval);
 router.put('/selection-approval/:id/decision', checkPermission('ORG_WRITE'), updateSelectionApprovalDecision);
 router.delete('/selection-approval/:id', checkPermission('ORG_WRITE'), deleteSelectionApproval);
 router.post('/selection-approval/:id/generate-pdf', checkPermission('ORG_READ'), generateSelectionApprovalPdf);

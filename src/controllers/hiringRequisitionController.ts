@@ -492,6 +492,49 @@ export const getSelectionApprovals = async (req: AuthRequest, res: Response) => 
   }
 };
 
+export const updateSelectionApproval = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    
+    const proposedCTC = Number(req.body.proposedCTC ?? String(req.body.proposedAnnualCTC || '0').replace(/,/g, '')) || 0;
+    const budgetedCTC = Number(String(req.body.budgetedCTC || '0').replace(/,/g, '')) || 0;
+    
+    let approvalChain = req.body.approvalChain;
+    if (Array.isArray(approvalChain)) {
+       approvalChain = approvalChain.filter((entry: any) => entry?.approverId);
+    }
+    
+    const updateData: any = {
+      ...req.body,
+      tenantId,
+      proposedCTC,
+      budgetedCTC,
+      justificationForVariance: req.body.justificationForVariance || req.body.justification || undefined,
+    };
+    if (approvalChain) {
+        updateData.approvalChain = approvalChain;
+    }
+    if (req.body.jobRole || req.body.proposedPosition) {
+        updateData.jobRole = req.body.jobRole || req.body.proposedPosition;
+    }
+
+    const approval = await SelectionApproval.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      updateData,
+      { returnDocument: 'after' }
+    );
+    
+    if (!approval) return res.status(404).json({ message: 'Selection approval not found' });
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_SELECTION_APPROVAL_RECORD', req, { approvalId: id });
+    res.status(200).json(approval);
+  } catch (error: any) {
+    console.error('Error updating selection approval:', error);
+    res.status(500).json({ message: 'Error updating selection approval' });
+  }
+};
+
 export const updateSelectionApprovalDecision = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
