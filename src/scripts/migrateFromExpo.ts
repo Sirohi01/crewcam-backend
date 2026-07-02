@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // The source URI given in your previous .env
-const SOURCE_URI = process.env.OLD_MONGODB_URI'';
+const SOURCE_URI = process.env.OLD_MONGODB_URI;
 
 // Target URI is the one currently active in .env
 const TARGET_URI = process.env.MONGODB_URI;
@@ -42,6 +42,10 @@ const COLLECTIONS_TO_MIGRATE = [
 async function migrate() {
   if (!TARGET_URI) {
     console.error('Target MONGODB_URI is not defined in .env');
+    process.exit(1);
+  }
+  if (!SOURCE_URI) {
+    console.error('Source OLD_MONGODB_URI is not defined in .env');
     process.exit(1);
   }
 

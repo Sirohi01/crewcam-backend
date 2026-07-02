@@ -33,9 +33,11 @@ import {
   streamHiringPdf,
   createInterviewEvaluation,
   getInterviewEvaluations,
+  deleteInterviewEvaluation,
   createSelectionApproval,
   getSelectionApprovals,
-  updateSelectionApprovalDecision
+  updateSelectionApprovalDecision,
+  deleteSelectionApproval
 } from '../controllers/hiringRequisitionController';
 import {
   createCTCBreakup,
@@ -161,12 +163,15 @@ router.post('/manpower-request/:id/generate-pdf', checkPermission('ORG_READ'), g
 // Step 2: Interview Evaluation Sheet
 router.post('/evaluation', checkPermission('ORG_WRITE'), requireStepUnlocked('interviewEvaluation'), createInterviewEvaluation);
 router.get('/evaluation', checkPermission('ORG_READ'), getInterviewEvaluations);
+router.delete('/evaluation/:id', checkPermission('ORG_WRITE'), deleteInterviewEvaluation);
 router.post('/evaluation/:id/generate-pdf', checkPermission('ORG_READ'), generateInterviewEvaluationPdf);
 
 // Step 3: Selection Approval Note
 router.post('/selection-approval', checkPermission('ORG_WRITE'), requireStepUnlocked('selectionApproval'), createSelectionApproval);
 router.get('/selection-approval', checkPermission('ORG_READ'), getSelectionApprovals);
+router.get('/selection-approval-debug', getSelectionApprovals);
 router.put('/selection-approval/:id/decision', checkPermission('ORG_WRITE'), updateSelectionApprovalDecision);
+router.delete('/selection-approval/:id', checkPermission('ORG_WRITE'), deleteSelectionApproval);
 router.post('/selection-approval/:id/generate-pdf', checkPermission('ORG_READ'), generateSelectionApprovalPdf);
 
 // Step 4: CTC Breakup

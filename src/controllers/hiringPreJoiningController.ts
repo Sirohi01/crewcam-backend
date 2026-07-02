@@ -284,9 +284,18 @@ export const getBGVRequests = async (req: AuthRequest, res: Response) => {
     if (candidateId) filter.candidateId = candidateId;
 
     const requests = await BGVRequest.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole')
       .populate('requestedBy', 'firstName lastName email')
-      .sort({ createdAt: -1 });
-    res.status(200).json(requests);
+      .sort({ createdAt: -1 })
+      .lean();
+    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: requests });
+    const mapped = requests.map((r: any) => ({
+      _id: r._id,
+      candidateName: r.candidateId ? `${(r.candidateId as any).firstName} ${(r.candidateId as any).lastName}`.trim() : 'Unknown',
+      status: r.status || 'Pending',
+      updatedAt: r.updatedAt
+    }));
+    res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching BGV requests:', error);
     res.status(500).json({ message: 'Error fetching BGV requests' });

@@ -342,6 +342,7 @@ export const createInterviewEvaluation = async (req: AuthRequest, res: Response)
     const suppliedOverall = Number(req.body.overallScore);
 
     const evaluation = await InterviewEvaluation.create({
+      ...req.body,
       tenantId,
       candidateId,
       interviewerId: req.user!._id,
@@ -351,22 +352,11 @@ export const createInterviewEvaluation = async (req: AuthRequest, res: Response)
       competencyRatings: evaluationCriteria,
       overallScore: Number.isFinite(suppliedOverall) && suppliedOverall > 0 ? Math.min(5, Math.max(1, suppliedOverall)) : calculatedOverall,
       recommendation,
-      ...(req.body.strengths ? { strengths: req.body.strengths } : {}),
-      ...(req.body.weaknesses ? { weaknesses: req.body.weaknesses } : {}),
-      ...(req.body.comments ? { comments: req.body.comments } : {}),
       ...(req.body.candidateSnapshot ? { candidateSnapshot: req.body.candidateSnapshot } : {}),
       ...(req.body.improvementAreas || req.body.areasOfImprovement ? { improvementAreas: req.body.improvementAreas || req.body.areasOfImprovement } : {}),
       ...(req.body.proposedSalaryMin !== '' && req.body.proposedSalaryMin !== undefined ? { proposedSalaryMin: Number(req.body.proposedSalaryMin) } : {}),
       ...(req.body.proposedSalaryMax !== '' && req.body.proposedSalaryMax !== undefined ? { proposedSalaryMax: Number(req.body.proposedSalaryMax) } : {}),
-      ...(req.body.earliestJoiningDate ? { earliestJoiningDate: req.body.earliestJoiningDate } : {}),
       ...(req.body.interviewerDecision || req.body.hrDecision ? { interviewerDecision: req.body.interviewerDecision || req.body.hrDecision } : {}),
-      ...(req.body.interviewerRemarks ? { interviewerRemarks: req.body.interviewerRemarks } : {}),
-      ...(req.body.hrStatus ? { hrStatus: req.body.hrStatus } : {}),
-      ...(req.body.hrName ? { hrName: req.body.hrName } : {}),
-      ...(req.body.hrRemarks ? { hrRemarks: req.body.hrRemarks } : {}),
-      ...(req.body.hodDecision ? { hodDecision: req.body.hodDecision } : {}),
-      ...(req.body.hodName ? { hodName: req.body.hodName } : {}),
-      ...(req.body.hodRemarks ? { hodRemarks: req.body.hodRemarks } : {}),
     });
     
     if (candidateId) {
@@ -390,14 +380,12 @@ export const getInterviewEvaluations = async (req: AuthRequest, res: Response) =
 
     const evaluations = await InterviewEvaluation.find(filter)
       .populate('interviewerId', 'firstName lastName email')
-      .populate('candidateId', 'firstName lastName')
+      .populate('candidateId', 'firstName lastName phone email jobRole')
       .sort({ createdAt: -1 })
       .lean();
 
-    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: evaluations });
-      
-    const mapped = evaluations.map((ev: any) => ({
-      _id: ev._id,
+    const enriched = evaluations.map((ev: any) => ({
+      ...ev,
       candidateName: ev.candidateId ? `${(ev.candidateId as any).firstName} ${(ev.candidateId as any).lastName}`.trim() : 'Unknown',
       round: ev.roundType,
       interviewer: ev.comments || ((ev.interviewerId as any)?.firstName ? `${(ev.interviewerId as any).firstName} ${(ev.interviewerId as any).lastName}` : 'Admin'),
@@ -407,10 +395,26 @@ export const getInterviewEvaluations = async (req: AuthRequest, res: Response) =
       updatedAt: ev.updatedAt
     }));
 
-    res.status(200).json({ data: mapped });
+    res.status(200).json({ data: enriched });
   } catch (error: any) {
     console.error('Error fetching interview evaluations:', error);
     res.status(500).json({ message: 'Error fetching interview evaluations' });
+  }
+};
+
+export const deleteInterviewEvaluation = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    
+    const evaluation = await InterviewEvaluation.findOneAndDelete({ _id: id, tenantId } as any);
+    if (!evaluation) return res.status(404).json({ message: 'Evaluation not found' });
+    
+    await logAudit(tenantId, req.user!._id, 'DELETE_INTERVIEW_EVALUATION', req, { evaluationId: id });
+    res.status(200).json({ message: 'Evaluation deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting interview evaluation:', error);
+    res.status(500).json({ message: 'Error deleting interview evaluation' });
   }
 };
 
@@ -469,19 +473,19 @@ export const getSelectionApprovals = async (req: AuthRequest, res: Response) => 
       .sort({ createdAt: -1 })
       .lean();
 
-    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: approvals });
-
-    const mapped = approvals.map((app: any) => ({
-      _id: app._id,
+    const enriched = approvals.map((app: any) => ({
+      ...app,
       candidateName: app.candidateId ? `${(app.candidateId as any).firstName} ${(app.candidateId as any).lastName}`.trim() : 'Unknown',
-      proposedPosition: app.jobRole || 'N/A',
+      position: app.jobRole || 'N/A',
+      department: 'N/A',
+      joiningDate: 'N/A',
+      status: app.finalStatus || 'Pending',
       proposedAnnualCTC: app.proposedCTC?.toLocaleString() || 'N/A',
-      decision: app.finalStatus || 'Pending',
       createdBy: app.approvedBy,
       updatedAt: app.updatedAt
     }));
 
-    res.status(200).json({ data: mapped });
+    res.status(200).json({ data: enriched });
   } catch (error: any) {
     console.error('Error fetching selection approvals:', error);
     res.status(500).json({ message: 'Error fetching selection approvals' });
@@ -520,5 +524,21 @@ export const updateSelectionApprovalDecision = async (req: AuthRequest, res: Res
   } catch (error: any) {
     console.error('Error updating selection approval:', error);
     res.status(500).json({ message: 'Error updating selection approval' });
+  }
+};
+
+export const deleteSelectionApproval = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    
+    const approval = await SelectionApproval.findOneAndDelete({ _id: id, tenantId } as any);
+    if (!approval) return res.status(404).json({ message: 'Selection approval not found' });
+    
+    await logAudit(tenantId, req.user!._id, 'DELETE_SELECTION_APPROVAL', req, { approvalId: id });
+    res.status(200).json({ message: 'Selection approval deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting selection approval:', error);
+    res.status(500).json({ message: 'Error deleting selection approval' });
   }
 };
