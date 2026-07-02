@@ -15,6 +15,8 @@ import { AuthRequest } from '../middleware/auth';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import moment from 'moment';
+import crypto from 'crypto';
+import { sendMail, buildEmployeeWelcomeEmail, buildCredentialsResetEmail } from '../services/mailer';
 
 const daysInclusive = (start: Date, end: Date) => moment(end).diff(moment(start), 'days') + 1;
 
@@ -258,7 +260,9 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password || 'P@ssw0rd123!', salt);
+    const generatedPassword = crypto.randomBytes(6).toString('hex') + 'A1!'; // e.g., 1a2b3c4d5e6fA1!
+    const finalPassword = password || generatedPassword;
+    const passwordHash = await bcrypt.hash(finalPassword, salt);
 
     const employee = new User({
       firstName,
@@ -308,6 +312,25 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
     await applyHierarchyAssignments(tenantId, employee._id, { ...req.body, departmentId, designationId }, req.user?._id);
     const { passwordHash: _, ...empWithoutPassword } = employee.toObject();
 
+    // Send Welcome Email with Credentials
+    try {
+      const tenant = await Tenant.findById(tenantId);
+      const companyName = tenant?.name || 'Your Company';
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const loginUrl = `${frontendUrl}/login`;
+      
+      const emailContent = buildEmployeeWelcomeEmail({
+        companyName,
+        firstName,
+        email,
+        password: finalPassword,
+        loginUrl
+      });
+      await sendMail({ to: email, ...emailContent });
+    } catch (mailError) {
+      console.error('Failed to send welcome email to new employee:', mailError);
+    }
+
     res.status(201).json({ message: 'Employee created successfully', data: empWithoutPassword });
   } catch (error: any) {
     res.status(400).json({ message: process.env.NODE_ENV === 'production' ? 'Invalid request' : error.message });
@@ -344,10 +367,12 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       String(req.params.id)
     );
 
+    let plainTextPassword = '';
     if (req.body.password && req.body.password.trim()) {
       if (req.body.password.length < 8) {
         return res.status(400).json({ message: 'Password must be at least 8 characters long' });
       }
+      plainTextPassword = req.body.password;
       const salt = await bcrypt.genSalt(10);
       updateData.passwordHash = await bcrypt.hash(req.body.password, salt);
     }
@@ -363,6 +388,28 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
 
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
     await applyHierarchyAssignments(tenantId, employee._id, { ...req.body, departmentId: updateData.departmentId, designationId: updateData.designationId }, req.user?._id);
+    
+    // Send Credentials Reset Email if password was changed
+    if (plainTextPassword) {
+      try {
+        const tenant = await Tenant.findById(tenantId);
+        const companyName = tenant?.name || 'Your Company';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const loginUrl = `${frontendUrl}/login`;
+        
+        const emailContent = buildCredentialsResetEmail({
+          companyName,
+          adminFirstName: employee.firstName,
+          adminEmail: employee.email,
+          adminPassword: plainTextPassword,
+          loginUrl
+        });
+        await sendMail({ to: employee.email, ...emailContent });
+      } catch (mailError) {
+        console.error('Failed to send credentials reset email:', mailError);
+      }
+    }
+
     res.status(200).json({ message: 'Employee updated successfully', data: employee });
   } catch (error: any) {
     res.status(400).json({ message: process.env.NODE_ENV === 'production' ? 'Invalid request' : error.message });

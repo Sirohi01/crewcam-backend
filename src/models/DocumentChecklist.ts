@@ -12,12 +12,34 @@ export interface IChecklistItem {
 }
 
 export interface IDocumentChecklist extends ITenantScoped {
+  employeeName?: string;
+  designation?: string;
+  department?: string;
+  dateOfJoining?: string;
+  workLocation?: string;
+  employeeCode?: string;
+  employeeSignatureDate?: string;
+  hrName?: string;
+  hrSignatureDate?: string;
+  hrRemarks?: string;
+
   candidateId: Types.ObjectId;
   items: IChecklistItem[];
   overallStatus: 'Incomplete' | 'Complete' | 'Verified';
 }
 
 const documentChecklistSchema = new Schema<IDocumentChecklist>({
+  employeeName: { type: String },
+  designation: { type: String },
+  department: { type: String },
+  dateOfJoining: { type: String },
+  workLocation: { type: String },
+  employeeCode: { type: String },
+  employeeSignatureDate: { type: String },
+  hrName: { type: String },
+  hrSignatureDate: { type: String },
+  hrRemarks: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   items: [{
     documentName: { type: String, required: true },

@@ -40,6 +40,7 @@ export interface IManpowerRequest extends Document {
   status: 'Pending' | 'Approved' | 'Rejected';
   requestedBy?: Types.ObjectId;
   approvedBy?: Types.ObjectId;
+  pendingApprovalFrom?: Types.ObjectId;
   rejectionReason?: string;
   approvalDate?: Date;
   departmentHeadSignature?: string;
@@ -88,6 +89,7 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
   requestedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  pendingApprovalFrom: { type: Schema.Types.ObjectId, ref: 'User' },
   rejectionReason: { type: String },
   approvalDate: { type: Date },
   departmentHeadSignature: { type: String },

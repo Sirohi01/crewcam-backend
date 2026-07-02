@@ -2,6 +2,17 @@ import mongoose, { Schema, Types } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IJoiningForm extends ITenantScoped {
+  personalEmailId?: string;
+  emergencyName?: string;
+  emergencyRelationship?: string;
+  emergencyMobile?: string;
+  emergencyAlternate?: string;
+  emergencyAddress?: string;
+  lastEmployerName?: string;
+  lastDesignation?: string;
+  lastDoj?: string;
+  lastDol?: string;
+
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
 
@@ -126,6 +137,17 @@ export interface IJoiningForm extends ITenantScoped {
 }
 
 const joiningFormSchema = new Schema<IJoiningForm>({
+  personalEmailId: { type: String },
+  emergencyName: { type: String },
+  emergencyRelationship: { type: String },
+  emergencyMobile: { type: String },
+  emergencyAlternate: { type: String },
+  emergencyAddress: { type: String },
+  lastEmployerName: { type: String },
+  lastDesignation: { type: String },
+  lastDoj: { type: String },
+  lastDol: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
 

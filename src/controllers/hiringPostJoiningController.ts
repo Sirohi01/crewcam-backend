@@ -9,6 +9,10 @@ import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
 import { generateIdCardPdfBuffer } from '../utils/idCardPdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStepForEmployee } from '../utils/hiringPipelineHelpers';
+import crypto from 'crypto';
+import bcrypt from 'bcrypt';
+import { Tenant } from '../models/Tenant';
+import { sendMail, buildEmployeeWelcomeEmail } from '../services/mailer';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -225,6 +229,33 @@ export const markIDCardIssued = async (req: AuthRequest, res: Response) => {
       { returnDocument: 'after' }
     );
     if (!card) return res.status(404).json({ message: 'ID card not found' });
+
+    // Step 24 marks the final completion of the entire 24-step hiring pipeline.
+    // We generate the final login credentials and send the welcome email here.
+    const employee = await User.findOne({ _id: card.employeeId, tenantId } as any);
+    if (employee) {
+      const generatedPassword = crypto.randomBytes(6).toString('hex') + 'A1!';
+      employee.passwordHash = await bcrypt.hash(generatedPassword, 10);
+      await employee.save();
+
+      try {
+        const tenant = await Tenant.findById(tenantId);
+        const companyName = tenant?.name || 'Your Company';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const loginUrl = `${frontendUrl}/login`;
+        
+        const emailContent = buildEmployeeWelcomeEmail({
+          companyName,
+          firstName: employee.firstName,
+          email: employee.email,
+          password: generatedPassword,
+          loginUrl
+        });
+        await sendMail({ to: employee.email, ...emailContent });
+      } catch (mailError) {
+        console.error('Failed to send welcome email at Step 24:', mailError);
+      }
+    }
 
     await advanceStepForEmployee(req, tenantId, String(card.employeeId), 'idCard', 'approved', card._id as any);
 

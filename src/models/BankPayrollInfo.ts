@@ -3,6 +3,18 @@ import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 import { encrypt, decrypt } from '../utils/encryption';
 
 export interface IBankPayrollInfo extends ITenantScoped {
+  employeeName?: string;
+  empCode?: string;
+  designation?: string;
+  department?: string;
+  dateOfJoining?: string;
+  workLocation?: string;
+  reportingTo?: string;
+  receivePayslipOnEmail?: string;
+  payslipEmailId?: string;
+  verifiedBy?: string;
+  verificationDate?: string;
+
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
 
@@ -54,6 +66,18 @@ export interface IBankPayrollInfo extends ITenantScoped {
 }
 
 const bankPayrollInfoSchema = new Schema<IBankPayrollInfo>({
+  employeeName: { type: String },
+  empCode: { type: String },
+  designation: { type: String },
+  department: { type: String },
+  dateOfJoining: { type: String },
+  workLocation: { type: String },
+  reportingTo: { type: String },
+  receivePayslipOnEmail: { type: String },
+  payslipEmailId: { type: String },
+  verifiedBy: { type: String },
+  verificationDate: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
 
