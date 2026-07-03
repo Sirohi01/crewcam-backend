@@ -32,6 +32,7 @@ import {
   generateManpowerRequestPdf,
   streamHiringPdf,
   createInterviewEvaluation,
+  updateInterviewEvaluation,
   getInterviewEvaluations,
   deleteInterviewEvaluation,
   createSelectionApproval,
@@ -163,6 +164,7 @@ router.post('/manpower-request/:id/generate-pdf', checkPermission('ORG_READ'), g
 // Step 2: Interview Evaluation Sheet
 router.post('/evaluation', checkPermission('ORG_WRITE'), requireStepUnlocked('interviewEvaluation'), createInterviewEvaluation);
 router.get('/evaluation', checkPermission('ORG_READ'), getInterviewEvaluations);
+router.put('/evaluation/:id', checkPermission('ORG_WRITE'), updateInterviewEvaluation);
 router.delete('/evaluation/:id', checkPermission('ORG_WRITE'), deleteInterviewEvaluation);
 router.post('/evaluation/:id/generate-pdf', checkPermission('ORG_READ'), generateInterviewEvaluationPdf);
 

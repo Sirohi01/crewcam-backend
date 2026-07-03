@@ -371,6 +371,73 @@ export const createInterviewEvaluation = async (req: AuthRequest, res: Response)
   }
 };
 
+export const updateInterviewEvaluation = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const permittedRounds = ['Telephonic', 'Technical', 'HR', 'Managerial', 'Final'];
+    const roundType = permittedRounds.includes(req.body.roundType)
+      ? req.body.roundType
+      : (permittedRounds.includes(req.body.round) ? req.body.round : undefined);
+    const permittedRecommendations = ['Strongly Recommend', 'Recommend', 'Neutral', 'Not Recommend', 'Strongly Reject'];
+    const recommendation = permittedRecommendations.includes(req.body.recommendation)
+      ? req.body.recommendation
+      : undefined;
+
+    const criteriaInput = Array.isArray(req.body.evaluationCriteria)
+      ? req.body.evaluationCriteria
+      : (Array.isArray(req.body.competencyRatings) ? req.body.competencyRatings : undefined);
+    
+    let evaluationCriteria;
+    let calculatedOverall;
+    if (criteriaInput) {
+      evaluationCriteria = criteriaInput.length
+        ? criteriaInput.map((row: any) => ({
+            criterion: String(row.criterion || 'General'),
+            score: Math.min(5, Math.max(1, Number(row.score) || 3)),
+            ...(row.remarks ? { remarks: String(row.remarks) } : {}),
+          }))
+        : [{ criterion: 'General', score: Math.min(5, Math.max(1, Number(req.body.overallScore || req.body.score) || 3)) }];
+      calculatedOverall = Math.round((evaluationCriteria.reduce((sum: number, row: any) => sum + row.score, 0) / evaluationCriteria.length) * 10) / 10;
+    }
+
+    const suppliedOverall = Number(req.body.overallScore);
+
+    const updateData: any = {
+      ...req.body,
+      ...(roundType ? { roundType } : {}),
+      ...(evaluationCriteria ? { evaluationCriteria, competencyRatings: evaluationCriteria } : {}),
+      ...(recommendation ? { recommendation } : {}),
+      ...(req.body.candidateSnapshot ? { candidateSnapshot: req.body.candidateSnapshot } : {}),
+      ...(req.body.improvementAreas || req.body.areasOfImprovement ? { improvementAreas: req.body.improvementAreas || req.body.areasOfImprovement } : {}),
+      ...(req.body.proposedSalaryMin !== '' && req.body.proposedSalaryMin !== undefined ? { proposedSalaryMin: Number(req.body.proposedSalaryMin) } : {}),
+      ...(req.body.proposedSalaryMax !== '' && req.body.proposedSalaryMax !== undefined ? { proposedSalaryMax: Number(req.body.proposedSalaryMax) } : {}),
+      ...(req.body.interviewerDecision || req.body.hrDecision ? { interviewerDecision: req.body.interviewerDecision || req.body.hrDecision } : {}),
+    };
+    
+    if (evaluationCriteria) {
+      updateData.overallScore = Number.isFinite(suppliedOverall) && suppliedOverall > 0 ? Math.min(5, Math.max(1, suppliedOverall)) : calculatedOverall;
+    }
+
+    const evaluation = await InterviewEvaluation.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      updateData,
+      { new: true }
+    );
+
+    if (!evaluation) return res.status(404).json({ message: 'Evaluation not found' });
+    
+    await logAudit(tenantId, req.user!._id, 'UPDATE_INTERVIEW_EVALUATION', req, { evaluationId: id });
+
+    res.status(200).json(evaluation);
+  } catch (error: any) {
+    console.error('Error updating interview evaluation:', error);
+    res.status(500).json({ message: 'Error updating interview evaluation' });
+  }
+};
+
 export const getInterviewEvaluations = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;

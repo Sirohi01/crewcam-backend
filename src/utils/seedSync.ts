@@ -3,13 +3,25 @@ import { DashboardWidgetConfig } from '../models/DashboardWidgetConfig';
 import { DEFAULT_SIDEBAR_ITEMS, SECTION_ORDER } from './sidebarDefaults';
 import { DEFAULT_DASHBOARD_WIDGETS } from './dashboardWidgetDefaults';
 export const syncSidebarDefaults = async (tenantId: string) => {
-  const existing = await SidebarConfig.find({ tenantId }, { section: 1, label: 1, sectionOrder: 1, href: 1, order: 1 });
+  const existing = await SidebarConfig.find({ tenantId }, { section: 1, label: 1, sectionOrder: 1, href: 1, order: 1, categories: 1 });
   const existingByKey = new Map(existing.map((i) => [`${i.section}::${i.label}`, i]));
 
   const missing = DEFAULT_SIDEBAR_ITEMS.filter((item) => !existingByKey.has(`${item.section}::${item.label}`));
   if (missing.length > 0) {
     await SidebarConfig.insertMany(missing.map((item) => ({ ...item, sectionOrder: SECTION_ORDER[item.section] ?? 999, tenantId })));
   }
+
+  const categoryFixes = DEFAULT_SIDEBAR_ITEMS.filter((item) => {
+    const current = existingByKey.get(`${item.section}::${item.label}`);
+    if (!current || !current.categories || !item.categories) return false;
+    if (current.categories.length !== item.categories.length) return true;
+    return !current.categories.every((c: string) => item.categories.includes(c as any));
+  });
+  await Promise.all(
+    categoryFixes.map((item) =>
+      SidebarConfig.updateOne({ tenantId, section: item.section, label: item.label } as any, { categories: item.categories })
+    )
+  );
 
   const sectionsNeedingFix = existing.filter((i) => i.sectionOrder !== SECTION_ORDER[i.section]);
   await Promise.all(
