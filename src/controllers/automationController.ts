@@ -54,6 +54,7 @@ export const getAutomationLogs = async (req: AuthRequest, res: Response) => {
     const query: any = {};
     if (req.query.type) query.type = req.query.type;
     if (req.query.status) query.status = req.query.status;
+    if (req.query.leadId) query.leadId = req.query.leadId;
 
     const [logs, total] = await Promise.all([
       AutomationLog.find(query)

@@ -94,6 +94,25 @@ export const getPlatformDashboardStats = async (req: AuthRequest, res: Response)
       }
     }
 
+    // MRR: normalize every active subscription to a monthly figure in INR (yearly plans / 12).
+    const activeSubTenants = (tenants as any[]).filter((t) => t.subscriptionStatus === 'ACTIVE');
+    const mrrINR = activeSubTenants.reduce((sum, t) => {
+      const monthly = t.billingCycle === 'YEARLY' ? (t.subscriptionAmount || 0) / 12 : (t.subscriptionAmount || 0);
+      return sum + toINR(monthly, t.subscriptionCurrency || 'INR');
+    }, 0);
+    const arpuINR = activeSubTenants.length > 0 ? mrrINR / activeSubTenants.length : 0;
+
+    // Churn rate: subscriptions cancelled in-range vs. tenants that already had a
+    // subscription (active/past-due/cancelled) before the range started. updatedAt is
+    // used as a proxy for "cancelled at" since cancellation isn't timestamped separately.
+    const cancelledInRange = (tenants as any[]).filter((t) =>
+      t.subscriptionStatus === 'CANCELLED' && new Date(t.updatedAt) >= start && new Date(t.updatedAt) <= end
+    ).length;
+    const subscribedBeforeRange = (tenants as any[]).filter((t) =>
+      new Date(t.createdAt) < start && ['ACTIVE', 'PAST_DUE', 'CANCELLED'].includes(t.subscriptionStatus)
+    ).length;
+    const churnRatePercent = subscribedBeforeRange > 0 ? (cancelledInRange / subscribedBeforeRange) * 100 : 0;
+
     const recentAuditEvents = await AuditLog.find({ createdAt: { $gte: start, $lte: end } })
       .setOptions({ bypassTenantIsolation: true })
       .populate('userId', 'firstName lastName email')
@@ -120,6 +139,9 @@ export const getPlatformDashboardStats = async (req: AuthRequest, res: Response)
       newCompaniesInRange,
       activityCountInRange,
       paymentAlerts,
+      mrrINR,
+      arpuINR,
+      churnRatePercent,
     });
   } catch (error) {
     console.error('Error building platform dashboard stats:', error);

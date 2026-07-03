@@ -7,7 +7,7 @@
     "start": "ts-node src/server.ts",
     "dev": "nodemon src/server.ts",
     "build": "tsc",
-    "test": "npm run build && node --test dist/tests/*.test.js"
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
   },
   "keywords": [],
   "author": "",
@@ -55,7 +55,10 @@
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "@types/speakeasy": "^2.0.10",
+    "@types/supertest": "^7.2.0",
+    "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.1.14",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
