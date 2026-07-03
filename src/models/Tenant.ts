@@ -20,11 +20,31 @@ export interface ITenant extends Document, IAuditable {
   isActive: boolean;
   packageId: mongoose.Types.ObjectId;
   aiCredits: number;
+<<<<<<< Updated upstream
   preferredAiProvider?: 'OpenAI' | 'Gemini' | 'Anthropic';
+=======
+
+  setupFeeAmount: number;
+  setupFeeCurrency: 'INR' | 'USD';
+  setupFeeStatus: 'PENDING' | 'PAID' | 'WAIVED';
+  setupFeePaidAt?: Date;
+
+  billingCycle: 'MONTHLY' | 'YEARLY';
+  subscriptionAmount: number;
+  subscriptionCurrency: 'INR' | 'USD';
+  subscriptionStatus: 'ACTIVE' | 'PENDING' | 'PAST_DUE' | 'CANCELLED';
+  subscriptionStartDate?: Date;
+  nextRenewalDate?: Date;
+
+  credentialsEmailStatus: 'PENDING' | 'SENT' | 'FAILED';
+  credentialsEmailSentAt?: Date;
+  credentialsEmailError?: string;
+>>>>>>> Stashed changes
 
   lifecycleStatus: LifecycleStatus;
   lifecycleUpdatedAt?: Date;
 
+<<<<<<< Updated upstream
   setupFeeStatus: 'PENDING' | 'PAID' | 'WAIVED';
   setupFeePaidAt?: Date;
   setupFeeAmount: number;
@@ -47,13 +67,37 @@ export interface ITenant extends Document, IAuditable {
 
   lastPaymentReminderAt?: Date;
   lastAiCreditsAlertAt?: Date;
+=======
+  userLimit: number;
+  storageLimitGB: number;
+  // SHARED = single multi-tenant DB (current architecture). DEDICATED is captured as a sales/ops
+  // intent only — there is no automated dedicated-DB provisioning pipeline yet.
+  dbType: 'SHARED' | 'DEDICATED';
+>>>>>>> Stashed changes
 }
+
+// Full company lifecycle, from first sales contact through to closure. A company can
+// only authenticate once this reaches ACTIVE/LIVE — see requireActiveLifecycle() in authController.
+export const LIFECYCLE_STATUSES = [
+  'LEAD', 'DEMO_SCHEDULED', 'PROPOSAL_SENT', 'QUOTATION_APPROVED',
+  'SUBSCRIPTION_PENDING', 'SUBSCRIPTION_PAID', 'SETUP_FEE_PENDING', 'SETUP_FEE_PAID',
+  'IMPLEMENTATION_IN_PROGRESS', 'WORKSPACE_PROVISIONING', 'CONFIGURATION', 'QA_VERIFICATION',
+  'ADMIN_CREDENTIALS_GENERATED', 'ACTIVATION_PENDING', 'ACTIVE', 'LIVE',
+  'SUSPENDED', 'EXPIRED', 'CLOSED',
+] as const;
+export type LifecycleStatus = typeof LIFECYCLE_STATUSES[number];
+// The strict forward sequence "Advance to next stage" walks through — the 3 exception
+// statuses (SUSPENDED/EXPIRED/CLOSED) are reachable only via explicit transitions, never "next".
+export const LIFECYCLE_SEQUENCE = LIFECYCLE_STATUSES.filter(
+  (s) => !['SUSPENDED', 'EXPIRED', 'CLOSED'].includes(s),
+);
 
 const TenantSchema = new Schema<ITenant>({
   name: { type: String, required: true },
   isActive: { type: Boolean, default: true },
   packageId: { type: Schema.Types.ObjectId, ref: 'Package' },
   aiCredits: { type: Number, default: 0 },
+<<<<<<< Updated upstream
   preferredAiProvider: { type: String, enum: ['OpenAI', 'Gemini', 'Anthropic'] },
 
   lifecycleStatus: { type: String, enum: LIFECYCLE_STATUSES, default: 'LEAD', index: true },
@@ -81,6 +125,31 @@ const TenantSchema = new Schema<ITenant>({
 
   lastPaymentReminderAt: { type: Date },
   lastAiCreditsAlertAt: { type: Date },
+=======
+
+  setupFeeAmount: { type: Number, default: 0 },
+  setupFeeCurrency: { type: String, enum: ['INR', 'USD'], default: 'INR' },
+  setupFeeStatus: { type: String, enum: ['PENDING', 'PAID', 'WAIVED'], default: 'PENDING' },
+  setupFeePaidAt: { type: Date },
+
+  billingCycle: { type: String, enum: ['MONTHLY', 'YEARLY'], default: 'MONTHLY' },
+  subscriptionAmount: { type: Number, default: 0 },
+  subscriptionCurrency: { type: String, enum: ['INR', 'USD'], default: 'INR' },
+  subscriptionStatus: { type: String, enum: ['ACTIVE', 'PENDING', 'PAST_DUE', 'CANCELLED'], default: 'PENDING' },
+  subscriptionStartDate: { type: Date },
+  nextRenewalDate: { type: Date },
+
+  credentialsEmailStatus: { type: String, enum: ['PENDING', 'SENT', 'FAILED'], default: 'PENDING' },
+  credentialsEmailSentAt: { type: Date },
+  credentialsEmailError: { type: String },
+
+  lifecycleStatus: { type: String, enum: LIFECYCLE_STATUSES, default: 'ACTIVATION_PENDING' },
+  lifecycleUpdatedAt: { type: Date },
+
+  userLimit: { type: Number, default: 10 },
+  storageLimitGB: { type: Number, default: 5 },
+  dbType: { type: String, enum: ['SHARED', 'DEDICATED'], default: 'SHARED' },
+>>>>>>> Stashed changes
 }, { timestamps: true });
 
 TenantSchema.plugin(auditPlugin);

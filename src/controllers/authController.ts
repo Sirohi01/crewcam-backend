@@ -8,6 +8,14 @@ import qrcode from 'qrcode';
 import { z } from 'zod';
 import { AuditLog } from '../models/AuditLog';
 import { Session } from '../models/Session';
+import { Tenant } from '../models/Tenant';
+import { buildPasswordResetEmail, sendMail } from '../services/mailer';
+
+const LIFECYCLE_BLOCK_MESSAGES: Record<string, string> = {
+  SUSPENDED: 'Your company account has been suspended. Please contact CrewCam support.',
+  EXPIRED: 'Your company subscription has expired. Please contact CrewCam support to renew.',
+  CLOSED: 'This company account has been closed.',
+};
 
 const passwordSchema = z.string()
   .min(8, 'Password must be at least 8 characters long')
@@ -57,6 +65,30 @@ export const login = async (req: Request, res: Response) => {
 
     if (!user.isActive) {
       return res.status(401).json({ message: 'User account is inactive' });
+    }
+
+    // A company cannot log in until provisioning and activation are complete. Tenants
+    // created before this field existed have no lifecycleStatus set — treated as
+    // grandfathered-active rather than retroactively locked out.
+    if (user.tenantId) {
+      const tenant = await Tenant.findById(user.tenantId).select('lifecycleStatus').lean();
+      const status = tenant?.lifecycleStatus;
+      if (status && status !== 'ACTIVE' && status !== 'LIVE') {
+        await AuditLog.create({
+          tenantId: user.tenantId,
+          userId: user._id,
+          action: 'LOGIN',
+          module: 'Auth',
+          status: 'FAILURE',
+          ipAddress: req.ip || '',
+          userAgent: req.headers['user-agent'] || '',
+          details: { reason: 'Lifecycle status blocked login', lifecycleStatus: status },
+        });
+        return res.status(403).json({
+          message: LIFECYCLE_BLOCK_MESSAGES[status] || 'Your company workspace is still being set up. Please contact CrewCam support.',
+          lifecycleStatus: status,
+        });
+      }
     }
 
     if (user.twoFactorEnabled) {
@@ -258,8 +290,15 @@ export const forgotPassword = async (req: Request, res: Response) => {
       expiresAt: resetExpiry(),
     });
 
+    const resetBaseUrl = process.env.FRONTEND_LOGIN_URL?.replace('/login', '/reset-password') || 'http://localhost:3000/reset-password';
+    const { subject, html } = buildPasswordResetEmail({
+      firstName: user.firstName,
+      resetUrl: `${resetBaseUrl}?token=${resetToken}`,
+    });
+    await sendMail({ to: user.email, subject, html });
+
     res.status(200).json({
-      message: 'If the email exists, a reset token has been generated',
+      message: 'If the email exists, a reset link has been sent',
       resetToken: process.env.NODE_ENV === 'production' ? undefined : resetToken,
     });
   } catch (error) {
