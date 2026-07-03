@@ -8,12 +8,23 @@ export interface PdfLine {
   value: string;
 }
 
+export interface PdfTableItem {
+  description: string;
+  amount: string;
+}
+
 export interface PdfOptions {
   title: string;
   companyName?: string | undefined;
   headerImageUrl?: string | undefined;
   recipientName?: string | undefined;
+  recipientSubtitle?: string | undefined;
   lines: PdfLine[];
+  // When set, renders an itemized table (description/amount columns + total row)
+  // instead of the plain label/value list — used for proposals.
+  table?: { items: PdfTableItem[]; totalLabel: string; totalValue: string } | undefined;
+  preparedBy?: string | undefined;
+  termsNote?: string | undefined;
   footerNote?: string | undefined;
 }
 
@@ -70,7 +81,11 @@ export const generatePdfBuffer = async (options: PdfOptions): Promise<Buffer> =>
     doc.moveDown(1);
 
     if (options.recipientName) {
-      doc.fontSize(11).font('Helvetica').text(`To: ${options.recipientName}`);
+      doc.fontSize(11).font('Helvetica-Bold').text(`To: ${options.recipientName}`);
+      if (options.recipientSubtitle) {
+        doc.fontSize(9).font('Helvetica').fillColor('#666666').text(options.recipientSubtitle);
+        doc.fillColor('#000000');
+      }
       doc.moveDown(0.5);
     }
 
@@ -85,7 +100,51 @@ export const generatePdfBuffer = async (options: PdfOptions): Promise<Buffer> =>
       doc.moveDown(0.3);
     }
 
-    doc.moveDown(2);
+    if (options.table) {
+      doc.moveDown(0.5);
+      const left = 50, right = 545, descX = left + 8, amountColX = 420;
+      const rowHeight = 22;
+
+      const headerTop = doc.y;
+      doc.rect(left, headerTop, right - left, rowHeight).fill('#18181b');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold');
+      doc.text('DESCRIPTION', descX, headerTop + 6);
+      doc.text('AMOUNT', amountColX, headerTop + 6, { width: right - amountColX - 8, align: 'right' });
+      doc.fillColor('#000000');
+      doc.y = headerTop + rowHeight;
+
+      doc.font('Helvetica').fontSize(10);
+      options.table.items.forEach((item, i) => {
+        const rowTop = doc.y;
+        if (i % 2 === 1) doc.rect(left, rowTop, right - left, rowHeight).fill('#f4f4f5').fillColor('#000000');
+        doc.text(item.description, descX, rowTop + 6, { width: amountColX - descX - 10 });
+        doc.text(item.amount, amountColX, rowTop + 6, { width: right - amountColX - 8, align: 'right' });
+        doc.y = rowTop + rowHeight;
+      });
+
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#18181b').lineWidth(1).stroke();
+      doc.moveDown(0.4);
+      const totalY = doc.y;
+      doc.font('Helvetica-Bold').fontSize(11);
+      doc.text(options.table.totalLabel, descX, totalY, { width: amountColX - descX - 10 });
+      doc.text(options.table.totalValue, amountColX, totalY, { width: right - amountColX - 8, align: 'right' });
+      doc.moveDown(1);
+    }
+
+    if (options.preparedBy) {
+      doc.fontSize(9).font('Helvetica').fillColor('#444444').text(`Prepared by: ${options.preparedBy}`);
+      doc.fillColor('#000000');
+      doc.moveDown(0.5);
+    }
+
+    if (options.termsNote) {
+      doc.moveDown(0.5);
+      doc.fontSize(9).font('Helvetica-Bold').text('Terms & Conditions');
+      doc.fontSize(8.5).font('Helvetica').fillColor('#444444').text(options.termsNote);
+      doc.fillColor('#000000');
+    }
+
+    doc.moveDown(1.5);
     if (options.footerNote) {
       doc.fontSize(9).fillColor('#666666').text(options.footerNote, { align: 'left' });
     }

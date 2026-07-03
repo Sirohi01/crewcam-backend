@@ -8,6 +8,7 @@ export interface ILeadProposalItem {
 export interface ILeadProposal extends Document {
   leadId: mongoose.Types.ObjectId;
   proposalNumber: string;
+  packageId?: mongoose.Types.ObjectId;
   items: ILeadProposalItem[];
   totalAmount: number;
   currency: 'INR' | 'USD';
@@ -21,6 +22,7 @@ export interface ILeadProposal extends Document {
 const LeadProposalSchema = new Schema<ILeadProposal>({
   leadId: { type: Schema.Types.ObjectId, ref: 'Lead', required: true, index: true },
   proposalNumber: { type: String, required: true, unique: true },
+  packageId: { type: Schema.Types.ObjectId, ref: 'Package' },
   items: [{
     description: { type: String, required: true },
     amount: { type: Number, required: true },

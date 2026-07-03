@@ -6,7 +6,7 @@ import {
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
-import { getAllLeads, getLeadById, getPipelineSummary, createLead, updateLead, deleteLead, listLeadProposals, generateLeadProposal, sendLeadProposal } from '../controllers/leadController';
+import { getAllLeads, getLeadById, getPipelineSummary, createLead, updateLead, deleteLead, listLeadProposals, generateLeadProposal, sendLeadProposal, addLeadNote, getLeadMasterData, createLeadMasterData, updateLeadMasterData, deleteLeadMasterData, getAssignableUsers, getLeadStats, bulkImportLeads, getFollowUpStats, getReminderSettings, updateReminderSettings, sendLeadEmail, getHotLeadStats } from '../controllers/leadController';
 import { getOnboardingTasks, createOnboardingTask, updateOnboardingTask, deleteOnboardingTask } from '../controllers/onboardingTaskController';
 import { getReportsSummary } from '../controllers/reportsController';
 import { listAllInvoices, listAllPayments, generateQuotation, listQuotations, sendQuotation, generateInvoice, listInvoicesForTenant, sendInvoice, createCheckoutSession, setInvoiceStatus } from '../controllers/billingController';
@@ -66,6 +66,17 @@ router.put('/ai-providers', configureAiProvider);
 
 router.get('/leads', getAllLeads);
 router.get('/leads/pipeline-summary', getPipelineSummary);
+router.get('/leads/stats', getLeadStats);
+router.get('/leads/follow-ups/stats', getFollowUpStats);
+router.get('/leads/hot/stats', getHotLeadStats);
+router.get('/leads/reminder-settings', getReminderSettings);
+router.put('/leads/reminder-settings', updateReminderSettings);
+router.get('/leads/master-data', getLeadMasterData);
+router.post('/leads/master-data', createLeadMasterData);
+router.put('/leads/master-data/:id', updateLeadMasterData);
+router.delete('/leads/master-data/:id', deleteLeadMasterData);
+router.get('/leads/assignable-users', getAssignableUsers);
+router.post('/leads/import', bulkImportLeads);
 router.get('/leads/:id', getLeadById);
 router.post('/leads', createLead);
 router.put('/leads/:id', updateLead);
@@ -73,6 +84,8 @@ router.delete('/leads/:id', deleteLead);
 router.get('/leads/:id/proposals', listLeadProposals);
 router.post('/leads/:id/proposals', generateLeadProposal);
 router.post('/leads/:id/proposals/:proposalId/send', sendLeadProposal);
+router.post('/leads/:id/notes', addLeadNote);
+router.post('/leads/:id/send-email', sendLeadEmail);
 
 router.get('/onboarding-tasks', getOnboardingTasks);
 router.post('/onboarding-tasks', createOnboardingTask);
