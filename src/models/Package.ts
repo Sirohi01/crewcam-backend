@@ -8,7 +8,6 @@ export interface IPackage extends Document, IAuditable {
   name: string;
   tier: PackageTier;
   description: string;
-  // tier: 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE' | 'CUSTOM';
   maxCompanies: number;
   maxBranches: number;
   maxDepartments: number;
@@ -33,7 +32,6 @@ const PackageSchema = new Schema<IPackage>({
   name: { type: String, required: true },
   tier: { type: String, enum: PACKAGE_TIERS, default: 'CUSTOM' },
   description: { type: String },
-  // tier: { type: String, enum: ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'], default: 'CUSTOM' },
   maxCompanies: { type: Number, required: true, default: 1 },
   maxBranches: { type: Number, required: true, default: 1 },
   maxDepartments: { type: Number, required: true, default: 5 },
@@ -48,6 +46,7 @@ const PackageSchema = new Schema<IPackage>({
   pricePerUserYearlyUSD: { type: Number, default: 0 },
   setupFeeINR: { type: Number, default: 0 },
   setupFeeUSD: { type: Number, default: 0 },
+  // AI credits bundled free with this package; anything beyond this is a separate paid top-up, never drawn from the setup fee.
   freeAiCredits: { type: Number, default: 0 },
   aiCreditTopUpPriceINR: { type: Number, default: 0 },
   aiCreditTopUpPriceUSD: { type: Number, default: 0 },

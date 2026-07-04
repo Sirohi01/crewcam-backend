@@ -239,6 +239,14 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   { section: 'Admin UI', label: 'Whitelabel', href: '/dashboard/settings/whitelabel', icon: 'Palette', order: 1, requiredFeature: 'whitelabel', categories: ['company_admin'] },
   { section: 'Admin UI', label: 'Active Sessions', href: '/dashboard/settings/sessions', icon: 'Shield', order: 2, categories: ALL },
   { section: 'Admin UI', label: 'Security (2FA)', href: '/dashboard/settings/security', icon: 'Shield', order: 3, categories: ALL },
+
+  // ---- Career Growth ----
+  { section: 'Career Growth', label: 'Training & Development', href: '/dashboard/training-development', icon: 'GraduationCap', order: 0, categories: ALL },
+  { section: 'Career Growth', label: 'Career Progression & Promotion', href: '/dashboard/career-progression', icon: 'TrendingUp', order: 1, categories: ALL },
+  { section: 'Career Growth', label: 'AI Career Coach', href: '/dashboard/ai-career-coach', icon: 'Sparkles', order: 2, categories: ALL },
+
+  // ---- Account (employee-facing settings hub, last item in the sidebar for every role) ----
+  { section: 'Account', label: 'Settings', href: '/dashboard/settings', icon: 'Settings', order: 0, categories: ALL },
 ];
 
 /**
