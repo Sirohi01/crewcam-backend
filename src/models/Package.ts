@@ -1,8 +1,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { auditPlugin, IAuditable } from './plugins/auditPlugin';
 
+export const PACKAGE_TIERS = ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'] as const;
+export type PackageTier = typeof PACKAGE_TIERS[number];
+
 export interface IPackage extends Document, IAuditable {
   name: string;
+  tier: PackageTier;
   description: string;
   tier: 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE' | 'CUSTOM';
   maxCompanies: number;
@@ -27,6 +31,7 @@ export interface IPackage extends Document, IAuditable {
 
 const PackageSchema = new Schema<IPackage>({
   name: { type: String, required: true },
+  tier: { type: String, enum: PACKAGE_TIERS, default: 'CUSTOM' },
   description: { type: String },
   tier: { type: String, enum: ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'], default: 'CUSTOM' },
   maxCompanies: { type: Number, required: true, default: 1 },

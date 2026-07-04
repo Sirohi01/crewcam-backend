@@ -31,9 +31,15 @@ import aiHiringRoutes from './routes/aiHiringRoutes';
 import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
 import jdKpaRoutes from './routes/jdKpaRoutes';
 import locationRoutes from './routes/locationRoutes';
+import webhookRoutes from './routes/webhookRoutes';
 
 export function createApp() {
   const app = express();
+  
+  // Razorpay/Stripe webhook signature verification needs the exact raw request bytes, so
+  // these must be mounted with express.raw() before the global express.json() below.
+  app.use('/api/v1/webhooks', express.raw({ type: '*/*' }), webhookRoutes);
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());

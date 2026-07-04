@@ -23,6 +23,124 @@ const passwordSchema = z.string()
   .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
   .regex(/[0-9]/, 'Password must contain at least one number');
 
+const createTenantSchema = z.object({
+  name: z.string().trim().min(2, 'Company name must be at least 2 characters'),
+  packageId: z.string().min(1, 'A subscription package must be selected'),
+  aiCredits: z.coerce.number().min(0).optional().default(0),
+  adminFirstName: z.string().trim().min(1, 'Admin first name is required'),
+  adminLastName: z.string().trim().min(1, 'Admin last name is required'),
+  adminEmail: z.string().trim().email('A valid admin email is required'),
+  adminPassword: passwordSchema,
+  country: z.string().trim().min(1).default('India'),
+  tradeName: z.string().optional(),
+  industry: z.string().optional(),
+  companyType: z.string().optional(),
+  website: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  timezone: z.string().optional(),
+  baseCurrency: z.string().optional(),
+  financialYearStartMonth: z.coerce.number().optional(),
+  panNumber: z.string().optional(),
+  gstin: z.string().optional(),
+  cin: z.string().optional(),
+  tan: z.string().optional(),
+  epfoNumber: z.string().optional(),
+  esicNumber: z.string().optional(),
+  ptNumber: z.string().optional(),
+  lwfNumber: z.string().optional(),
+  tin: z.string().optional(),
+  ein: z.string().optional(),
+  vatNumber: z.string().optional(),
+  businessLicenseNumber: z.string().optional(),
+  logoUrl: z.string().optional(),
+  adminProfilePictureUrl: z.string().optional(),
+  setupFeeAmount: z.coerce.number().min(0).optional().default(0),
+  setupFeeCurrency: z.enum(['INR', 'USD']).optional().default('INR'),
+  setupFeeStatus: z.enum(['PENDING', 'PAID', 'WAIVED']).optional().default('PENDING'),
+  billingCycle: z.enum(['MONTHLY', 'YEARLY']).optional().default('MONTHLY'),
+  subscriptionAmount: z.coerce.number().min(0).optional().default(0),
+  subscriptionCurrency: z.enum(['INR', 'USD']).optional().default('INR'),
+});
+
+const updateTenantSchema = createTenantSchema.partial({
+  adminPassword: true,
+  packageId: true,
+}).extend({
+  isActive: z.coerce.boolean().optional(),
+  setupFeeStatus: z.enum(['PENDING', 'PAID', 'WAIVED']).optional(),
+  subscriptionStatus: z.enum(['ACTIVE', 'PENDING', 'PAST_DUE', 'CANCELLED']).optional(),
+});
+
+function computeNextRenewalDate(from: Date, billingCycle: 'MONTHLY' | 'YEARLY'): Date {
+  const next = new Date(from);
+  if (billingCycle === 'YEARLY') next.setFullYear(next.getFullYear() + 1);
+  else next.setMonth(next.getMonth() + 1);
+  return next;
+}
+
+function getLoginUrl(): string {
+  return process.env.FRONTEND_LOGIN_URL || 'https://app.crewcam.com/login';
+}
+
+function toINR(amount: number, currency: 'INR' | 'USD'): number {
+  if (currency === 'USD') {
+    const rate = parseFloat(process.env.USD_TO_INR_RATE || '83.5');
+    return amount * rate;
+  }
+  return amount;
+}
+
+function resolveDateRange(range: string | undefined, fromQuery: string | undefined, toQuery: string | undefined): { start: Date; end: Date } {
+  const now = new Date();
+  if (range === 'week') {
+    const start = new Date(now);
+    start.setDate(start.getDate() - start.getDay());
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    return { start, end };
+  }
+  if (range === 'month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+    return { start, end };
+  }
+  if (range === 'custom' && fromQuery && toQuery) {
+    const start = new Date(fromQuery);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(toQuery);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+  // default: today
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+async function writeAuditLog(params: { tenantId: string; userId?: any; action: string; status: 'SUCCESS' | 'FAILURE'; details?: Record<string, any> }) {
+  try {
+    await AuditLog.create({
+      tenantId: params.tenantId,
+      userId: params.userId,
+      action: params.action,
+      module: 'SuperAdmin',
+      status: params.status,
+      details: params.details,
+    } as any);
+  } catch (err) {
+    console.error('[audit] failed to write audit log:', err);
+  }
+}
+
 export const getAllTenants = async (req: AuthRequest, res: Response) => {
   try {
     const tenants = await Tenant.find().populate('packageId').lean();
@@ -48,7 +166,12 @@ export const getAllTenants = async (req: AuthRequest, res: Response) => {
 };
 
 export const createTenant = async (req: AuthRequest, res: Response) => {
+  let createdTenantId: any = null;
   try {
+    const parsed = createTenantSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input', errors: parsed.error.issues });
+    }
     const {
       name, packageId, aiCredits, adminFirstName, adminLastName, adminEmail, adminPassword, country,
       tradeName, industry, companyType, website, email, phone,
@@ -56,26 +179,53 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       timezone, baseCurrency, financialYearStartMonth,
       panNumber, gstin, cin, tan, epfoNumber, esicNumber, ptNumber, lwfNumber,
       tin, ein, vatNumber, businessLicenseNumber,
-      logoUrl, adminProfilePictureUrl
-    } = req.body;
+      logoUrl, adminProfilePictureUrl,
+      setupFeeAmount, setupFeeCurrency, setupFeeStatus,
+      billingCycle, subscriptionAmount, subscriptionCurrency,
+    } = parsed.data;
+
     const existingUser = await User.findOne({ email: adminEmail }).setOptions({ bypassTenantIsolation: true });
     if (existingUser) {
       return res.status(400).json({ message: 'User with this admin email already exists' });
     }
 
-    try {
-      passwordSchema.parse(adminPassword);
-    } catch (zodError: any) {
-      return res.status(400).json({ message: zodError?.errors?.[0]?.message || 'Invalid password format' });
+    const pkg = await Package.findById(packageId);
+    if (!pkg || !pkg.isActive) {
+      return res.status(400).json({ message: 'Selected package does not exist or is inactive' });
     }
+
+    const subscriptionStartDate = new Date();
+    const nextRenewalDate = computeNextRenewalDate(subscriptionStartDate, billingCycle);
 
     const tenant = new Tenant({
       name,
       packageId,
       aiCredits: Math.max(0, Number(aiCredits) || 0),
-      createdBy: req.user?._id
+      setupFeeAmount,
+      setupFeeCurrency,
+      setupFeeStatus,
+      setupFeePaidAt: setupFeeStatus === 'PAID' ? new Date() : undefined,
+      billingCycle,
+      subscriptionAmount,
+      subscriptionCurrency,
+      subscriptionStatus: 'ACTIVE',
+      subscriptionStartDate,
+      nextRenewalDate,
+      createdBy: req.user?._id,
     });
     await tenant.save();
+    createdTenantId = tenant._id;
+
+    if (setupFeeStatus === 'PAID' && setupFeeAmount > 0) {
+      await Payment.create({
+        tenantId: tenant._id,
+        type: 'SETUP_FEE',
+        amount: setupFeeAmount,
+        currency: setupFeeCurrency,
+        paidAt: new Date(),
+        ...(req.user?._id && { recordedBy: req.user._id }),
+      });
+    }
 
     // Create Company (Root)
     const company = new Company({
@@ -120,16 +270,127 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     });
     await adminUser.save();
 
-    res.status(201).json(tenant);
+    const { subject, html } = buildCompanyWelcomeEmail({
+      companyName: name,
+      adminFirstName,
+      adminEmail,
+      adminPassword,
+      loginUrl: getLoginUrl(),
+    });
+    const emailResult = await sendMail({ to: adminEmail, subject, html });
+
+    tenant.credentialsEmailStatus = emailResult.sent ? 'SENT' : 'FAILED';
+    if (emailResult.sent) tenant.credentialsEmailSentAt = new Date();
+    if (!emailResult.sent && emailResult.error) tenant.credentialsEmailError = emailResult.error;
+    await tenant.save();
+
+    await writeAuditLog({
+      tenantId: String(tenant._id),
+      userId: req.user?._id,
+      action: 'CREATE_COMPANY',
+      status: 'SUCCESS',
+      details: { name, adminEmail, packageId, credentialsEmailSent: emailResult.sent },
+    });
+
+    // Quick-create already performs implementation/provisioning/configuration/QA/credential-issuing
+    // in one atomic step, so the lifecycle starts at ACTIVATION_PENDING rather than replaying every
+    // earlier stage. Login stays blocked until this is explicitly advanced to ACTIVE.
+    await CompanyLifecycleEvent.create({
+      tenantId: tenant._id,
+      toStatus: tenant.lifecycleStatus,
+      note: 'Company provisioned via quick-create — implementation through credential issuance completed in one step.',
+      ...(req.user?._id && { changedBy: req.user._id }),
+    });
+
+    const responsePayload = tenant.toObject();
+    res.status(201).json({
+      ...responsePayload,
+      credentialsEmailSent: emailResult.sent,
+      credentialsEmailError: emailResult.error,
+      adminEmail,
+      // Only returned once, in the create response, as a fallback if the email failed to send.
+      adminPasswordFallback: emailResult.sent ? undefined : adminPassword,
+    });
   } catch (error) {
     console.error('Error creating tenant:', error);
+    if (createdTenantId) {
+      // Roll back partially-created records so a failed setup doesn't leave an orphaned company.
+      await Promise.all([
+        Tenant.findByIdAndDelete(createdTenantId),
+        Company.deleteMany({ tenantId: createdTenantId }),
+        Role.deleteMany({ tenantId: createdTenantId }),
+        User.deleteMany({ tenantId: createdTenantId }),
+        Payment.deleteMany({ tenantId: createdTenantId }),
+      ]).catch((rollbackErr) => console.error('Rollback failed:', rollbackErr));
+    }
     res.status(500).json({ message: 'Internal server error while creating tenant' });
+  }
+};
+
+export const resendCompanyCredentials = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const tenant = await Tenant.findById(id);
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    const adminRole = await Role.findOne({ tenantId: id, name: 'Company Admin' }).lean();
+    if (!adminRole) return res.status(404).json({ message: 'Company admin role not found' });
+
+    const adminUser = await User.findOne({ tenantId: id, roleId: adminRole._id });
+    if (!adminUser) return res.status(404).json({ message: 'Company admin user not found' });
+
+    const newPassword = req.body?.newPassword;
+    try {
+      passwordSchema.parse(newPassword);
+    } catch (zodError: any) {
+      return res.status(400).json({ message: zodError?.errors?.[0]?.message || 'A valid new password is required' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    adminUser.passwordHash = await bcrypt.hash(newPassword, salt);
+    await adminUser.save();
+
+    const { subject, html } = buildCredentialsResetEmail({
+      companyName: tenant.name,
+      adminFirstName: adminUser.firstName,
+      adminEmail: adminUser.email,
+      adminPassword: newPassword,
+      loginUrl: getLoginUrl(),
+    });
+    const emailResult = await sendMail({ to: adminUser.email, subject, html });
+
+    tenant.credentialsEmailStatus = emailResult.sent ? 'SENT' : 'FAILED';
+    if (emailResult.sent) tenant.credentialsEmailSentAt = new Date();
+    if (!emailResult.sent && emailResult.error) tenant.credentialsEmailError = emailResult.error;
+    await tenant.save();
+
+    await writeAuditLog({
+      tenantId: id,
+      userId: req.user?._id,
+      action: 'RESEND_CREDENTIALS',
+      status: emailResult.sent ? 'SUCCESS' : 'FAILURE',
+      details: { adminEmail: adminUser.email, credentialsEmailSent: emailResult.sent, error: emailResult.error },
+    });
+
+    res.status(200).json({
+      credentialsEmailSent: emailResult.sent,
+      credentialsEmailError: emailResult.error,
+      adminEmail: adminUser.email,
+      adminPasswordFallback: emailResult.sent ? undefined : newPassword,
+    });
+  } catch (error) {
+    console.error('Error resending company credentials:', error);
+    res.status(500).json({ message: 'Internal server error while resending credentials' });
   }
 };
 
 export const updateTenant = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
+    const parsed = updateTenantSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input', errors: parsed.error.issues });
+    }
     const {
       name, packageId, isActive, aiCredits, country,
       adminFirstName, adminLastName, adminEmail, adminPassword,
@@ -138,8 +399,30 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       timezone, baseCurrency, financialYearStartMonth,
       panNumber, gstin, cin, tan, epfoNumber, esicNumber, ptNumber, lwfNumber,
       tin, ein, vatNumber, businessLicenseNumber,
-      logoUrl, adminProfilePictureUrl
-    } = req.body;
+      logoUrl, adminProfilePictureUrl,
+      setupFeeAmount, setupFeeCurrency, setupFeeStatus,
+      billingCycle, subscriptionAmount, subscriptionCurrency, subscriptionStatus,
+    } = parsed.data;
+
+    const existingTenant = await Tenant.findById(id);
+    if (!existingTenant) return res.status(404).json({ message: 'Company not found' });
+
+    const billingUpdate: any = {};
+    if (setupFeeAmount !== undefined) billingUpdate.setupFeeAmount = setupFeeAmount;
+    if (setupFeeCurrency !== undefined) billingUpdate.setupFeeCurrency = setupFeeCurrency;
+    if (setupFeeStatus !== undefined) {
+      billingUpdate.setupFeeStatus = setupFeeStatus;
+      if (setupFeeStatus === 'PAID' && existingTenant.setupFeeStatus !== 'PAID') {
+        billingUpdate.setupFeePaidAt = new Date();
+      }
+    }
+    if (billingCycle !== undefined && billingCycle !== existingTenant.billingCycle) {
+      billingUpdate.billingCycle = billingCycle;
+      billingUpdate.nextRenewalDate = computeNextRenewalDate(existingTenant.subscriptionStartDate || new Date(), billingCycle);
+    }
+    if (subscriptionAmount !== undefined) billingUpdate.subscriptionAmount = subscriptionAmount;
+    if (subscriptionCurrency !== undefined) billingUpdate.subscriptionCurrency = subscriptionCurrency;
+    if (subscriptionStatus !== undefined) billingUpdate.subscriptionStatus = subscriptionStatus;
 
     const tenant = await Tenant.findByIdAndUpdate(
       id,
@@ -148,11 +431,24 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
         packageId,
         isActive,
         ...(aiCredits !== undefined && { aiCredits: Math.max(0, Number(aiCredits) || 0) }),
+        ...billingUpdate,
       },
       { returnDocument: 'after' }
     );
 
-    if (!tenant) return res.status(404).json({ message: 'Tenant not found' });
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    if (setupFeeStatus === 'PAID' && existingTenant.setupFeeStatus !== 'PAID' && tenant.setupFeeAmount > 0) {
+      await Payment.create({
+        tenantId: tenant._id,
+        type: 'SETUP_FEE',
+        amount: tenant.setupFeeAmount,
+        currency: tenant.setupFeeCurrency,
+        paidAt: new Date(),
+        ...(req.user?._id && { recordedBy: req.user._id }),
+      });
+    }
+
     const updatePayload: any = {
       legalName: name, country, tradeName, industry, companyType, website, email, phone,
       addressLine1, addressLine2, city, state, postalCode,
@@ -206,6 +502,14 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    await writeAuditLog({
+      tenantId: id,
+      userId: req.user?._id,
+      action: 'UPDATE_COMPANY',
+      status: 'SUCCESS',
+      details: { name, isActive, setupFeeStatus, billingCycle, subscriptionStatus },
+    });
+
     res.status(200).json(tenant);
   } catch (error) {
     console.error('Error updating tenant:', error);
@@ -217,17 +521,144 @@ export const deleteTenant = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const tenant = await Tenant.findByIdAndDelete(id);
-    if (!tenant) return res.status(404).json({ message: 'Tenant not found' });
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
 
     // Delete associated data
     await Company.deleteMany({ tenantId: id });
     await User.deleteMany({ tenantId: id });
     await Role.deleteMany({ tenantId: id });
 
-    res.status(200).json({ message: 'Tenant and associated data deleted successfully' });
+    await writeAuditLog({
+      tenantId: id,
+      userId: req.user?._id,
+      action: 'DELETE_COMPANY',
+      status: 'SUCCESS',
+      details: { name: tenant.name },
+    });
+
+    res.status(200).json({ message: 'Company and associated data deleted successfully' });
   } catch (error) {
     console.error('Error deleting tenant:', error);
     res.status(500).json({ message: 'Internal server error while deleting tenant' });
+  }
+};
+
+export const markSetupFeePaid = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const tenant = await Tenant.findById(id);
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+    if (tenant.setupFeeStatus === 'PAID') {
+      return res.status(400).json({ message: 'Setup fee is already marked as paid' });
+    }
+
+    tenant.setupFeeStatus = 'PAID';
+    tenant.setupFeePaidAt = new Date();
+    await tenant.save();
+
+    if (tenant.setupFeeAmount > 0) {
+      await Payment.create({
+        tenantId: tenant._id,
+        type: 'SETUP_FEE',
+        amount: tenant.setupFeeAmount,
+        currency: tenant.setupFeeCurrency,
+        paidAt: new Date(),
+        ...(req.user?._id && { recordedBy: req.user._id }),
+      });
+    }
+
+    await writeAuditLog({
+      tenantId: id,
+      userId: req.user?._id,
+      action: 'MARK_SETUP_FEE_PAID',
+      status: 'SUCCESS',
+      details: { amount: tenant.setupFeeAmount, currency: tenant.setupFeeCurrency },
+    });
+
+    res.status(200).json(tenant);
+  } catch (error) {
+    console.error('Error marking setup fee paid:', error);
+    res.status(500).json({ message: 'Internal server error while marking setup fee paid' });
+  }
+};
+
+export const recordSubscriptionPayment = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const tenant = await Tenant.findById(id);
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    const now = new Date();
+    await Payment.create({
+      tenantId: tenant._id,
+      type: 'SUBSCRIPTION',
+      amount: tenant.subscriptionAmount,
+      currency: tenant.subscriptionCurrency,
+      paidAt: now,
+      ...(req.user?._id && { recordedBy: req.user._id }),
+    });
+
+    tenant.subscriptionStatus = 'ACTIVE';
+    tenant.nextRenewalDate = computeNextRenewalDate(now, tenant.billingCycle);
+    await tenant.save();
+
+    await writeAuditLog({
+      tenantId: id,
+      userId: req.user?._id,
+      action: 'RECORD_SUBSCRIPTION_PAYMENT',
+      status: 'SUCCESS',
+      details: { amount: tenant.subscriptionAmount, currency: tenant.subscriptionCurrency, nextRenewalDate: tenant.nextRenewalDate },
+    });
+
+    res.status(200).json(tenant);
+  } catch (error) {
+    console.error('Error recording subscription payment:', error);
+    res.status(500).json({ message: 'Internal server error while recording subscription payment' });
+  }
+};
+
+export const topUpAiCredits = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const credits = Number(req.body?.credits);
+    if (!credits || credits <= 0) {
+      return res.status(400).json({ message: 'credits must be a positive number' });
+    }
+
+    const tenant = await Tenant.findById(id).populate('packageId');
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    const pkg = tenant.packageId as any;
+    const pricePerCredit = pkg?.aiCreditTopUpPriceINR || 0;
+    const amount = Math.round(pricePerCredit * credits);
+
+    if (amount > 0) {
+      await Payment.create({
+        tenantId: tenant._id,
+        type: 'AI_CREDIT_TOPUP',
+        amount,
+        currency: 'INR',
+        paidAt: new Date(),
+        notes: `${credits} AI credits`,
+        ...(req.user?._id && { recordedBy: req.user._id }),
+      });
+    }
+
+    tenant.aiCredits = (tenant.aiCredits || 0) + credits;
+    await tenant.save();
+
+    await writeAuditLog({
+      tenantId: id,
+      userId: req.user?._id,
+      action: 'TOPUP_AI_CREDITS',
+      status: 'SUCCESS',
+      details: { credits, amount, currency: 'INR', newBalance: tenant.aiCredits },
+    });
+
+    res.status(200).json({ aiCredits: tenant.aiCredits, amountCharged: amount, currency: 'INR' });
+  } catch (error) {
+    console.error('Error topping up AI credits:', error);
+    res.status(500).json({ message: 'Internal server error while topping up AI credits' });
   }
 };
 
@@ -241,6 +672,17 @@ export const getAllPackages = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getPackageById = async (req: AuthRequest, res: Response) => {
+  try {
+    const pkg = await Package.findById(req.params.id);
+    if (!pkg) return res.status(404).json({ message: 'Package not found' });
+    res.status(200).json(pkg);
+  } catch (error) {
+    console.error('Error fetching package:', error);
+    res.status(500).json({ message: 'Internal server error while fetching package' });
+  }
+};
+
 export const createPackage = async (req: AuthRequest, res: Response) => {
   try {
     const {
@@ -250,6 +692,7 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
     } = req.body;
     const newPackage = new Package({
       name,
+      tier: tier || 'CUSTOM',
       description,
       tier,
       maxCompanies,
@@ -292,6 +735,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
       id,
       {
         ...(name !== undefined && { name }),
+        ...(tier !== undefined && { tier }),
         ...(description !== undefined && { description }),
         ...(tier !== undefined && { tier }),
         ...(maxCompanies !== undefined && { maxCompanies }),
@@ -403,6 +847,236 @@ export const deleteFeature = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error deleting feature:', error);
     res.status(500).json({ message: 'Internal server error while deleting feature' });
+  }
+};
+
+export const getDashboardStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const range = (req.query.range as string) || 'today';
+    const { start, end } = resolveDateRange(range, req.query.from as string, req.query.to as string);
+
+    const [totalTenants, activeTenants, totalPackages, totalFeatures] = await Promise.all([
+      Tenant.countDocuments(),
+      Tenant.countDocuments({ isActive: true }),
+      Package.countDocuments(),
+      FeatureFlag.countDocuments({ isActive: true }),
+    ]);
+    const totalUsers = await User.countDocuments({}).setOptions({ bypassTenantIsolation: true });
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const growthRangeStart = new Date();
+    growthRangeStart.setMonth(growthRangeStart.getMonth() - 5);
+    growthRangeStart.setDate(1);
+    growthRangeStart.setHours(0, 0, 0, 0);
+
+    const growthAgg = await Tenant.aggregate([
+      { $match: { createdAt: { $gte: growthRangeStart } } },
+      { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
+    ]);
+
+    const growth = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const match = growthAgg.find((g: any) => g._id.y === d.getFullYear() && g._id.m === d.getMonth() + 1);
+      growth.push({ name: monthNames[d.getMonth()], value: match ? match.count : 0 });
+    }
+
+    const recentTenants = await Tenant.find()
+      .populate('packageId', 'name')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    // --- Range-scoped figures: revenue, new companies, activity ---
+    const [paymentsInRange, newCompaniesInRange, activityCountInRange, recentAuditEvents] = await Promise.all([
+      Payment.find({ paidAt: { $gte: start, $lt: end } }).lean(),
+      Tenant.countDocuments({ createdAt: { $gte: start, $lt: end } }),
+      AuditLog.countDocuments({ createdAt: { $gte: start, $lt: end } }).setOptions({ bypassTenantIsolation: true }),
+      AuditLog.find({ createdAt: { $gte: start, $lt: end } })
+        .setOptions({ bypassTenantIsolation: true })
+        .populate('userId', 'firstName lastName email')
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+    ]);
+
+    const revenueINR = paymentsInRange.reduce((sum, p: any) => sum + toINR(p.amount, p.currency), 0);
+    const setupFeeRevenueINR = paymentsInRange
+      .filter((p: any) => p.type === 'SETUP_FEE')
+      .reduce((sum, p: any) => sum + toINR(p.amount, p.currency), 0);
+    const subscriptionRevenueINR = paymentsInRange
+      .filter((p: any) => p.type === 'SUBSCRIPTION')
+      .reduce((sum, p: any) => sum + toINR(p.amount, p.currency), 0);
+    const aiCreditRevenueINR = paymentsInRange
+      .filter((p: any) => p.type === 'AI_CREDIT_TOPUP')
+      .reduce((sum, p: any) => sum + toINR(p.amount, p.currency), 0);
+
+    // --- Payment alerts: pending setup fees, past-due / overdue subscriptions ---
+    const now = new Date();
+    const atRiskTenants = await Tenant.find({
+      $or: [
+        { setupFeeStatus: 'PENDING' },
+        { subscriptionStatus: 'PAST_DUE' },
+        { subscriptionStatus: 'ACTIVE', nextRenewalDate: { $lte: now } },
+      ],
+    }).select('name setupFeeAmount setupFeeCurrency setupFeeStatus subscriptionAmount subscriptionCurrency subscriptionStatus nextRenewalDate billingCycle').limit(50).lean();
+
+    const paymentAlerts = atRiskTenants.map((t: any) => {
+      if (t.setupFeeStatus === 'PENDING') {
+        return { tenantId: t._id, companyName: t.name, type: 'SETUP_FEE_PENDING', amount: t.setupFeeAmount, currency: t.setupFeeCurrency };
+      }
+      if (t.subscriptionStatus === 'PAST_DUE') {
+        return { tenantId: t._id, companyName: t.name, type: 'SUBSCRIPTION_PAST_DUE', amount: t.subscriptionAmount, currency: t.subscriptionCurrency, nextRenewalDate: t.nextRenewalDate };
+      }
+      return { tenantId: t._id, companyName: t.name, type: 'RENEWAL_OVERDUE', amount: t.subscriptionAmount, currency: t.subscriptionCurrency, nextRenewalDate: t.nextRenewalDate };
+    });
+
+    res.status(200).json({
+      range,
+      rangeStart: start,
+      rangeEnd: end,
+      totalTenants,
+      activeTenants,
+      totalPackages,
+      totalFeatures,
+      totalUsers,
+      growth,
+      recentTenants,
+      recentAuditEvents,
+      revenueINR,
+      setupFeeRevenueINR,
+      subscriptionRevenueINR,
+      aiCreditRevenueINR,
+      paymentsCount: paymentsInRange.length,
+      newCompaniesInRange,
+      activityCountInRange,
+      paymentAlerts,
+    });
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ message: 'Internal server error while fetching dashboard stats' });
+  }
+};
+
+export const getAllAuditLogsAcrossTenants = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const query: any = {};
+    if (req.query.tenantId) query.tenantId = req.query.tenantId;
+    if (req.query.module) query.module = req.query.module;
+    if (req.query.status) query.status = req.query.status;
+    if (req.query.search) {
+      const search = new RegExp(String(req.query.search), 'i');
+      query.$or = [{ action: search }, { module: search }];
+    }
+
+    const [logs, total] = await Promise.all([
+      AuditLog.find(query)
+        .setOptions({ bypassTenantIsolation: true })
+        .populate('userId', 'firstName lastName email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      AuditLog.countDocuments(query).setOptions({ bypassTenantIsolation: true }),
+    ]);
+
+    const tenantIds = [...new Set(logs.map((l: any) => l.tenantId).filter(Boolean))];
+    const tenants = await Tenant.find({ _id: { $in: tenantIds } }).select('name').lean();
+    const tenantNameById = new Map(tenants.map((t: any) => [String(t._id), t.name]));
+
+    res.status(200).json({
+      data: logs.map((l: any) => ({ ...l, tenantName: tenantNameById.get(String(l.tenantId)) || l.tenantId })),
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error('Error fetching audit logs:', error);
+    res.status(500).json({ message: 'Internal server error while fetching audit logs' });
+  }
+};
+
+export const getAllPayments = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const query: any = {};
+    if (req.query.type) query.type = req.query.type;
+    if (req.query.tenantId) query.tenantId = req.query.tenantId;
+    if (req.query.from || req.query.to) {
+      query.paidAt = {};
+      if (req.query.from) query.paidAt.$gte = new Date(String(req.query.from));
+      if (req.query.to) {
+        const end = new Date(String(req.query.to));
+        end.setHours(23, 59, 59, 999);
+        query.paidAt.$lte = end;
+      }
+    }
+
+    const [payments, total] = await Promise.all([
+      Payment.find(query)
+        .populate('tenantId', 'name')
+        .populate('recordedBy', 'firstName lastName email')
+        .sort({ paidAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Payment.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      data: payments,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({ message: 'Internal server error while fetching payments' });
+  }
+};
+
+export const getAllTicketsAcrossTenants = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const query: any = {};
+    if (req.query.status) query.status = req.query.status;
+    if (req.query.priority) query.priority = req.query.priority;
+    if (req.query.tenantId) query.tenantId = req.query.tenantId;
+    if (req.query.search) {
+      const search = new RegExp(String(req.query.search), 'i');
+      query.$or = [{ subject: search }, { department: search }];
+    }
+
+    const [tickets, total, openCount, urgentCount] = await Promise.all([
+      Ticket.find(query)
+        .setOptions({ bypassTenantIsolation: true })
+        .populate('tenantId', 'name')
+        .populate('employeeId', 'firstName lastName email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Ticket.countDocuments(query).setOptions({ bypassTenantIsolation: true }),
+      Ticket.countDocuments({ status: { $in: ['Open', 'In_Progress'] } }).setOptions({ bypassTenantIsolation: true }),
+      Ticket.countDocuments({ priority: 'Urgent', status: { $in: ['Open', 'In_Progress'] } }).setOptions({ bypassTenantIsolation: true }),
+    ]);
+
+    res.status(200).json({
+      data: tickets,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      openCount,
+      urgentCount,
+    });
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    res.status(500).json({ message: 'Internal server error while fetching tickets' });
   }
 };
 

@@ -13,6 +13,14 @@ export interface IWhiteLabel extends Document, IAuditable {
   customDomain?: string;
   companyNameOverride?: string;
   supportEmail?: string;
+
+  emailFromName?: string;
+  emailFromAddress?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  whatsappEnabled: boolean;
+  whatsappNumber?: string;
 }
 
 const WhiteLabelSchema = new Schema<IWhiteLabel>({
@@ -26,6 +34,16 @@ const WhiteLabelSchema = new Schema<IWhiteLabel>({
   customDomain: { type: String, unique: true, sparse: true },
   companyNameOverride: { type: String },
   supportEmail: { type: String },
+
+  emailFromName: { type: String },
+  emailFromAddress: { type: String },
+  // SMTP credentials a company brings for white-labeled outbound mail — password is not
+  // captured here; it's configured directly by the platform team when this is wired up.
+  smtpHost: { type: String },
+  smtpPort: { type: Number },
+  smtpUsername: { type: String },
+  whatsappEnabled: { type: Boolean, default: false },
+  whatsappNumber: { type: String },
 }, { timestamps: true });
 
 WhiteLabelSchema.plugin(auditPlugin);

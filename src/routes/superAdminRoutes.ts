@@ -30,6 +30,7 @@ router.get('/reports/summary', getReportsSummary);
 
 router.get('/tenants', getAllTenants);
 router.post('/tenants', createTenant);
+router.post('/companies/wizard', createCompanyDraft);
 router.put('/tenants/:id', updateTenant);
 router.delete('/tenants/:id', deleteTenant);
 router.post('/tenants/:id/resend-credentials', resendCredentials);
@@ -49,6 +50,7 @@ router.post('/tenants/:id/invoices', generateInvoice);
 router.post('/companies/wizard', createCompanyDraft);
 
 router.get('/packages', getAllPackages);
+router.get('/packages/:id', getPackageById);
 router.post('/packages', createPackage);
 router.put('/packages/:id', updatePackage);
 

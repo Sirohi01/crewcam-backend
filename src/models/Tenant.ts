@@ -49,6 +49,22 @@ export interface ITenant extends Document, IAuditable {
   lastAiCreditsAlertAt?: Date;
 }
 
+// Full company lifecycle, from first sales contact through to closure. A company can
+// only authenticate once this reaches ACTIVE/LIVE — see requireActiveLifecycle() in authController.
+export const LIFECYCLE_STATUSES = [
+  'LEAD', 'DEMO_SCHEDULED', 'PROPOSAL_SENT', 'QUOTATION_APPROVED',
+  'SUBSCRIPTION_PENDING', 'SUBSCRIPTION_PAID', 'SETUP_FEE_PENDING', 'SETUP_FEE_PAID',
+  'IMPLEMENTATION_IN_PROGRESS', 'WORKSPACE_PROVISIONING', 'CONFIGURATION', 'QA_VERIFICATION',
+  'ADMIN_CREDENTIALS_GENERATED', 'ACTIVATION_PENDING', 'ACTIVE', 'LIVE',
+  'SUSPENDED', 'EXPIRED', 'CLOSED',
+] as const;
+export type LifecycleStatus = typeof LIFECYCLE_STATUSES[number];
+// The strict forward sequence "Advance to next stage" walks through — the 3 exception
+// statuses (SUSPENDED/EXPIRED/CLOSED) are reachable only via explicit transitions, never "next".
+export const LIFECYCLE_SEQUENCE = LIFECYCLE_STATUSES.filter(
+  (s) => !['SUSPENDED', 'EXPIRED', 'CLOSED'].includes(s),
+);
+
 const TenantSchema = new Schema<ITenant>({
   name: { type: String, required: true },
   isActive: { type: Boolean, default: true },

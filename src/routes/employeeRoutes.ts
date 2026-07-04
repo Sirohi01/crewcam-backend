@@ -10,7 +10,7 @@ router.use(authenticate);
 router.use(tenantResolver);
 router.use(requireFeature('Core HR'));
 
-router.get('/current', checkPermission('EMPLOYEE_READ'), getCurrentEmployee);
+router.get('/current', getCurrentEmployee);
 router.get('/ex', checkPermission('EMPLOYEE_READ'), getExEmployees);
 router.get('/', checkPermission('EMPLOYEE_READ'), getEmployees);
 router.get('/:id', checkPermission('EMPLOYEE_READ'), getEmployeeById);
