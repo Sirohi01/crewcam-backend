@@ -8,18 +8,15 @@ export interface IPackage extends Document, IAuditable {
   name: string;
   tier: PackageTier;
   description: string;
-  tier: 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE' | 'CUSTOM';
+  // tier: 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE' | 'CUSTOM';
   maxCompanies: number;
   maxBranches: number;
   maxDepartments: number;
   maxDesignations: number;
   maxUsers: number;
   features: string[];
-<<<<<<< Updated upstream
   priceINR: number;
   priceUSD: number;
-=======
->>>>>>> Stashed changes
   pricePerUserMonthlyINR: number;
   pricePerUserMonthlyUSD: number;
   pricePerUserYearlyINR: number;
@@ -36,28 +33,21 @@ const PackageSchema = new Schema<IPackage>({
   name: { type: String, required: true },
   tier: { type: String, enum: PACKAGE_TIERS, default: 'CUSTOM' },
   description: { type: String },
-  tier: { type: String, enum: ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'], default: 'CUSTOM' },
+  // tier: { type: String, enum: ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'], default: 'CUSTOM' },
   maxCompanies: { type: Number, required: true, default: 1 },
   maxBranches: { type: Number, required: true, default: 1 },
   maxDepartments: { type: Number, required: true, default: 5 },
   maxDesignations: { type: Number, required: true, default: 10 },
   maxUsers: { type: Number, required: true },
   features: [{ type: String }],
-<<<<<<< Updated upstream
   priceINR: { type: Number, default: 0 },
   priceUSD: { type: Number, default: 0 },
-=======
->>>>>>> Stashed changes
   pricePerUserMonthlyINR: { type: Number, default: 0 },
   pricePerUserMonthlyUSD: { type: Number, default: 0 },
   pricePerUserYearlyINR: { type: Number, default: 0 },
   pricePerUserYearlyUSD: { type: Number, default: 0 },
   setupFeeINR: { type: Number, default: 0 },
   setupFeeUSD: { type: Number, default: 0 },
-<<<<<<< Updated upstream
-=======
-  // AI credits bundled free with this package; anything beyond this is a separate paid top-up, never drawn from the setup fee.
->>>>>>> Stashed changes
   freeAiCredits: { type: Number, default: 0 },
   aiCreditTopUpPriceINR: { type: Number, default: 0 },
   aiCreditTopUpPriceUSD: { type: Number, default: 0 },

@@ -1,8 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-<<<<<<< Updated upstream
+import express, { Request, Response, NextFunction } from 'express';
 import { app } from './app';
-=======
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/authRoutes';
@@ -33,10 +32,11 @@ import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
 import locationRoutes from './routes/locationRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import path from 'path';
->>>>>>> Stashed changes
 import { startRetentionJobs } from './utils/retentionJobs';
 import { startCronJobs } from './utils/cronJobs';
 import { startAutomationJobs } from './utils/automationJobs';
+import helmet from 'helmet';
+import cors from 'cors';
 
 dotenv.config();
 
@@ -45,8 +45,6 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
 }
 
 const PORT = process.env.PORT || 8000;
-<<<<<<< Updated upstream
-=======
 
 // Razorpay/Stripe webhook signature verification needs the exact raw request bytes, so
 // these must be mounted with express.raw() before the global express.json() below.
@@ -114,7 +112,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     ...(isProduction ? {} : { stack: err.stack })
   });
 });
->>>>>>> Stashed changes
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/CREWCAM';
 mongoose.connect(MONGODB_URI)

@@ -1,9 +1,14 @@
 import { Router } from 'express';
-<<<<<<< Updated upstream
 import {
   createFeature, createPackage, createPermission, createTenant, deleteFeature, deleteTenant, getAiUsageLogs,
   getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
+  getDashboardStats,
+  getAllAuditLogsAcrossTenants,
+  getAllPayments,
+  getAllTicketsAcrossTenants,
+  getPackageById,
+  resendCompanyCredentials,
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
@@ -17,20 +22,6 @@ import { createCompanyDraft } from '../controllers/companyWizardController';
 import { getLifecycleTimeline, advanceLifecycle, setLifecycleStatus, provisionWorkspace } from '../controllers/companyLifecycleController';
 import { getAllBanners, createBanner, updateBanner, deleteBanner } from '../controllers/bannerController';
 import { getAutomationRules, updateAutomationRule, getAutomationLogs, runAutomationNow } from '../controllers/automationController';
-=======
-import { createFeature, createPackage, createPermission, createTenant, deleteFeature, deleteTenant, getAiUsageLogs, getAllAuditLogsAcrossTenants, getAllFeatures, getAllPackages, getAllPayments, getAllPermissions, getAllTenants, getAllTicketsAcrossTenants, getDashboardStats, getPackageById, markSetupFeePaid, recordSubscriptionPayment, resendCompanyCredentials, topUpAiCredits, updateFeature, updatePackage, updateTenant } from '../controllers/superAdminController';
-import { createLead, deleteLead, getAllLeads, getLeadById, getPipelineSummary, updateLead } from '../controllers/leadController';
-import { createOnboardingTask, deleteOnboardingTask, getOnboardingTasks, updateOnboardingTask } from '../controllers/onboardingTaskController';
-import { getReportsSummary } from '../controllers/reportsController';
-import { advanceLifecycle, getLifecycleTimeline, provisionWorkspace, setLifecycleStatus } from '../controllers/companyLifecycleController';
-import { createCompanyDraft } from '../controllers/companyWizardController';
-import {
-  generateQuotation, listQuotations, sendQuotation,
-  generateInvoice, listInvoicesForTenant, listAllInvoices, sendInvoice, createCheckoutSession, setInvoiceStatus,
-} from '../controllers/billingController';
-import { createCoupon, deleteCoupon, getAllCoupons, updateCoupon } from '../controllers/couponController';
-import { changePlan } from '../controllers/changePlanController';
->>>>>>> Stashed changes
 import { authenticate } from '../middleware/auth';
 import { checkPermission } from '../middleware/rbac';
 
@@ -48,7 +39,6 @@ router.post('/tenants', createTenant);
 router.post('/companies/wizard', createCompanyDraft);
 router.put('/tenants/:id', updateTenant);
 router.delete('/tenants/:id', deleteTenant);
-<<<<<<< Updated upstream
 router.post('/tenants/:id/resend-credentials', resendCredentials);
 router.post('/tenants/:id/topup-ai-credits', topUpAiCredits);
 router.post('/tenants/:id/mark-setup-fee-paid', markSetupFeePaid);
@@ -65,7 +55,6 @@ router.post('/tenants/:id/invoices', generateInvoice);
 
 router.post('/companies/wizard', createCompanyDraft);
 
-=======
 router.post('/tenants/:id/resend-credentials', resendCompanyCredentials);
 router.post('/tenants/:id/mark-setup-fee-paid', markSetupFeePaid);
 router.post('/tenants/:id/record-subscription-payment', recordSubscriptionPayment);
@@ -74,7 +63,6 @@ router.get('/tenants/:id/lifecycle', getLifecycleTimeline);
 router.post('/tenants/:id/lifecycle/advance', advanceLifecycle);
 router.post('/tenants/:id/lifecycle', setLifecycleStatus);
 router.post('/tenants/:id/provision-workspace', provisionWorkspace);
->>>>>>> Stashed changes
 router.get('/packages', getAllPackages);
 router.get('/packages/:id', getPackageById);
 router.post('/packages', createPackage);
@@ -89,7 +77,6 @@ router.put('/features/:id', updateFeature);
 router.delete('/features/:id', deleteFeature);
 
 router.get('/ai-usage-logs', getAiUsageLogs);
-<<<<<<< Updated upstream
 router.get('/ai-providers', getAllAiProviders);
 router.put('/ai-providers', configureAiProvider);
 
@@ -106,32 +93,26 @@ router.put('/leads/master-data/:id', updateLeadMasterData);
 router.delete('/leads/master-data/:id', deleteLeadMasterData);
 router.get('/leads/assignable-users', getAssignableUsers);
 router.post('/leads/import', bulkImportLeads);
-=======
 router.get('/dashboard-stats', getDashboardStats);
 router.get('/audit-logs', getAllAuditLogsAcrossTenants);
 router.get('/payments', getAllPayments);
 router.get('/tickets', getAllTicketsAcrossTenants);
 router.get('/leads', getAllLeads);
 router.get('/leads/pipeline-summary', getPipelineSummary);
->>>>>>> Stashed changes
 router.get('/leads/:id', getLeadById);
 router.post('/leads', createLead);
 router.put('/leads/:id', updateLead);
 router.delete('/leads/:id', deleteLead);
-<<<<<<< Updated upstream
 router.get('/leads/:id/proposals', listLeadProposals);
 router.post('/leads/:id/proposals', generateLeadProposal);
 router.post('/leads/:id/proposals/:proposalId/send', sendLeadProposal);
 router.post('/leads/:id/notes', addLeadNote);
 router.post('/leads/:id/send-email', sendLeadEmail);
 
-=======
->>>>>>> Stashed changes
 router.get('/onboarding-tasks', getOnboardingTasks);
 router.post('/onboarding-tasks', createOnboardingTask);
 router.put('/onboarding-tasks/:id', updateOnboardingTask);
 router.delete('/onboarding-tasks/:id', deleteOnboardingTask);
-<<<<<<< Updated upstream
 
 router.get('/invoices', listAllInvoices);
 router.post('/invoices/:id/send', sendInvoice);
@@ -141,7 +122,6 @@ router.get('/payments', listAllPayments);
 
 router.post('/quotations/:id/send', sendQuotation);
 
-=======
 router.get('/reports/summary', getReportsSummary);
 router.get('/tenants/:id/quotations', listQuotations);
 router.post('/tenants/:id/quotations', generateQuotation);
@@ -152,12 +132,10 @@ router.get('/invoices', listAllInvoices);
 router.post('/invoices/:id/send', sendInvoice);
 router.post('/invoices/:id/checkout', createCheckoutSession);
 router.post('/invoices/:id/status', setInvoiceStatus);
->>>>>>> Stashed changes
 router.get('/coupons', getAllCoupons);
 router.post('/coupons', createCoupon);
 router.put('/coupons/:id', updateCoupon);
 router.delete('/coupons/:id', deleteCoupon);
-<<<<<<< Updated upstream
 
 router.get('/banners', getAllBanners);
 router.post('/banners', createBanner);
@@ -168,8 +146,6 @@ router.get('/automation/rules', getAutomationRules);
 router.put('/automation/rules/:type', updateAutomationRule);
 router.get('/automation/logs', getAutomationLogs);
 router.post('/automation/run', runAutomationNow);
-=======
 router.post('/tenants/:id/change-plan', changePlan);
->>>>>>> Stashed changes
 
 export default router;
