@@ -12,11 +12,9 @@ import { AuditLog } from '../models/AuditLog';
 import { Payment } from '../models/Payment';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
-import { buildCredentialsResetEmail, sendMail } from '../services/mailer';
-
-function getLoginUrl(): string {
-  return process.env.FRONTEND_LOGIN_URL || 'https://app.crewcam.com/login';
-}
+import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, sendMail } from '../services/mailer';
+import { Ticket } from '../models/Ticket';
+import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
 
 const passwordSchema = z.string()
   .min(8, 'Password must be at least 8 characters long')
@@ -467,7 +465,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     if (adminRole) {
       adminUser = await User.findOne({ tenantId: id as string, roleId: adminRole._id });
     }
-    
+
     if (adminUser) {
       if (adminFirstName) adminUser.firstName = adminFirstName;
       if (adminLastName) adminUser.lastName = adminLastName;
@@ -694,7 +692,6 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
       name,
       tier: tier || 'CUSTOM',
       description,
-      tier,
       maxCompanies,
       maxBranches,
       maxDepartments,
@@ -1166,107 +1163,107 @@ export const resendCredentials = async (req: AuthRequest, res: Response) => {
   }
 };
 
-const topUpSchema = z.object({ credits: z.coerce.number().positive('Credits must be greater than 0') });
+// const topUpSchema = z.object({ credits: z.coerce.number().positive('Credits must be greater than 0') });
 
-export const topUpAiCredits = async (req: AuthRequest, res: Response) => {
-  try {
-    const parsed = topUpSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
-    }
-    const tenantId = req.params.id as string;
-    const tenant = await Tenant.findById(tenantId).populate('packageId');
-    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+// export const topUpAiCredits = async (req: AuthRequest, res: Response) => {
+//   try {
+//     const parsed = topUpSchema.safeParse(req.body);
+//     if (!parsed.success) {
+//       return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
+//     }
+//     const tenantId = req.params.id as string;
+//     const tenant = await Tenant.findById(tenantId).populate('packageId');
+//     if (!tenant) return res.status(404).json({ message: 'Company not found' });
 
-    const pkg = tenant.packageId as any;
-    const amountCharged = Math.round((pkg?.aiCreditTopUpPriceINR || 0) * parsed.data.credits);
+//     const pkg = tenant.packageId as any;
+//     const amountCharged = Math.round((pkg?.aiCreditTopUpPriceINR || 0) * parsed.data.credits);
 
-    tenant.aiCredits = (tenant.aiCredits || 0) + parsed.data.credits;
-    await tenant.save();
+//     tenant.aiCredits = (tenant.aiCredits || 0) + parsed.data.credits;
+//     await tenant.save();
 
-    if (amountCharged > 0) {
-      await Payment.create({
-        tenantId, type: 'AI_CREDIT_TOPUP', amount: amountCharged, currency: 'INR',
-        paidAt: new Date(), gateway: 'MANUAL', notes: `Top-up of ${parsed.data.credits} AI credits`,
-        ...(req.user?._id && { recordedBy: req.user._id }),
-      });
-    }
+//     if (amountCharged > 0) {
+//       await Payment.create({
+//         tenantId, type: 'AI_CREDIT_TOPUP', amount: amountCharged, currency: 'INR',
+//         paidAt: new Date(), gateway: 'MANUAL', notes: `Top-up of ${parsed.data.credits} AI credits`,
+//         ...(req.user?._id && { recordedBy: req.user._id }),
+//       });
+//     }
 
-    await AuditLog.create({
-      tenantId, userId: req.user?._id, action: 'TOPUP_AI_CREDITS', module: 'Billing',
-      status: 'SUCCESS', details: { creditsAdded: parsed.data.credits, amountCharged, newBalance: tenant.aiCredits },
-    } as any);
+//     await AuditLog.create({
+//       tenantId, userId: req.user?._id, action: 'TOPUP_AI_CREDITS', module: 'Billing',
+//       status: 'SUCCESS', details: { creditsAdded: parsed.data.credits, amountCharged, newBalance: tenant.aiCredits },
+//     } as any);
 
-    res.status(200).json({ aiCredits: tenant.aiCredits, amountCharged });
-  } catch (error) {
-    console.error('Error topping up AI credits:', error);
-    res.status(500).json({ message: 'Internal server error while topping up AI credits' });
-  }
-};
+//     res.status(200).json({ aiCredits: tenant.aiCredits, amountCharged });
+//   } catch (error) {
+//     console.error('Error topping up AI credits:', error);
+//     res.status(500).json({ message: 'Internal server error while topping up AI credits' });
+//   }
+// };
 
-export const markSetupFeePaid = async (req: AuthRequest, res: Response) => {
-  try {
-    const tenantId = req.params.id as string;
-    const tenant = await Tenant.findById(tenantId);
-    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+// export const markSetupFeePaid = async (req: AuthRequest, res: Response) => {
+//   try {
+//     const tenantId = req.params.id as string;
+//     const tenant = await Tenant.findById(tenantId);
+//     if (!tenant) return res.status(404).json({ message: 'Company not found' });
 
-    tenant.setupFeeStatus = 'PAID';
-    tenant.setupFeePaidAt = new Date();
-    await tenant.save();
+//     tenant.setupFeeStatus = 'PAID';
+//     tenant.setupFeePaidAt = new Date();
+//     await tenant.save();
 
-    if ((tenant.setupFeeAmount || 0) > 0) {
-      await Payment.create({
-        tenantId, type: 'SETUP_FEE', amount: tenant.setupFeeAmount, currency: tenant.setupFeeCurrency || 'INR',
-        paidAt: new Date(), gateway: 'MANUAL', notes: 'Marked paid manually by Super Admin',
-        ...(req.user?._id && { recordedBy: req.user._id }),
-      });
-    }
+//     if ((tenant.setupFeeAmount || 0) > 0) {
+//       await Payment.create({
+//         tenantId, type: 'SETUP_FEE', amount: tenant.setupFeeAmount, currency: tenant.setupFeeCurrency || 'INR',
+//         paidAt: new Date(), gateway: 'MANUAL', notes: 'Marked paid manually by Super Admin',
+//         ...(req.user?._id && { recordedBy: req.user._id }),
+//       });
+//     }
 
-    await AuditLog.create({
-      tenantId, userId: req.user?._id, action: 'MARK_SETUP_FEE_PAID', module: 'Billing',
-      status: 'SUCCESS', details: { amount: tenant.setupFeeAmount },
-    } as any);
+//     await AuditLog.create({
+//       tenantId, userId: req.user?._id, action: 'MARK_SETUP_FEE_PAID', module: 'Billing',
+//       status: 'SUCCESS', details: { amount: tenant.setupFeeAmount },
+//     } as any);
 
-    res.status(200).json(tenant);
-  } catch (error) {
-    console.error('Error marking setup fee paid:', error);
-    res.status(500).json({ message: 'Internal server error while marking setup fee paid' });
-  }
-};
+//     res.status(200).json(tenant);
+//   } catch (error) {
+//     console.error('Error marking setup fee paid:', error);
+//     res.status(500).json({ message: 'Internal server error while marking setup fee paid' });
+//   }
+// };
 
-function computeNextRenewalDate(from: Date, billingCycle: 'MONTHLY' | 'YEARLY'): Date {
-  const next = new Date(from);
-  if (billingCycle === 'YEARLY') next.setFullYear(next.getFullYear() + 1);
-  else next.setMonth(next.getMonth() + 1);
-  return next;
-}
+// function computeNextRenewalDate(from: Date, billingCycle: 'MONTHLY' | 'YEARLY'): Date {
+//   const next = new Date(from);
+//   if (billingCycle === 'YEARLY') next.setFullYear(next.getFullYear() + 1);
+//   else next.setMonth(next.getMonth() + 1);
+//   return next;
+// }
 
-export const recordSubscriptionPayment = async (req: AuthRequest, res: Response) => {
-  try {
-    const tenantId = req.params.id as string;
-    const tenant = await Tenant.findById(tenantId);
-    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+// export const recordSubscriptionPayment = async (req: AuthRequest, res: Response) => {
+//   try {
+//     const tenantId = req.params.id as string;
+//     const tenant = await Tenant.findById(tenantId);
+//     if (!tenant) return res.status(404).json({ message: 'Company not found' });
 
-    tenant.subscriptionStatus = 'ACTIVE';
-    tenant.nextRenewalDate = computeNextRenewalDate(new Date(), tenant.billingCycle);
-    await tenant.save();
+//     tenant.subscriptionStatus = 'ACTIVE';
+//     tenant.nextRenewalDate = computeNextRenewalDate(new Date(), tenant.billingCycle);
+//     await tenant.save();
 
-    if ((tenant.subscriptionAmount || 0) > 0) {
-      await Payment.create({
-        tenantId, type: 'SUBSCRIPTION', amount: tenant.subscriptionAmount, currency: tenant.subscriptionCurrency || 'INR',
-        paidAt: new Date(), gateway: 'MANUAL', notes: 'Recorded manually by Super Admin',
-        ...(req.user?._id && { recordedBy: req.user._id }),
-      });
-    }
+//     if ((tenant.subscriptionAmount || 0) > 0) {
+//       await Payment.create({
+//         tenantId, type: 'SUBSCRIPTION', amount: tenant.subscriptionAmount, currency: tenant.subscriptionCurrency || 'INR',
+//         paidAt: new Date(), gateway: 'MANUAL', notes: 'Recorded manually by Super Admin',
+//         ...(req.user?._id && { recordedBy: req.user._id }),
+//       });
+//     }
 
-    await AuditLog.create({
-      tenantId, userId: req.user?._id, action: 'RECORD_SUBSCRIPTION_PAYMENT', module: 'Billing',
-      status: 'SUCCESS', details: { amount: tenant.subscriptionAmount, nextRenewalDate: tenant.nextRenewalDate },
-    } as any);
+//     await AuditLog.create({
+//       tenantId, userId: req.user?._id, action: 'RECORD_SUBSCRIPTION_PAYMENT', module: 'Billing',
+//       status: 'SUCCESS', details: { amount: tenant.subscriptionAmount, nextRenewalDate: tenant.nextRenewalDate },
+//     } as any);
 
-    res.status(200).json(tenant);
-  } catch (error) {
-    console.error('Error recording subscription payment:', error);
-    res.status(500).json({ message: 'Internal server error while recording subscription payment' });
-  }
-};
+//     res.status(200).json(tenant);
+//   } catch (error) {
+//     console.error('Error recording subscription payment:', error);
+//     res.status(500).json({ message: 'Internal server error while recording subscription payment' });
+//   }
+// };

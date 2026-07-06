@@ -39,32 +39,32 @@ export interface ICompany extends ITenantScoped, IAuditable {
   vatNumber?: string;
   businessLicenseNumber?: string;
 
-  companySize?: string;
-  description?: string;
+  // companySize?: string;
+  // description?: string;
 
-  // Sales/onboarding contacts — distinct from the actual login account, which is created
-  // separately (see pendingAdmin* below) once the lifecycle reaches ADMIN_CREDENTIALS_GENERATED.
-  ownerName?: string;
-  hrName?: string;
-  alternatePhone?: string;
+  // // Sales/onboarding contacts — distinct from the actual login account, which is created
+  // // separately (see pendingAdmin* below) once the lifecycle reaches ADMIN_CREDENTIALS_GENERATED.
+  // ownerName?: string;
+  // hrName?: string;
+  // alternatePhone?: string;
 
-  pendingAdminFirstName?: string;
-  pendingAdminLastName?: string;
-  pendingAdminEmail?: string;
-  pendingAdminPhone?: string;
+  // pendingAdminFirstName?: string;
+  // pendingAdminLastName?: string;
+  // pendingAdminEmail?: string;
+  // pendingAdminPhone?: string;
 
-  selectedModules: string[];
+  // selectedModules: string[];
 
-  organizationSetupPlan?: {
-    branchesPlanned: number;
-    departmentsPlanned: number;
-    designationsPlanned: number;
-    shiftsPlanned: number;
-    needsHolidayCalendar: boolean;
-    needsLeavePolicy: boolean;
-    needsApprovalMatrix: boolean;
-    needsCustomRoles: boolean;
-  };
+  // organizationSetupPlan?: {
+  //   branchesPlanned: number;
+  //   departmentsPlanned: number;
+  //   designationsPlanned: number;
+  //   shiftsPlanned: number;
+  //   needsHolidayCalendar: boolean;
+  //   needsLeavePolicy: boolean;
+  //   needsApprovalMatrix: boolean;
+  //   needsCustomRoles: boolean;
+  // };
 
   isActive: boolean;
 
@@ -162,27 +162,6 @@ const CompanySchema = new Schema<ICompany>({
 
   isActive: { type: Boolean, default: true },
 
-  // Company Creation Wizard
-  companySize: { type: String },
-  description: { type: String, maxlength: 1000 },
-  ownerName: { type: String },
-  hrName: { type: String },
-  alternatePhone: { type: String },
-  pendingAdminFirstName: { type: String },
-  pendingAdminLastName: { type: String },
-  pendingAdminEmail: { type: String },
-  pendingAdminPhone: { type: String },
-  selectedModules: [{ type: String }],
-  organizationSetupPlan: {
-    branchesPlanned: { type: Number, default: 0 },
-    departmentsPlanned: { type: Number, default: 0 },
-    designationsPlanned: { type: Number, default: 0 },
-    shiftsPlanned: { type: Number, default: 0 },
-    needsHolidayCalendar: { type: Boolean, default: false },
-    needsLeavePolicy: { type: Boolean, default: false },
-    needsApprovalMatrix: { type: Boolean, default: false },
-    needsCustomRoles: { type: Boolean, default: false },
-  },
 }, { timestamps: true });
 
 CompanySchema.plugin(tenantPlugin);
