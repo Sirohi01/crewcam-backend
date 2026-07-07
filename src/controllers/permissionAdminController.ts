@@ -170,8 +170,9 @@ export const getMySidebar = async (req: AuthRequest, res: Response) => {
     const ctx = { category: resolveRoleCategory(role), effectivePermissions, tenantFeatures };
     const visible = items.filter((item) => isVisible(item, ctx));
 
-    res.status(200).json(visible);
+    res.status(200).json({ items: visible, roleCategory: ctx.category });
   } catch (error: any) {
+    console.error('getMySidebar error:', error);
     res.status(500).json({ message: 'Error fetching sidebar' });
   }
 };

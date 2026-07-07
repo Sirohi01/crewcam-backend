@@ -3,22 +3,59 @@ import { DashboardWidgetConfig } from '../models/DashboardWidgetConfig';
 import { DEFAULT_SIDEBAR_ITEMS, SECTION_ORDER } from './sidebarDefaults';
 import { DEFAULT_DASHBOARD_WIDGETS } from './dashboardWidgetDefaults';
 export const syncSidebarDefaults = async (tenantId: string) => {
-  const existing = await SidebarConfig.find({ tenantId }, { section: 1, label: 1, sectionOrder: 1, href: 1, order: 1 });
+  const rawExisting = await SidebarConfig.find({ tenantId }, { section: 1, label: 1, sectionOrder: 1, href: 1, order: 1 });
+
+  // Self-heal duplicate (section, label) rows — these can appear when several
+  // concurrent requests (multiple tabs / rapid reloads) each raced through the
+  // missing-item insert below before any single one had committed. Keep the
+  // oldest row per key, drop the rest.
+  const seenKeys = new Set<string>();
+  const duplicateIds: string[] = [];
+  const existing = rawExisting.filter((item) => {
+    const key = `${item.section}::${item.label}`;
+    if (seenKeys.has(key)) {
+      duplicateIds.push(String(item._id));
+      return false;
+    }
+    seenKeys.add(key);
+    return true;
+  });
+  if (duplicateIds.length > 0) {
+    await SidebarConfig.deleteMany({ tenantId, _id: { $in: duplicateIds } } as any);
+  }
 
   // One-time rename: "Step 1 - Manpower Requests" -> "Job Requisition" (matches the
   // new Create Job Requisition page). Rename in place rather than letting the
-  // missing-item insert below create a duplicate row for existing tenants.
+  // missing-item insert below create a duplicate row for existing tenants. If a
+  // "Job Requisition" row already exists (e.g. a previous run already renamed it,
+  // or it was freshly upserted), the legacy row is just a leftover — delete it
+  // instead of renaming into a collision with the row that already has that label.
   const legacyManpowerItem = existing.find((i) => i.section === 'Hiring Process' && i.label === 'Step 1 - Manpower Requests');
   if (legacyManpowerItem) {
-    await SidebarConfig.updateOne({ _id: legacyManpowerItem._id } as any, { label: 'Job Requisition' });
-    legacyManpowerItem.label = 'Job Requisition';
+    const alreadyRenamed = existing.some((i) => i.section === 'Hiring Process' && i.label === 'Job Requisition');
+    if (alreadyRenamed) {
+      await SidebarConfig.deleteOne({ _id: legacyManpowerItem._id, tenantId } as any);
+      const idx = existing.indexOf(legacyManpowerItem);
+      if (idx !== -1) existing.splice(idx, 1);
+    } else {
+      await SidebarConfig.updateOne({ _id: legacyManpowerItem._id, tenantId } as any, { label: 'Job Requisition' });
+      legacyManpowerItem.label = 'Job Requisition';
+    }
   }
 
   const existingByKey = new Map(existing.map((i) => [`${i.section}::${i.label}`, i]));
 
+  // Upsert (not blind insertMany) so concurrent calls can't each decide an item is
+  // "missing" and every one of them insert its own duplicate copy.
   const missing = DEFAULT_SIDEBAR_ITEMS.filter((item) => !existingByKey.has(`${item.section}::${item.label}`));
   if (missing.length > 0) {
-    await SidebarConfig.insertMany(missing.map((item) => ({ ...item, sectionOrder: SECTION_ORDER[item.section] ?? 999, tenantId })));
+    await SidebarConfig.bulkWrite(missing.map((item) => ({
+      updateOne: {
+        filter: { tenantId, section: item.section, label: item.label } as any,
+        update: { $setOnInsert: { ...item, sectionOrder: SECTION_ORDER[item.section] ?? 999, tenantId } },
+        upsert: true,
+      },
+    })));
   }
 
   const sectionsNeedingFix = existing.filter((i) => i.sectionOrder !== SECTION_ORDER[i.section]);
