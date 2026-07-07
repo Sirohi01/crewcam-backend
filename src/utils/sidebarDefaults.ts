@@ -146,7 +146,8 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // sections just duplicated the mental model for no reason; per explicit user request) ----
   // Actual operating sequence: requisition -> candidate intake -> resume screening ->
   // interviews -> evaluation (Step 2) -> the remaining offer/onboarding steps.
-  { section: 'Hiring Process', label: 'Step 1 - Manpower Requests', href: '/dashboard/hiring/manpower', icon: 'ClipboardList', order: 0, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Recruiter Dashboard', href: '/dashboard/hr-dashboard', icon: 'LayoutDashboard', order: -1, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Job Requisition', href: '/dashboard/hiring/manpower', icon: 'ClipboardList', order: 0, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'Add Candidate', href: '/dashboard/hiring/candidates', icon: 'UserPlus', order: 1, requiredPermission: 'ATS_WRITE', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'Candidate Pipeline', href: '/dashboard/hiring/pipeline', icon: 'UserPlus', order: 2, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'AI Resume Screening', href: '/dashboard/hiring/ai-resume-screening', icon: 'Sparkles', order: 3, requiredPermission: 'ATS_READ', requiredFeature: 'ai-hiring', categories: HR_AND_HOD },

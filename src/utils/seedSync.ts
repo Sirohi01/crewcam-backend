@@ -4,6 +4,16 @@ import { DEFAULT_SIDEBAR_ITEMS, SECTION_ORDER } from './sidebarDefaults';
 import { DEFAULT_DASHBOARD_WIDGETS } from './dashboardWidgetDefaults';
 export const syncSidebarDefaults = async (tenantId: string) => {
   const existing = await SidebarConfig.find({ tenantId }, { section: 1, label: 1, sectionOrder: 1, href: 1, order: 1 });
+
+  // One-time rename: "Step 1 - Manpower Requests" -> "Job Requisition" (matches the
+  // new Create Job Requisition page). Rename in place rather than letting the
+  // missing-item insert below create a duplicate row for existing tenants.
+  const legacyManpowerItem = existing.find((i) => i.section === 'Hiring Process' && i.label === 'Step 1 - Manpower Requests');
+  if (legacyManpowerItem) {
+    await SidebarConfig.updateOne({ _id: legacyManpowerItem._id } as any, { label: 'Job Requisition' });
+    legacyManpowerItem.label = 'Job Requisition';
+  }
+
   const existingByKey = new Map(existing.map((i) => [`${i.section}::${i.label}`, i]));
 
   const missing = DEFAULT_SIDEBAR_ITEMS.filter((item) => !existingByKey.has(`${item.section}::${item.label}`));
