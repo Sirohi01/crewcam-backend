@@ -35,7 +35,7 @@ import webhookRoutes from './routes/webhookRoutes';
 
 export function createApp() {
   const app = express();
-  
+
   // Razorpay/Stripe webhook signature verification needs the exact raw request bytes, so
   // these must be mounted with express.raw() before the global express.json() below.
   app.use('/api/v1/webhooks', express.raw({ type: '*/*' }), webhookRoutes);

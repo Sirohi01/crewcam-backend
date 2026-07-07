@@ -66,10 +66,7 @@ const createTenantSchema = z.object({
   subscriptionCurrency: z.enum(['INR', 'USD']).optional().default('INR'),
 });
 
-const updateTenantSchema = createTenantSchema.partial({
-  adminPassword: true,
-  packageId: true,
-}).extend({
+const updateTenantSchema = createTenantSchema.partial().extend({
   isActive: z.coerce.boolean().optional(),
   setupFeeStatus: z.enum(['PENDING', 'PAID', 'WAIVED']).optional(),
   subscriptionStatus: z.enum(['ACTIVE', 'PENDING', 'PAST_DUE', 'CANCELLED']).optional(),
@@ -734,7 +731,6 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(name !== undefined && { name }),
         ...(tier !== undefined && { tier }),
         ...(description !== undefined && { description }),
-        ...(tier !== undefined && { tier }),
         ...(maxCompanies !== undefined && { maxCompanies }),
         ...(maxBranches !== undefined && { maxBranches }),
         ...(maxDepartments !== undefined && { maxDepartments }),
@@ -1162,108 +1158,3 @@ export const resendCredentials = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Internal server error while resending credentials' });
   }
 };
-
-// const topUpSchema = z.object({ credits: z.coerce.number().positive('Credits must be greater than 0') });
-
-// export const topUpAiCredits = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const parsed = topUpSchema.safeParse(req.body);
-//     if (!parsed.success) {
-//       return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
-//     }
-//     const tenantId = req.params.id as string;
-//     const tenant = await Tenant.findById(tenantId).populate('packageId');
-//     if (!tenant) return res.status(404).json({ message: 'Company not found' });
-
-//     const pkg = tenant.packageId as any;
-//     const amountCharged = Math.round((pkg?.aiCreditTopUpPriceINR || 0) * parsed.data.credits);
-
-//     tenant.aiCredits = (tenant.aiCredits || 0) + parsed.data.credits;
-//     await tenant.save();
-
-//     if (amountCharged > 0) {
-//       await Payment.create({
-//         tenantId, type: 'AI_CREDIT_TOPUP', amount: amountCharged, currency: 'INR',
-//         paidAt: new Date(), gateway: 'MANUAL', notes: `Top-up of ${parsed.data.credits} AI credits`,
-//         ...(req.user?._id && { recordedBy: req.user._id }),
-//       });
-//     }
-
-//     await AuditLog.create({
-//       tenantId, userId: req.user?._id, action: 'TOPUP_AI_CREDITS', module: 'Billing',
-//       status: 'SUCCESS', details: { creditsAdded: parsed.data.credits, amountCharged, newBalance: tenant.aiCredits },
-//     } as any);
-
-//     res.status(200).json({ aiCredits: tenant.aiCredits, amountCharged });
-//   } catch (error) {
-//     console.error('Error topping up AI credits:', error);
-//     res.status(500).json({ message: 'Internal server error while topping up AI credits' });
-//   }
-// };
-
-// export const markSetupFeePaid = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const tenantId = req.params.id as string;
-//     const tenant = await Tenant.findById(tenantId);
-//     if (!tenant) return res.status(404).json({ message: 'Company not found' });
-
-//     tenant.setupFeeStatus = 'PAID';
-//     tenant.setupFeePaidAt = new Date();
-//     await tenant.save();
-
-//     if ((tenant.setupFeeAmount || 0) > 0) {
-//       await Payment.create({
-//         tenantId, type: 'SETUP_FEE', amount: tenant.setupFeeAmount, currency: tenant.setupFeeCurrency || 'INR',
-//         paidAt: new Date(), gateway: 'MANUAL', notes: 'Marked paid manually by Super Admin',
-//         ...(req.user?._id && { recordedBy: req.user._id }),
-//       });
-//     }
-
-//     await AuditLog.create({
-//       tenantId, userId: req.user?._id, action: 'MARK_SETUP_FEE_PAID', module: 'Billing',
-//       status: 'SUCCESS', details: { amount: tenant.setupFeeAmount },
-//     } as any);
-
-//     res.status(200).json(tenant);
-//   } catch (error) {
-//     console.error('Error marking setup fee paid:', error);
-//     res.status(500).json({ message: 'Internal server error while marking setup fee paid' });
-//   }
-// };
-
-// function computeNextRenewalDate(from: Date, billingCycle: 'MONTHLY' | 'YEARLY'): Date {
-//   const next = new Date(from);
-//   if (billingCycle === 'YEARLY') next.setFullYear(next.getFullYear() + 1);
-//   else next.setMonth(next.getMonth() + 1);
-//   return next;
-// }
-
-// export const recordSubscriptionPayment = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const tenantId = req.params.id as string;
-//     const tenant = await Tenant.findById(tenantId);
-//     if (!tenant) return res.status(404).json({ message: 'Company not found' });
-
-//     tenant.subscriptionStatus = 'ACTIVE';
-//     tenant.nextRenewalDate = computeNextRenewalDate(new Date(), tenant.billingCycle);
-//     await tenant.save();
-
-//     if ((tenant.subscriptionAmount || 0) > 0) {
-//       await Payment.create({
-//         tenantId, type: 'SUBSCRIPTION', amount: tenant.subscriptionAmount, currency: tenant.subscriptionCurrency || 'INR',
-//         paidAt: new Date(), gateway: 'MANUAL', notes: 'Recorded manually by Super Admin',
-//         ...(req.user?._id && { recordedBy: req.user._id }),
-//       });
-//     }
-
-//     await AuditLog.create({
-//       tenantId, userId: req.user?._id, action: 'RECORD_SUBSCRIPTION_PAYMENT', module: 'Billing',
-//       status: 'SUCCESS', details: { amount: tenant.subscriptionAmount, nextRenewalDate: tenant.nextRenewalDate },
-//     } as any);
-
-//     res.status(200).json(tenant);
-//   } catch (error) {
-//     console.error('Error recording subscription payment:', error);
-//     res.status(500).json({ message: 'Internal server error while recording subscription payment' });
-//   }
-// };

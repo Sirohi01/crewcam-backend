@@ -39,6 +39,8 @@ export interface ITenant extends Document, IAuditable {
 
   userLimit: number;
   storageLimitGB: number;
+  // SHARED = single multi-tenant DB (current architecture). DEDICATED is captured as a sales/ops
+  // intent only — there is no automated dedicated-DB provisioning pipeline yet.
   dbType: 'SHARED' | 'DEDICATED';
 
   credentialsEmailStatus?: 'SENT' | 'FAILED';
@@ -48,7 +50,6 @@ export interface ITenant extends Document, IAuditable {
   lastPaymentReminderAt?: Date;
   lastAiCreditsAlertAt?: Date;
 }
-
 
 const TenantSchema = new Schema<ITenant>({
   name: { type: String, required: true },
