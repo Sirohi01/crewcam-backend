@@ -20,7 +20,7 @@ const HR_AND_HOD: RoleCategory[] = ['hr', 'hr_admin', 'hod', 'company_admin'];
 const FINANCE_TEAM: RoleCategory[] = ['finance', 'hr_admin', 'company_admin'];
 
 const comingSoon = (feature: string, section: string) =>
-  `/dashboard/coming-soon?feature=${encodeURIComponent(feature)}&module=${encodeURIComponent(section)}`;
+  `/company/coming-soon?feature=${encodeURIComponent(feature)}&module=${encodeURIComponent(section)}`;
 
 /** Steps 2-24 of docs/hiring/10_HIRING_24_STEP_BLUEPRINT.md — step 1 is the candidate pipeline page itself. */
 const HIRING_STEPS = [
@@ -60,14 +60,14 @@ const BUILT_MASTER_DATA = new Set([
 const ORGANIZATION_ITEMS = new Set(['Add Branch', 'Add Department', 'Add Designation']);
 
 export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
-  { section: 'Workspace', label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', order: 0, categories: ALL },
+  { section: 'Workspace', label: 'Dashboard', href: '/company', icon: 'LayoutDashboard', order: 0, categories: ALL },
 
   // ---- Company Setup ----
-  { section: 'Company Setup', label: 'Company Profile', href: '/dashboard/settings/company', icon: 'UserCog', order: 0, requiredPermission: 'COMPANY_PROFILE_READ', categories: ['company_admin', 'hr_admin'] },
-  { section: 'Company Setup', label: 'Manage Branch', href: '/dashboard/branches', icon: 'Building2', order: 1, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
-  { section: 'Company Setup', label: 'Manage Department', href: '/dashboard/departments', icon: 'ListTree', order: 2, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
-  { section: 'Company Setup', label: 'Manage Designation', href: '/dashboard/designations', icon: 'Briefcase', order: 3, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
-  { section: 'Company Setup', label: 'Manage Roles', href: '/dashboard/roles', icon: 'KeyRound', order: 4, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
+  { section: 'Company Setup', label: 'Company Profile', href: '/company/settings/company', icon: 'UserCog', order: 0, requiredPermission: 'COMPANY_PROFILE_READ', categories: ['company_admin', 'hr_admin'] },
+  { section: 'Company Setup', label: 'Manage Branch', href: '/company/branches', icon: 'Building2', order: 1, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
+  { section: 'Company Setup', label: 'Manage Department', href: '/company/departments', icon: 'ListTree', order: 2, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
+  { section: 'Company Setup', label: 'Manage Designation', href: '/company/designations', icon: 'Briefcase', order: 3, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
+  { section: 'Company Setup', label: 'Manage Roles', href: '/company/roles', icon: 'KeyRound', order: 4, requiredPermission: 'ORG_READ', categories: ['hr_admin', 'admin', 'company_admin'] },
   ...[
     ['Job Levels', 'levels'], ['Statuses', 'statuses'], ['Policies', 'policies'],
     ['Leave Types', 'leave-types'], ['Leave Natures', 'leave-natures'], ['Attendance Rules', 'attendance-rules'],
@@ -81,7 +81,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   ].map(([label, endpointKey], i) => ({
     section: 'Company Setup',
     label: label as string,
-    href: `/dashboard/master/${endpointKey}`,
+    href: `/company/master/${endpointKey}`,
     icon: 'Circle',
     order: i + 5,
     parent: 'Master Data',
@@ -91,28 +91,28 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // Company Assets lives on its own page (with allocation tracking) rather than the
   // generic master-data CRUD list, so it can't join the .map() above — same Master Data
   // grouping and href as the existing Support & Operations > Asset Management entry.
-  { section: 'Company Setup', label: 'Company Assets', href: '/dashboard/support/assets', icon: 'Briefcase', order: 29, parent: 'Master Data', requiredPermission: 'SUPPORT_READ', categories: ['hr_admin', 'admin', 'company_admin', 'developer'] },
+  { section: 'Company Setup', label: 'Company Assets', href: '/company/support/assets', icon: 'Briefcase', order: 29, parent: 'Master Data', requiredPermission: 'SUPPORT_READ', categories: ['hr_admin', 'admin', 'company_admin', 'developer'] },
 
   // ---- People ----
-  { section: 'People', label: 'Employees', href: '/dashboard/employees', icon: 'Users', order: 0, requiredPermission: 'EMPLOYEE_READ', categories: ['hr', 'hr_admin', 'admin', 'company_admin', 'hod', 'reporting_manager'] },
-  { section: 'People', label: 'HR Admin', href: '/dashboard/hr-admin', icon: 'Scale', order: 1, requiredPermission: 'ORG_READ', categories: HR_TEAM },
+  { section: 'People', label: 'Employees', href: '/company/employees/companys', icon: 'Users', order: 0, requiredPermission: 'EMPLOYEE_READ', categories: ['hr', 'hr_admin', 'admin', 'company_admin', 'hod', 'reporting_manager'] },
+  { section: 'People', label: 'HR Admin', href: '/company/hr-admin', icon: 'Scale', order: 1, requiredPermission: 'ORG_READ', categories: HR_TEAM },
 
   // ---- Attendance Section ----
-  { section: 'Attendance Section', label: 'My Attendance', href: '/dashboard/attendance', icon: 'Fingerprint', order: 0, categories: ALL },
-  { section: 'Attendance Section', label: 'Short Excursions', href: '/dashboard/out-in', icon: 'LogOut', order: 1, categories: ALL },
-  { section: 'Attendance Section', label: 'HR Override', href: '/dashboard/hr-override', icon: 'Clock', order: 2, categories: HR_TEAM },
-  { section: 'Attendance Section', label: 'Leave Statistics', href: '/dashboard/leave-statistics', icon: 'TrendingUp', order: 3, categories: HR_AND_HOD.concat('reporting_manager') },
-  { section: 'Attendance Section', label: 'Leaves', href: '/dashboard/leaves', icon: 'Calendar', order: 4, categories: ALL },
-  { section: 'Attendance Section', label: 'Leave Credit', href: '/dashboard/leave-credit', icon: 'CalendarDays', order: 5, categories: HR_TEAM },
-  { section: 'Attendance Section', label: 'Employee Live Tracking', href: '/dashboard/live-tracking', icon: 'MapPin', order: 6, requiredFeature: 'liveTracking', categories: ['hod', 'reporting_manager', 'admin', 'company_admin'] },
-  { section: 'Attendance Section', label: 'To Do List', href: '/dashboard/todos', icon: 'ListTodo', order: 7, categories: ALL },
+  { section: 'Attendance Section', label: 'My Attendance', href: '/company/attendance', icon: 'Fingerprint', order: 0, categories: ALL },
+  { section: 'Attendance Section', label: 'Short Excursions', href: '/company/out-in', icon: 'LogOut', order: 1, categories: ALL },
+  { section: 'Attendance Section', label: 'HR Override', href: '/company/hr-override', icon: 'Clock', order: 2, categories: HR_TEAM },
+  { section: 'Attendance Section', label: 'Leave Statistics', href: '/company/leave-statistics', icon: 'TrendingUp', order: 3, categories: HR_AND_HOD.concat('reporting_manager') },
+  { section: 'Attendance Section', label: 'Leaves', href: '/company/leaves', icon: 'Calendar', order: 4, categories: ALL },
+  { section: 'Attendance Section', label: 'Leave Credit', href: '/company/leave-credit', icon: 'CalendarDays', order: 5, categories: HR_TEAM },
+  { section: 'Attendance Section', label: 'Employee Live Tracking', href: '/company/live-tracking', icon: 'MapPin', order: 6, requiredFeature: 'liveTracking', categories: ['hod', 'reporting_manager', 'admin', 'company_admin'] },
+  { section: 'Attendance Section', label: 'To Do List', href: '/company/todos', icon: 'ListTodo', order: 7, categories: ALL },
 
-  { section: 'Meeting Section', label: 'Meetings', href: '/dashboard/meetings', icon: 'Calendar', order: 0, categories: ALL },
+  { section: 'Meeting Section', label: 'Meetings', href: '/company/meetings', icon: 'Calendar', order: 0, categories: ALL },
 
   // ---- Communications ----
-  { section: 'Communications', label: 'Add HR Notification', href: '/dashboard/communication', icon: 'MessageSquare', order: 0, categories: HR_TEAM },
-  { section: 'Communications', label: 'Add Daily Quotes', href: '/dashboard/daily-quotes', icon: 'MessageSquare', order: 1, categories: HR_TEAM },
-  { section: 'Communications', label: 'Employee Queries', href: '/dashboard/queries', icon: 'MessageSquare', order: 2, categories: ALL },
+  { section: 'Communications', label: 'Add HR Notification', href: '/company/communication', icon: 'MessageSquare', order: 0, categories: HR_TEAM },
+  { section: 'Communications', label: 'Add Daily Quotes', href: '/company/daily-quotes', icon: 'MessageSquare', order: 1, categories: HR_TEAM },
+  { section: 'Communications', label: 'Employee Queries', href: '/company/queries', icon: 'MessageSquare', order: 2, categories: ALL },
 
   // ---- HR & Admin Department ----
   // "Current Employee List" used to duplicate People > Employees (same href) — removed,
@@ -136,7 +136,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   { section: 'HR & Admin Department', label: 'Experience Letter', href: comingSoon('Experience Letter', 'HR & Admin Department'), icon: 'FileSignature', order: 17, categories: HR_TEAM },
 
   // ---- PMS System ----
-  { section: 'PMS System', label: 'Self Appraisal', href: '/dashboard/pms', icon: 'TrendingUp', order: 0, categories: ALL },
+  { section: 'PMS System', label: 'Self Appraisal', href: '/company/pms', icon: 'TrendingUp', order: 0, categories: ALL },
   { section: 'PMS System', label: 'Appraisal By HOD', href: comingSoon('Appraisal By HOD', 'PMS System'), icon: 'TrendingUp', order: 1, categories: ['hod', 'company_admin'] },
   { section: 'PMS System', label: 'Appraisal By HR', href: comingSoon('Appraisal By HR', 'PMS System'), icon: 'TrendingUp', order: 2, categories: HR_TEAM },
   { section: 'PMS System', label: 'Appraisal Statistics', href: comingSoon('Appraisal Statistics', 'PMS System'), icon: 'TrendingUp', order: 3, categories: HR_TEAM },
@@ -146,20 +146,20 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // sections just duplicated the mental model for no reason; per explicit user request) ----
   // Actual operating sequence: requisition -> candidate intake -> resume screening ->
   // interviews -> evaluation (Step 2) -> the remaining offer/onboarding steps.
-  { section: 'Hiring Process', label: 'Step 1 - Manpower Requests', href: '/dashboard/hiring/manpower', icon: 'ClipboardList', order: 0, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'Add Candidate', href: '/dashboard/hiring/candidates', icon: 'UserPlus', order: 1, requiredPermission: 'ATS_WRITE', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'Candidate Pipeline', href: '/dashboard/hiring/pipeline', icon: 'UserPlus', order: 2, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'AI Resume Screening', href: '/dashboard/hiring/ai-resume-screening', icon: 'Sparkles', order: 3, requiredPermission: 'ATS_READ', requiredFeature: 'ai-hiring', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'Interviews', href: '/dashboard/hiring/interviews/list', icon: 'UserPlus', order: 4, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'Level 1-Walk-In Round', href: '/dashboard/hiring/interviews/walk-in', icon: 'UserPlus', order: 6, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'Level 1-Telephonic Round', href: '/dashboard/hiring/interviews/telephonic', icon: 'UserPlus', order: 7, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'Level 2-HR and HOD Round', href: '/dashboard/hiring/interviews/hr-hod', icon: 'UserPlus', order: 8, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
-  { section: 'Hiring Process', label: 'Level 3-HR Final Round', href: '/dashboard/hiring/interviews/final', icon: 'UserPlus', order: 9, requiredPermission: 'ATS_READ', categories: HR_TEAM },
-  { section: 'Hiring Process', label: 'Interview Statistics', href: '/dashboard/hiring/interviews/statistics', icon: 'TrendingUp', order: 10, requiredPermission: 'ATS_READ', categories: HR_TEAM },
+  { section: 'Hiring Process', label: 'Step 1 - Manpower Requests', href: '/company/hiring/manpower', icon: 'ClipboardList', order: 0, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Add Candidate', href: '/company/hiring/candidates', icon: 'UserPlus', order: 1, requiredPermission: 'ATS_WRITE', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Candidate Pipeline', href: '/company/hiring/pipeline', icon: 'UserPlus', order: 2, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'AI Resume Screening', href: '/company/hiring/ai-resume-screening', icon: 'Sparkles', order: 3, requiredPermission: 'ATS_READ', requiredFeature: 'ai-hiring', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Interviews', href: '/company/hiring/interviews/list', icon: 'UserPlus', order: 4, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Level 1-Walk-In Round', href: '/company/hiring/interviews/walk-in', icon: 'UserPlus', order: 6, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Level 1-Telephonic Round', href: '/company/hiring/interviews/telephonic', icon: 'UserPlus', order: 7, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Level 2-HR and HOD Round', href: '/company/hiring/interviews/hr-hod', icon: 'UserPlus', order: 8, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'Level 3-HR Final Round', href: '/company/hiring/interviews/final', icon: 'UserPlus', order: 9, requiredPermission: 'ATS_READ', categories: HR_TEAM },
+  { section: 'Hiring Process', label: 'Interview Statistics', href: '/company/hiring/interviews/statistics', icon: 'TrendingUp', order: 10, requiredPermission: 'ATS_READ', categories: HR_TEAM },
   ...HIRING_STEPS.map(([label, stepId], i) => ({
     section: 'Hiring Process',
     label,
-    href: `/dashboard/hiring/steps/${stepId}`,
+    href: `/company/hiring/steps/${stepId}`,
     icon: 'UserPlus',
     order: i + 11,
     requiredPermission: 'ATS_READ',
@@ -206,12 +206,12 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // Asset Management used to live here, but it's the exact same page as Company Setup >
   // Master Data > Company Assets (added so Assets sits alongside the other master-data
   // catalogs) — per explicit user request, dropped here to avoid a same-page duplicate.
-  { section: 'Support & Operations', label: 'Helpdesk & IT', href: '/dashboard/support/helpdesk', icon: 'MessageSquare', order: 1, requiredPermission: 'SUPPORT_READ', categories: ALL },
-  { section: 'Support & Operations', label: 'Learning (LMS)', href: '/dashboard/support/lms', icon: 'Palette', order: 2, requiredPermission: 'SUPPORT_READ', categories: ALL },
+  { section: 'Support & Operations', label: 'Helpdesk & IT', href: '/company/support/helpdesk', icon: 'MessageSquare', order: 1, requiredPermission: 'SUPPORT_READ', categories: ALL },
+  { section: 'Support & Operations', label: 'Learning (LMS)', href: '/company/support/lms', icon: 'Palette', order: 2, requiredPermission: 'SUPPORT_READ', categories: ALL },
 
   // ---- Sidebar Section ----
-  { section: 'Sidebar Section', label: 'Side Bar List', href: '/dashboard/settings/sidebar', icon: 'ListTree', order: 0, requiredPermission: 'ROLE_ADMIN', categories: ['company_admin', 'hr_admin'] },
-  { section: 'Sidebar Section', label: 'User Role', href: '/dashboard/settings/roles', icon: 'ShieldCheck', order: 1, requiredPermission: 'ROLE_ADMIN', categories: ['company_admin', 'hr_admin'] },
+  { section: 'Sidebar Section', label: 'Side Bar List', href: '/company/settings/sidebar', icon: 'ListTree', order: 0, requiredPermission: 'ROLE_ADMIN', categories: ['company_admin', 'hr_admin'] },
+  { section: 'Sidebar Section', label: 'User Role', href: '/company/settings/roles', icon: 'ShieldCheck', order: 1, requiredPermission: 'ROLE_ADMIN', categories: ['company_admin', 'hr_admin'] },
 
   // ---- Admin Section ----
   { section: 'Admin Section', label: 'Activity Logs', href: comingSoon('Activity Logs', 'Admin Section'), icon: 'Shield', order: 0, categories: ['company_admin', 'hr_admin', 'admin'] },
@@ -231,27 +231,27 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   })),
 
   // ---- Finance & Legal (overview pages, kept from the existing build) ----
-  { section: 'Finance & Legal', label: 'Payroll & Slips', href: '/dashboard/finance/payroll', icon: 'IndianRupee', order: 0, categories: ALL },
-  { section: 'Finance & Legal', label: 'Expenses', href: '/dashboard/finance/expenses', icon: 'Receipt', order: 1, requiredPermission: 'FINANCE_READ', categories: FINANCE_TEAM.concat('employee') },
+  { section: 'Finance & Legal', label: 'Payroll & Slips', href: '/company/finance/payroll', icon: 'IndianRupee', order: 0, categories: ALL },
+  { section: 'Finance & Legal', label: 'Expenses', href: '/company/finance/expenses', icon: 'Receipt', order: 1, requiredPermission: 'FINANCE_READ', categories: FINANCE_TEAM.concat('employee') },
 
   // ---- Admin UI ----
-  { section: 'Admin UI', label: 'Integrations', href: '/dashboard/settings/integrations', icon: 'Plug', order: 0, requiredFeature: 'integrations', categories: ['company_admin'] },
-  { section: 'Admin UI', label: 'Whitelabel', href: '/dashboard/settings/whitelabel', icon: 'Palette', order: 1, requiredFeature: 'whitelabel', categories: ['company_admin'] },
-  { section: 'Admin UI', label: 'Active Sessions', href: '/dashboard/settings/sessions', icon: 'Shield', order: 2, categories: ALL },
-  { section: 'Admin UI', label: 'Security (2FA)', href: '/dashboard/settings/security', icon: 'Shield', order: 3, categories: ALL },
+  { section: 'Admin UI', label: 'Integrations', href: '/company/settings/integrations', icon: 'Plug', order: 0, requiredFeature: 'integrations', categories: ['company_admin'] },
+  { section: 'Admin UI', label: 'Whitelabel', href: '/company/settings/whitelabel', icon: 'Palette', order: 1, requiredFeature: 'whitelabel', categories: ['company_admin'] },
+  { section: 'Admin UI', label: 'Active Sessions', href: '/company/settings/sessions', icon: 'Shield', order: 2, categories: ALL },
+  { section: 'Admin UI', label: 'Security (2FA)', href: '/company/settings/security', icon: 'Shield', order: 3, categories: ALL },
 
   // ---- Career Growth ----
-  { section: 'Career Growth', label: 'Training & Development', href: '/dashboard/training-development', icon: 'GraduationCap', order: 0, categories: ALL },
-  { section: 'Career Growth', label: 'Career Progression & Promotion', href: '/dashboard/career-progression', icon: 'TrendingUp', order: 1, categories: ALL },
-  { section: 'Career Growth', label: 'AI Career Coach', href: '/dashboard/ai-career-coach', icon: 'Sparkles', order: 2, categories: ALL },
+  { section: 'Career Growth', label: 'Training & Development', href: '/company/training-development', icon: 'GraduationCap', order: 0, categories: ALL },
+  { section: 'Career Growth', label: 'Career Progression & Promotion', href: '/company/career-progression', icon: 'TrendingUp', order: 1, categories: ALL },
+  { section: 'Career Growth', label: 'AI Career Coach', href: '/company/ai-career-coach', icon: 'Sparkles', order: 2, categories: ALL },
 
   // ---- Account (employee-facing settings hub, last item in the sidebar for every role) ----
-  { section: 'Account', label: 'Settings', href: '/dashboard/settings', icon: 'Settings', order: 0, categories: ALL },
+  { section: 'Account', label: 'Settings', href: '/company/settings', icon: 'Settings', order: 0, categories: ALL },
 ];
 
 /**
  * Section display order, derived from each section's first appearance above
- * (Workspace/Dashboard first, by design). Sorting the DB query alphabetically by
+ * (Workspace/company first, by design). Sorting the DB query alphabetically by
  * `section` string would put "Admin UI" before "Workspace" — this map is what
  * lets the sidebar render sections in the intended order instead.
  */

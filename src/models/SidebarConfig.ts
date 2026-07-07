@@ -32,6 +32,7 @@ const SidebarConfigSchema = new Schema<ISidebarConfig>({
 }, { timestamps: true });
 
 SidebarConfigSchema.index({ tenantId: 1, sectionOrder: 1, order: 1 });
+SidebarConfigSchema.index({ tenantId: 1, href: 1 }, { unique: true });
 
 SidebarConfigSchema.plugin(tenantPlugin);
 SidebarConfigSchema.plugin(auditPlugin);
