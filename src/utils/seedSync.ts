@@ -24,22 +24,27 @@ export const syncSidebarDefaults = async (tenantId: string) => {
     await SidebarConfig.deleteMany({ tenantId, _id: { $in: duplicateIds } } as any);
   }
 
-  // One-time rename: "Step 1 - Manpower Requests" -> "Job Requisition" (matches the
-  // new Create Job Requisition page). Rename in place rather than letting the
-  // missing-item insert below create a duplicate row for existing tenants. If a
-  // "Job Requisition" row already exists (e.g. a previous run already renamed it,
-  // or it was freshly upserted), the legacy row is just a leftover — delete it
-  // instead of renaming into a collision with the row that already has that label.
-  const legacyManpowerItem = existing.find((i) => i.section === 'Hiring Process' && i.label === 'Step 1 - Manpower Requests');
-  if (legacyManpowerItem) {
-    const alreadyRenamed = existing.some((i) => i.section === 'Hiring Process' && i.label === 'Job Requisition');
+  // One-time label renames (old label -> new label, matching a page rename). Rename in
+  // place rather than letting the missing-item insert below create a duplicate row for
+  // existing tenants. If a row with the new label already exists (e.g. a previous run
+  // already renamed it, or it was freshly upserted), the old-labeled row is just a
+  // leftover — delete it instead of renaming into a collision.
+  const LABEL_RENAMES: Array<{ section: string; from: string; to: string }> = [
+    { section: 'Hiring Process', from: 'Step 1 - Manpower Requests', to: 'Job Requisition' },
+    { section: 'Hiring Process', from: 'Interview Round', to: 'Interview Round - 3' },
+    { section: 'Hiring Process', from: 'Written Assessment', to: 'Interview Round - 4' },
+  ];
+  for (const rename of LABEL_RENAMES) {
+    const legacyItem = existing.find((i) => i.section === rename.section && i.label === rename.from);
+    if (!legacyItem) continue;
+    const alreadyRenamed = existing.some((i) => i.section === rename.section && i.label === rename.to);
     if (alreadyRenamed) {
-      await SidebarConfig.deleteOne({ _id: legacyManpowerItem._id, tenantId } as any);
-      const idx = existing.indexOf(legacyManpowerItem);
+      await SidebarConfig.deleteOne({ _id: legacyItem._id, tenantId } as any);
+      const idx = existing.indexOf(legacyItem);
       if (idx !== -1) existing.splice(idx, 1);
     } else {
-      await SidebarConfig.updateOne({ _id: legacyManpowerItem._id, tenantId } as any, { label: 'Job Requisition' });
-      legacyManpowerItem.label = 'Job Requisition';
+      await SidebarConfig.updateOne({ _id: legacyItem._id, tenantId } as any, { label: rename.to });
+      legacyItem.label = rename.to;
     }
   }
 
