@@ -69,8 +69,9 @@ export const login = async (req: Request, res: Response) => {
 
     // A company cannot log in until provisioning and activation are complete. Tenants
     // created before this field existed have no lifecycleStatus set — treated as
-    // grandfathered-active rather than retroactively locked out.
-    if (user.tenantId) {
+    // grandfathered-active rather than retroactively locked out. Platform/super-admin
+    // users carry the 'SUPER_ADMIN' sentinel instead of a real Tenant id, so skip them.
+    if (user.tenantId && user.tenantId !== 'SUPER_ADMIN') {
       const tenant = await Tenant.findById(user.tenantId).select('lifecycleStatus').lean();
       const status = tenant?.lifecycleStatus;
       if (status && status !== 'ACTIVE' && status !== 'LIVE') {
