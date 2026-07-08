@@ -7,6 +7,7 @@ export const ROLE_CATEGORIES = [
   'reporting_manager',
   'hod',
   'hr',
+  'hr_recruiter',
   'hr_admin',
   'finance',
   'admin',
