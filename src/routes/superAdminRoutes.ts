@@ -54,14 +54,6 @@ router.post('/tenants/:id/invoices', generateInvoice);
 
 router.post('/companies/wizard', createCompanyDraft);
 
-router.post('/tenants/:id/resend-credentials', resendCompanyCredentials);
-router.post('/tenants/:id/mark-setup-fee-paid', markSetupFeePaid);
-router.post('/tenants/:id/record-subscription-payment', recordSubscriptionPayment);
-router.post('/tenants/:id/topup-ai-credits', topUpAiCredits);
-router.get('/tenants/:id/lifecycle', getLifecycleTimeline);
-router.post('/tenants/:id/lifecycle/advance', advanceLifecycle);
-router.post('/tenants/:id/lifecycle', setLifecycleStatus);
-router.post('/tenants/:id/provision-workspace', provisionWorkspace);
 router.get('/packages', getAllPackages);
 router.post('/packages', createPackage);
 router.put('/packages/:id', updatePackage);
@@ -91,12 +83,6 @@ router.put('/leads/master-data/:id', updateLeadMasterData);
 router.delete('/leads/master-data/:id', deleteLeadMasterData);
 router.get('/leads/assignable-users', getAssignableUsers);
 router.post('/leads/import', bulkImportLeads);
-router.get('/dashboard-stats', getDashboardStats);
-router.get('/audit-logs', getAllAuditLogsAcrossTenants);
-router.get('/payments', getAllPayments);
-router.get('/tickets', getAllTicketsAcrossTenants);
-router.get('/leads', getAllLeads);
-router.get('/leads/pipeline-summary', getPipelineSummary);
 router.get('/leads/:id', getLeadById);
 router.post('/leads', createLead);
 router.put('/leads/:id', updateLead);
@@ -120,16 +106,6 @@ router.get('/payments', listAllPayments);
 
 router.post('/quotations/:id/send', sendQuotation);
 
-router.get('/reports/summary', getReportsSummary);
-router.get('/tenants/:id/quotations', listQuotations);
-router.post('/tenants/:id/quotations', generateQuotation);
-router.post('/quotations/:id/send', sendQuotation);
-router.get('/tenants/:id/invoices', listInvoicesForTenant);
-router.post('/tenants/:id/invoices', generateInvoice);
-router.get('/invoices', listAllInvoices);
-router.post('/invoices/:id/send', sendInvoice);
-router.post('/invoices/:id/checkout', createCheckoutSession);
-router.post('/invoices/:id/status', setInvoiceStatus);
 router.get('/coupons', getAllCoupons);
 router.post('/coupons', createCoupon);
 router.put('/coupons/:id', updateCoupon);
@@ -144,6 +120,5 @@ router.get('/automation/rules', getAutomationRules);
 router.put('/automation/rules/:type', updateAutomationRule);
 router.get('/automation/logs', getAutomationLogs);
 router.post('/automation/run', runAutomationNow);
-router.post('/tenants/:id/change-plan', changePlan);
 
 export default router;
