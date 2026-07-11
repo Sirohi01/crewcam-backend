@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
 import { Tenant } from '../models/Tenant';
+import { subdomainFromHost } from '../utils/subdomain';
 
 export const tenantResolver = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -13,10 +14,9 @@ export const tenantResolver = async (req: AuthRequest, res: Response, next: Next
       req.tenantId = tenantHeader;
       return next();
     }
-    const host = req.headers.host || '';
-    const subdomain = host.split('.')[0];
+    const subdomain = subdomainFromHost(req.headers.host);
 
-    if (subdomain && subdomain !== 'www' && subdomain !== 'localhost') {
+    if (subdomain) {
       const tenant = await Tenant.findOne({ subdomain, isActive: true });
       if (tenant) {
         req.tenantId = tenant._id.toString();

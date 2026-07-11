@@ -10,6 +10,7 @@ import { AuditLog } from '../models/AuditLog';
 import { Session } from '../models/Session';
 import { Tenant } from '../models/Tenant';
 import { buildPasswordResetEmail, sendMail } from '../services/mailer';
+import { normalizeSubdomain } from '../utils/subdomain';
 
 const LIFECYCLE_BLOCK_MESSAGES: Record<string, string> = {
   SUSPENDED: 'Your company account has been suspended. Please contact CrewCam support.',
@@ -24,6 +25,78 @@ const passwordSchema = z.string()
 
 const refreshExpiry = () => new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
 const resetExpiry = () => new Date(Date.now() + 1000 * 60 * 30);
+
+// Shared by login, login2FA and googleLogin: issues the refresh token, session record,
+// and httpOnly cookies, and returns the trimmed user object each login response sends back.
+const issueSession = async (user: any, req: Request, res: Response) => {
+  const token = signAccessToken(user);
+  const refreshToken = createOpaqueToken();
+  await AuthToken.create({
+    userId: user._id,
+    tokenHash: hashToken(refreshToken),
+    type: 'refresh',
+    expiresAt: refreshExpiry(),
+  });
+
+  await Session.create({
+    userId: user._id,
+    tenantId: user.tenantId,
+    refreshToken: refreshToken,
+    browser: req.headers['user-agent'] || '',
+    ipAddress: req.ip || '',
+    expiresAt: refreshExpiry(),
+  });
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.cookie('token', token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+
+  return {
+    id: user._id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    profilePictureUrl: user.profilePictureUrl,
+    tenantId: user.tenantId,
+  };
+};
+
+// A company cannot log in until provisioning and activation are complete. Tenants created
+// before this field existed have no lifecycleStatus set — treated as grandfathered-active
+// rather than retroactively locked out. Platform/super-admin users carry the 'SUPER_ADMIN'
+// sentinel instead of a real Tenant id, so they're skipped entirely.
+const getLifecycleBlock = async (tenantId?: string): Promise<{ message: string; lifecycleStatus: string } | null> => {
+  if (!tenantId || tenantId === 'SUPER_ADMIN') return null;
+  const tenant = await Tenant.findById(tenantId).select('lifecycleStatus').lean();
+  const status = tenant?.lifecycleStatus;
+  if (status && status !== 'ACTIVE' && status !== 'LIVE') {
+    return {
+      message: LIFECYCLE_BLOCK_MESSAGES[status] || 'Your company workspace is still being set up. Please contact CrewCam support.',
+      lifecycleStatus: status,
+    };
+  }
+  return null;
+};
+
+// Subdomain is a branding hint, not the tenant isolation boundary (that's still the JWT's
+// tenantId) — but if the client resolved a *known* tenant from the subdomain and it doesn't
+// match the authenticating user's own tenant, this is almost certainly the wrong workspace.
+// Unrecognized/absent subdomains (e.g. the default app.crewcam.com) always pass through.
+const isSubdomainMismatch = async (subdomainRaw: unknown, user: any): Promise<boolean> => {
+  const subdomain = normalizeSubdomain(typeof subdomainRaw === 'string' ? subdomainRaw : undefined);
+  if (!subdomain) return false;
+  const tenant = await Tenant.findOne({ subdomain }).select('_id').lean();
+  if (!tenant) return false;
+  return String(tenant._id) !== String(user.tenantId);
+};
+
+// Employer and super-admin portals are separate front-end apps hitting the same endpoint;
+// this keeps a tenant user out of the platform-admin login and vice versa.
+const isPortalMismatch = (portal: unknown, user: any): boolean => {
+  if (portal !== 'super-admin' && portal !== 'employer') return false;
+  const isSuperAdmin = user.tenantId === 'SUPER_ADMIN';
+  return (portal === 'super-admin' && !isSuperAdmin) || (portal === 'employer' && isSuperAdmin);
+};
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -67,56 +140,38 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'User account is inactive' });
     }
 
-    // A company cannot log in until provisioning and activation are complete. Tenants
-    // created before this field existed have no lifecycleStatus set — treated as
-    // grandfathered-active rather than retroactively locked out. Platform/super-admin
-    // users carry the 'SUPER_ADMIN' sentinel instead of a real Tenant id, so skip them.
-    if (user.tenantId && user.tenantId !== 'SUPER_ADMIN') {
-      const tenant = await Tenant.findById(user.tenantId).select('lifecycleStatus').lean();
-      const status = tenant?.lifecycleStatus;
-      if (status && status !== 'ACTIVE' && status !== 'LIVE') {
-        await AuditLog.create({
-          tenantId: user.tenantId,
-          userId: user._id,
-          action: 'LOGIN',
-          module: 'Auth',
-          status: 'FAILURE',
-          ipAddress: req.ip || '',
-          userAgent: req.headers['user-agent'] || '',
-          details: { reason: 'Lifecycle status blocked login', lifecycleStatus: status },
-        });
-        return res.status(403).json({
-          message: LIFECYCLE_BLOCK_MESSAGES[status] || 'Your company workspace is still being set up. Please contact CrewCam support.',
-          lifecycleStatus: status,
-        });
-      }
+    if (isPortalMismatch(req.body.portal, user)) {
+      return res.status(403).json({ message: 'Invalid credentials' });
+    }
+
+    if (await isSubdomainMismatch(req.body.subdomain, user)) {
+      return res.status(403).json({ message: "This account doesn't belong to this workspace." });
+    }
+
+    const lifecycleBlock = await getLifecycleBlock(user.tenantId);
+    if (lifecycleBlock) {
+      await AuditLog.create({
+        tenantId: user.tenantId,
+        userId: user._id,
+        action: 'LOGIN',
+        module: 'Auth',
+        status: 'FAILURE',
+        ipAddress: req.ip || '',
+        userAgent: req.headers['user-agent'] || '',
+        details: { reason: 'Lifecycle status blocked login', lifecycleStatus: lifecycleBlock.lifecycleStatus },
+      });
+      return res.status(403).json(lifecycleBlock);
     }
 
     if (user.twoFactorEnabled) {
-      return res.status(200).json({ 
-        message: '2FA required', 
-        requires2FA: true, 
-        email: user.email 
+      return res.status(200).json({
+        message: '2FA required',
+        requires2FA: true,
+        email: user.email
       });
     }
 
-    const token = signAccessToken(user);
-    const refreshToken = createOpaqueToken();
-    await AuthToken.create({
-      userId: user._id,
-      tokenHash: hashToken(refreshToken),
-      type: 'refresh',
-      expiresAt: refreshExpiry(),
-    });
-
-    await Session.create({
-      userId: user._id,
-      tenantId: user.tenantId,
-      refreshToken: refreshToken,
-      browser: req.headers['user-agent'] || '',
-      ipAddress: req.ip || '',
-      expiresAt: refreshExpiry(),
-    });
+    const userResponse = await issueSession(user, req, res);
 
     await AuditLog.create({
       tenantId: user.tenantId,
@@ -128,21 +183,7 @@ export const login = async (req: Request, res: Response) => {
       userAgent: req.headers['user-agent'] || ''
     });
 
-    const isProduction = process.env.NODE_ENV === 'production';
-    res.cookie('token', token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
-    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
-
-    res.status(200).json({
-      message: 'Login successful',
-      user: {
-        id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profilePictureUrl: user.profilePictureUrl,
-        tenantId: user.tenantId,
-      }
-    });
+    res.status(200).json({ message: 'Login successful', user: userResponse });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -174,38 +215,16 @@ export const login2FA = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid 2FA token' });
     }
 
-    const token = signAccessToken(user);
-    const refreshToken = createOpaqueToken();
-    await AuthToken.create({
-      userId: user._id,
-      tokenHash: hashToken(refreshToken),
-      type: 'refresh',
-      expiresAt: refreshExpiry(),
-    });
+    if (isPortalMismatch(req.body.portal, user)) {
+      return res.status(403).json({ message: 'Invalid credentials' });
+    }
 
-    await Session.create({
-      userId: user._id,
-      tenantId: user.tenantId,
-      refreshToken: refreshToken,
-      browser: req.headers['user-agent'] || '',
-      ipAddress: req.ip || '',
-      expiresAt: refreshExpiry(),
-    });
+    if (await isSubdomainMismatch(req.body.subdomain, user)) {
+      return res.status(403).json({ message: "This account doesn't belong to this workspace." });
+    }
 
-    const isProduction = process.env.NODE_ENV === 'production';
-    res.cookie('token', token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
-    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
-
-    res.status(200).json({
-      message: 'Login successful',
-      user: {
-        id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        tenantId: user.tenantId,
-      }
-    });
+    const userResponse = await issueSession(user, req, res);
+    res.status(200).json({ message: 'Login successful', user: userResponse });
   } catch (error) {
     res.status(500).json({ message: 'Internal server error' });
   }

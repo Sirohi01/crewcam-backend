@@ -17,6 +17,7 @@ export const LIFECYCLE_SEQUENCE: readonly LifecycleStatus[] = LIFECYCLE_SEQUENCE
 
 export interface ITenant extends Document, IAuditable {
   name: string;
+  subdomain?: string;
   isActive: boolean;
   packageId: mongoose.Types.ObjectId;
   aiCredits: number;
@@ -53,6 +54,8 @@ export interface ITenant extends Document, IAuditable {
 
 const TenantSchema = new Schema<ITenant>({
   name: { type: String, required: true },
+  // Canonical per-tenant identifier for subdomain-based white-label routing (partner1.crewcam.com).
+  subdomain: { type: String, unique: true, sparse: true, lowercase: true, trim: true, index: true },
   isActive: { type: Boolean, default: true },
   packageId: { type: Schema.Types.ObjectId, ref: 'Package' },
   aiCredits: { type: Number, default: 0 },

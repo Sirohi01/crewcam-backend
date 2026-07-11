@@ -44,8 +44,32 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
   app.use(helmet());
+
+  // Accepts the configured base origin, any tenant subdomain of CORS_ORIGIN_SUFFIX
+  // (e.g. partner1.crewcam.com when CORS_ORIGIN_SUFFIX=crewcam.com), and *.localhost
+  // dev subdomains used to simulate tenant subdomains locally.
+  const corsOriginSuffix = process.env.CORS_ORIGIN_SUFFIX;
+  const staticCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const isAllowedOrigin = (origin: string): boolean => {
+    if (staticCorsOrigins.includes(origin)) return true;
+    let hostname: string;
+    try {
+      hostname = new URL(origin).hostname;
+    } catch {
+      return false;
+    }
+    if (hostname.endsWith('.localhost')) return true;
+    if (corsOriginSuffix && (hostname === corsOriginSuffix || hostname.endsWith(`.${corsOriginSuffix}`))) return true;
+    return false;
+  };
   app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      if (!origin || isAllowedOrigin(origin)) return callback(null, true);
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   }));
 

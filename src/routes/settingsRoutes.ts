@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { tenantResolver } from '../middleware/tenantResolver';
+import { apiLimiter } from '../middleware/rateLimiter';
 import {
   getActiveSessions,
   revokeSession,
+  getPublicWhitelabel,
   getWhitelabel,
   updateWhitelabel,
   getIntegrations,
@@ -13,6 +15,11 @@ import {
 } from '../controllers/settingsController';
 
 const router = Router();
+
+// Unauthenticated: lets the login page resolve a tenant's branding by subdomain
+// before the user signs in. Must stay ahead of the authenticate/tenantResolver below.
+router.get('/whitelabel/public', apiLimiter, getPublicWhitelabel);
+
 router.use(authenticate);
 router.use(tenantResolver);
 
