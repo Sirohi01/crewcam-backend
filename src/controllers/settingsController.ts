@@ -1,10 +1,13 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Session } from '../models/Session';
 import { WhiteLabel } from '../models/WhiteLabel';
 import { Integration } from '../models/Integration';
 import { PlatformAiProvider } from '../models/PlatformAiProvider';
 import { Tenant } from '../models/Tenant';
+import { normalizeSubdomain } from '../utils/subdomain';
+
+const ACTIVE_LIFECYCLE_STATUSES = ['ACTIVE', 'LIVE'];
 
 // SESSIONS
 export const getActiveSessions = async (req: AuthRequest, res: Response) => {
@@ -31,6 +34,35 @@ export const revokeSession = async (req: AuthRequest, res: Response) => {
 };
 
 // WHITELABEL
+// Unauthenticated: resolves branding for a subdomain so the login page can show a tenant's
+// logo/colors before the user signs in. Only ever returns the explicit whitelist below —
+// WhiteLabel also stores SMTP/WhatsApp credentials that must never leak pre-auth.
+export const getPublicWhitelabel = async (req: Request, res: Response) => {
+  try {
+    const subdomain = normalizeSubdomain(req.query.subdomain as string | undefined);
+    if (!subdomain) return res.status(404).json({ message: 'Not found' });
+
+    const tenant = await Tenant.findOne({ subdomain, isActive: true }).select('lifecycleStatus').lean();
+    if (!tenant || !ACTIVE_LIFECYCLE_STATUSES.includes(tenant.lifecycleStatus)) {
+      return res.status(404).json({ message: 'Not found' });
+    }
+
+    const whitelabel = await WhiteLabel.findOne({ tenantId: String(tenant._id) }).lean();
+    if (!whitelabel) return res.status(404).json({ message: 'Not found' });
+
+    res.status(200).json({
+      logoUrl: whitelabel.logoUrl,
+      faviconUrl: whitelabel.faviconUrl,
+      primaryColor: whitelabel.primaryColor,
+      secondaryColor: whitelabel.secondaryColor,
+      themeMode: whitelabel.themeMode,
+      companyNameOverride: whitelabel.companyNameOverride,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching branding' });
+  }
+};
+
 export const getWhitelabel = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
@@ -49,11 +81,11 @@ export const updateWhitelabel = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     const tenantId = (req.tenantId || req.user.tenantId) as any;
-    const { primaryColor, companyNameOverride, themeMode } = req.body;
+    const { primaryColor, secondaryColor, companyNameOverride, themeMode, logoUrl, faviconUrl } = req.body;
 
     const whitelabel = await WhiteLabel.findOneAndUpdate(
       { tenantId },
-      { primaryColor, companyNameOverride, themeMode },
+      { primaryColor, secondaryColor, companyNameOverride, themeMode, logoUrl, faviconUrl },
       { returnDocument: 'after', upsert: true }
     );
     res.status(200).json(whitelabel);
