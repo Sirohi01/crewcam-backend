@@ -3,12 +3,6 @@ import {
   createFeature, createPackage, createPermission, createTenant, deleteFeature, deleteTenant, getAiUsageLogs,
   getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
-  getDashboardStats,
-  getAllAuditLogsAcrossTenants,
-  getAllPayments,
-  getAllTicketsAcrossTenants,
-  getPackageById,
-  resendCompanyCredentials,
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
