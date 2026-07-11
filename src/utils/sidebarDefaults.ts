@@ -13,10 +13,10 @@ export interface SidebarDefaultItem {
 }
 
 const ALL: RoleCategory[] = [
-  'employee', 'reporting_manager', 'hod', 'hr', 'hr_admin', 'finance', 'admin', 'company_admin', 'developer',
+  'employee', 'reporting_manager', 'hod', 'hr', 'hr_recruiter', 'hr_admin', 'finance', 'admin', 'company_admin', 'developer',
 ];
-const HR_TEAM: RoleCategory[] = ['hr', 'hr_admin', 'company_admin'];
-const HR_AND_HOD: RoleCategory[] = ['hr', 'hr_admin', 'hod', 'company_admin'];
+const HR_TEAM: RoleCategory[] = ['hr', 'hr_recruiter', 'hr_admin', 'company_admin'];
+const HR_AND_HOD: RoleCategory[] = ['hr', 'hr_recruiter', 'hr_admin', 'hod', 'company_admin'];
 const FINANCE_TEAM: RoleCategory[] = ['finance', 'hr_admin', 'company_admin'];
 
 const comingSoon = (feature: string, section: string) =>
@@ -157,6 +157,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   { section: 'Hiring Process', label: 'Interview Process', href: '/dashboard/hiring/candidates/new/create/interview-process', icon: 'UserPlus', order: 4.4, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'Interview Round - 3', href: '/dashboard/hiring/candidates/new/create/interview', icon: 'UserPlus', order: 4.5, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'Interview Round - 4', href: '/dashboard/hiring/candidates/new/create/assessment', icon: 'UserPlus', order: 4.6, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
+  { section: 'Hiring Process', label: 'HOD Evaluation', href: '/dashboard/hiring/evaluation', icon: 'ClipboardCheck', order: 5, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'Level 1-Walk-In Round', href: '/dashboard/hiring/interviews/walk-in', icon: 'UserPlus', order: 6, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'Level 1-Telephonic Round', href: '/dashboard/hiring/interviews/telephonic', icon: 'UserPlus', order: 7, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
   { section: 'Hiring Process', label: 'Level 2-HR and HOD Round', href: '/dashboard/hiring/interviews/hr-hod', icon: 'UserPlus', order: 8, requiredPermission: 'ATS_READ', categories: HR_AND_HOD },
