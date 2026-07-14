@@ -4,7 +4,7 @@ import { LeaveRequest } from '../models/LeaveRequest';
 import { LeaveType } from '../models/LeaveType';
 import { LeaveCredit } from '../models/LeaveCredit';
 import { AuditLog } from '../models/AuditLog';
-import { Role, resolveRoleCategory } from '../models/Role';
+import { Role, resolveRoleScope } from '../models/Role';
 import { canAccessUser } from '../utils/scopeHelpers';
 import moment from 'moment';
 
@@ -145,8 +145,8 @@ export const getLeaveStatistics = async (req: AuthRequest, res: Response) => {
 
     if (targetUserId !== String(req.user._id)) {
       const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
-      const category = resolveRoleCategory(role);
-      const allowed = await canAccessUser(req, category, targetUserId);
+      const scope = resolveRoleScope(role);
+      const allowed = await canAccessUser(req, scope, targetUserId);
       if (!allowed) return res.status(403).json({ message: 'Not authorized to view this employee\'s leave statistics' });
     }
 

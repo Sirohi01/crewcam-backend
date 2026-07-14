@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Attendance } from '../models/Attendance';
 import { OutInRecord } from '../models/OutInRecord';
-import { Role, resolveRoleCategory } from '../models/Role';
+import { Role, resolveRoleScope } from '../models/Role';
 import { User } from '../models/User';
 import { Branch } from '../models/Branch';
 import { getUserScopeFilter, canAccessUser } from '../utils/scopeHelpers';
@@ -212,8 +212,8 @@ export const getTodayAttendance = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId: req.tenantId || req.user.tenantId } as any);
-    const category = resolveRoleCategory(role);
-    const scopeFilter = await getUserScopeFilter(req, category);
+    const scope = resolveRoleScope(role);
+    const scopeFilter = await getUserScopeFilter(req, scope);
 
     const today = moment().startOf('day').toDate();
     const records = await Attendance.find({ ...scopeFilter, date: { $gte: today } } as any)
@@ -238,9 +238,9 @@ export const getIndividualAttendance = async (req: AuthRequest, res: Response) =
     const userId = req.params.userId as string;
 
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
-    const category = resolveRoleCategory(role);
+    const scope = resolveRoleScope(role);
 
-    const allowed = await canAccessUser(req, category, userId);
+    const allowed = await canAccessUser(req, scope, userId);
     if (!allowed) return res.status(403).json({ message: 'Not authorized to view this employee\'s attendance' });
 
     const records = await Attendance.find({ tenantId, userId } as any).sort({ date: -1 });

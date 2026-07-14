@@ -2,7 +2,8 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { User } from '../models/User';
 import { Branch } from '../models/Branch';
-import { Role, resolveRoleCategory } from '../models/Role';
+import { Role, resolveRoleScope } from '../models/Role';
+import { isWidgetVisible } from '../utils/visibilityFilter';
 import { LeaveRequest } from '../models/LeaveRequest';
 import { Attendance } from '../models/Attendance';
 import { Candidate } from '../models/Candidate';
@@ -34,9 +35,9 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Returns the current user's persona category, effective permissions, and the
- * ordered widget-key list their dashboard should render — one call instead of
- * the frontend needing several round-trips before it can paint anything.
+ * Returns the current user's data scope, effective permissions, and the ordered
+ * widget-key list their dashboard should render — one call instead of the frontend
+ * needing several round-trips before it can paint anything.
  */
 export const getDashboardConfig = async (req: AuthRequest, res: Response) => {
   try {
@@ -44,19 +45,20 @@ export const getDashboardConfig = async (req: AuthRequest, res: Response) => {
     if (!tenantId || !req.user) return res.status(400).json({ message: 'Tenant ID required' });
 
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
-    const category = resolveRoleCategory(role);
+    const scope = resolveRoleScope(role);
+    const widgetCtx = { scope, roleId: req.user.roleId ? String(req.user.roleId) : undefined };
 
     await syncDashboardWidgetDefaults(tenantId);
-    const widgets = await DashboardWidgetConfig.find({ tenantId, isActive: true }).sort({ category: 1, order: 1 });
+    const widgets = await DashboardWidgetConfig.find({ tenantId, isActive: true }).sort({ order: 1 });
 
     const widgetKeys = widgets
-      .filter((w) => w.category === category)
+      .filter((w) => isWidgetVisible(w, widgetCtx))
       .sort((a, b) => a.order - b.order)
       .map((w) => w.widgetKey);
 
     const effectivePermissions = await getEffectivePermissions(req);
 
-    res.status(200).json({ category, effectivePermissions, widgets: widgetKeys });
+    res.status(200).json({ scope, effectivePermissions, widgets: widgetKeys });
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching dashboard configuration' });
   }
@@ -80,7 +82,7 @@ export const getWidgetData = async (req: AuthRequest, res: Response) => {
     if (!tenantId || !req.user) return res.status(400).json({ message: 'Tenant ID required' });
 
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
-    const category = resolveRoleCategory(role);
+    const scope = resolveRoleScope(role);
 
     switch (widgetKey) {
       case 'my-attendance-today': {
@@ -118,7 +120,7 @@ export const getWidgetData = async (req: AuthRequest, res: Response) => {
       }
 
       case 'pending-approvals': {
-        const memberFilter = category === 'hod' ? getDepartmentFilter(req) : getTeamFilter(req);
+        const memberFilter = scope === 'department' ? getDepartmentFilter(req) : getTeamFilter(req);
         const memberIds = await User.find(memberFilter as any).distinct('_id');
         const pending = await LeaveRequest.countDocuments({ tenantId, userId: { $in: memberIds }, status: 'Pending' });
         return res.status(200).json({ pending });

@@ -10,6 +10,9 @@ export interface ICompany extends ITenantScoped, IAuditable {
   companyType?: string;
   website?: string;
   logoUrl?: string;
+  // Extra factor an admin enters on the Employer Login screen, in addition to the subdomain,
+  // to confirm they're signing into the right company workspace.
+  corporateId?: string;
   documentHeaderImageUrl?: string;
   documentFooterText?: string;
   founderName?: string;
@@ -78,6 +81,7 @@ const CompanySchema = new Schema<ICompany>({
   companyType: { type: String },
   website: { type: String },
   logoUrl: { type: String },
+  corporateId: { type: String, unique: true, sparse: true },
   documentHeaderImageUrl: { type: String },
   documentFooterText: { type: String, maxlength: 300 },
   founderName: { type: String },

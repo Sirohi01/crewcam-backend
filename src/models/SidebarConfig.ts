@@ -1,7 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 import { auditPlugin, IAuditable } from './plugins/auditPlugin';
-import { ROLE_CATEGORIES } from './Role';
 
 export interface ISidebarConfig extends ITenantScoped, IAuditable {
   section: string;
@@ -13,7 +12,10 @@ export interface ISidebarConfig extends ITenantScoped, IAuditable {
   parent?: string;
   requiredPermission?: string;
   requiredFeature?: string;
-  categories: string[];
+  // Opt-in fine-grained targeting: specific Role documents (e.g. a tenant's "HR Recruiter"
+  // role) that can see this item. Empty/unset means "no extra role restriction" —
+  // requiredPermission/requiredFeature (or nothing at all) decide visibility alone.
+  roleIds: mongoose.Types.ObjectId[];
   isActive: boolean;
 }
 
@@ -27,7 +29,7 @@ const SidebarConfigSchema = new Schema<ISidebarConfig>({
   parent: { type: String },
   requiredPermission: { type: String },
   requiredFeature: { type: String },
-  categories: [{ type: String, enum: ROLE_CATEGORIES }],
+  roleIds: [{ type: Schema.Types.ObjectId, ref: 'Role' }],
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
