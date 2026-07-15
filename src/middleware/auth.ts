@@ -10,7 +10,11 @@ export interface AuthRequest extends Request {
 
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    // Employer and super-admin portals now use differently-named cookies (see
+    // sessionCookieNames in authController.ts) so logging out of one can't touch the
+    // other — this just tries both, since the JWT itself is self-contained regardless
+    // of which portal's cookie slot it came from.
+    const token = req.cookies.token_employer || req.cookies.token_super_admin || req.headers.authorization?.split(' ')[1];
     
     if (!token) {
       return res.status(401).json({ message: 'Authentication required' });

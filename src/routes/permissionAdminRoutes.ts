@@ -9,6 +9,7 @@ import {
   getSidebarConfig,
   updateSidebarConfigItem,
   getDashboardWidgetConfig,
+  updateDashboardWidgetConfigItem,
   getMySidebar,
 } from '../controllers/permissionAdminController';
 
@@ -28,5 +29,6 @@ router.get('/sidebar-config', checkPermission('ROLE_ADMIN'), getSidebarConfig);
 router.put('/sidebar-config/:id', checkPermission('ROLE_ADMIN'), updateSidebarConfigItem);
 
 router.get('/dashboard-config', checkPermission('ROLE_ADMIN'), getDashboardWidgetConfig);
+router.put('/dashboard-config/:id', checkPermission('ROLE_ADMIN'), updateDashboardWidgetConfigItem);
 
 export default router;

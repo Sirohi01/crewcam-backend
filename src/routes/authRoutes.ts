@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { login, login2FA, register, refreshToken, logout, forgotPassword, resetPassword, setup2FA, verifyAndEnable2FA, disable2FA } from '../controllers/authController';
+import { login, login2FA, register, refreshToken, logout, forgotPassword, resetPassword, setup2FA, verifyAndEnable2FA, disable2FA, sendLoginOtp, verifyLoginOtp } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
 import { authLimiter } from '../middleware/rateLimiter';
 
@@ -10,6 +10,8 @@ router.use(authLimiter);
 
 router.post('/login', login);
 router.post('/login/2fa', login2FA);
+router.post('/login/send-otp', sendLoginOtp);
+router.post('/login/verify-otp', verifyLoginOtp);
 router.post('/register', register);
 router.post('/refresh', refreshToken);
 router.post('/logout', logout);

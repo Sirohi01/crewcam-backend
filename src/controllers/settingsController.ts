@@ -57,6 +57,8 @@ export const getPublicWhitelabel = async (req: Request, res: Response) => {
       secondaryColor: whitelabel.secondaryColor,
       themeMode: whitelabel.themeMode,
       companyNameOverride: whitelabel.companyNameOverride,
+      poweredByLabel: whitelabel.poweredByLabel,
+      poweredByLogoUrl: whitelabel.poweredByLogoUrl,
     });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching branding' });
@@ -81,11 +83,11 @@ export const updateWhitelabel = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     const tenantId = (req.tenantId || req.user.tenantId) as any;
-    const { primaryColor, secondaryColor, companyNameOverride, themeMode, logoUrl, faviconUrl } = req.body;
+    const { primaryColor, secondaryColor, companyNameOverride, themeMode, logoUrl, faviconUrl, poweredByLabel, poweredByLogoUrl } = req.body;
 
     const whitelabel = await WhiteLabel.findOneAndUpdate(
       { tenantId },
-      { primaryColor, secondaryColor, companyNameOverride, themeMode, logoUrl, faviconUrl },
+      { primaryColor, secondaryColor, companyNameOverride, themeMode, logoUrl, faviconUrl, poweredByLabel, poweredByLogoUrl },
       { returnDocument: 'after', upsert: true }
     );
     res.status(200).json(whitelabel);

@@ -3,7 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { LiveTrackingConsent } from '../models/LiveTrackingConsent';
 import { LiveTrackingConfig } from '../models/LiveTrackingConfig';
 import { LiveTrackingLog } from '../models/LiveTrackingLog';
-import { Role, resolveRoleCategory } from '../models/Role';
+import { Role, resolveRoleScope } from '../models/Role';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { getUserScopeFilter } from '../utils/scopeHelpers';
@@ -91,8 +91,8 @@ export const getTeamLocations = async (req: AuthRequest, res: Response) => {
     if (!tenantId || !req.user) return res.status(400).json({ message: 'Tenant ID required' });
 
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
-    const category = resolveRoleCategory(role);
-    const scopeFilter = await getUserScopeFilter(req, category);
+    const scope = resolveRoleScope(role);
+    const scopeFilter = await getUserScopeFilter(req, scope);
 
     const consentedUserIds = (
       await LiveTrackingConsent.find({ tenantId, consentGiven: true } as any).select('userId')
@@ -137,8 +137,8 @@ export const getUserHistory = async (req: AuthRequest, res: Response) => {
 
     const { userId } = req.params;
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
-    const category = resolveRoleCategory(role);
-    const scopeFilter = await getUserScopeFilter(req, category);
+    const scope = resolveRoleScope(role);
+    const scopeFilter = await getUserScopeFilter(req, scope);
     if (scopeFilter.userId) {
       if (Array.isArray(scopeFilter.userId.$in)) {
         if (!scopeFilter.userId.$in.some((id: any) => String(id) === String(userId))) {
@@ -200,7 +200,7 @@ export const getRoleTrackingConfigs = async (req: AuthRequest, res: Response) =>
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const configs = await LiveTrackingConfig.find({ tenantId } as any).populate('roleId', 'name category');
+    const configs = await LiveTrackingConfig.find({ tenantId } as any).populate('roleId', 'name scope');
     res.status(200).json(configs);
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching tracking configs', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });

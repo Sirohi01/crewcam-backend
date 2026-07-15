@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { Company } from '../models/Company';
-import { Role, ROLE_CATEGORIES } from '../models/Role';
+import { Role, ROLE_SCOPES, ROLE_LOGIN_TYPES } from '../models/Role';
 import { AuthRequest } from '../middleware/auth';
 
 export const getMyCompanyProfile = async (req: AuthRequest, res: Response) => {
@@ -91,7 +91,8 @@ export const createCompanyRole = async (req: AuthRequest, res: Response) => {
     const name = String(req.body.name || '').trim();
     const description = String(req.body.description || '').trim();
     const permissions = Array.isArray(req.body.permissions) ? req.body.permissions : [];
-    const category = ROLE_CATEGORIES.includes(req.body.category) ? req.body.category : 'employee';
+    const scope = ROLE_SCOPES.includes(req.body.scope) ? req.body.scope : 'self';
+    const loginType = ROLE_LOGIN_TYPES.includes(req.body.loginType) ? req.body.loginType : 'employee';
     if (!name) return res.status(400).json({ message: 'Role name is required' });
     const duplicate = await Role.findOne({ tenantId, name, isActive: true } as any);
     if (duplicate) return res.status(400).json({ message: 'Role with this name already exists' });
@@ -99,7 +100,8 @@ export const createCompanyRole = async (req: AuthRequest, res: Response) => {
       name,
       description,
       permissions,
-      category,
+      scope,
+      loginType,
       tenantId,
       createdBy: req.user?._id,
     });
@@ -116,8 +118,11 @@ export const updateCompanyRole = async (req: AuthRequest, res: Response) => {
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID is required' });
     const { name, description, permissions, isActive } = req.body;
     const update: Record<string, any> = { name, description, permissions, isActive, updatedBy: req.user?._id };
-    if (ROLE_CATEGORIES.includes(req.body.category)) {
-      update.category = req.body.category;
+    if (ROLE_SCOPES.includes(req.body.scope)) {
+      update.scope = req.body.scope;
+    }
+    if (ROLE_LOGIN_TYPES.includes(req.body.loginType)) {
+      update.loginType = req.body.loginType;
     }
     const role = await Role.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,

@@ -36,7 +36,7 @@ export const revokeSession = async (req: AuthRequest, res: Response) => {
 
 export const revokeAllOtherSessions = async (req: AuthRequest, res: Response) => {
   try {
-    const currentRefreshToken = req.cookies.refreshToken;
+    const currentRefreshToken = req.cookies.refreshToken_employer || req.cookies.refreshToken_super_admin;
     const sessions = await Session.find({ userId: req.user!._id, tenantId: req.tenantId || req.user!.tenantId, isActive: true } as any);
     
     for (const session of sessions) {

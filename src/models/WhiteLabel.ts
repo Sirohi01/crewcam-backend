@@ -13,6 +13,8 @@ export interface IWhiteLabel extends Document, IAuditable {
   customDomain?: string;
   companyNameOverride?: string;
   supportEmail?: string;
+  poweredByLabel?: string;
+  poweredByLogoUrl?: string;
 
   emailFromName?: string;
   emailFromAddress?: string;
@@ -34,6 +36,9 @@ const WhiteLabelSchema = new Schema<IWhiteLabel>({
   customDomain: { type: String, unique: true, sparse: true },
   companyNameOverride: { type: String },
   supportEmail: { type: String },
+  // Optional reseller/partner attribution shown above the login form (e.g. "Powered by Acme Partners").
+  poweredByLabel: { type: String },
+  poweredByLogoUrl: { type: String },
 
   emailFromName: { type: String },
   emailFromAddress: { type: String },

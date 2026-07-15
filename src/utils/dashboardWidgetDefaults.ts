@@ -1,65 +1,44 @@
-import { RoleCategory } from '../models/Role';
+import { RoleScope } from '../models/Role';
 
 export interface DashboardWidgetDefault {
-  category: RoleCategory;
   widgetKey: string;
   order: number;
+  minScope: RoleScope;
 }
 
 /**
- * Default widget set per persona category, per docs/03_ROLES_DASHBOARDS_PERMISSIONS.md §2.
- * The full module map is seeded now (same "show full scope up front" decision as the
- * sidebar) — widgets without a real query yet fall through getWidgetData's default case
- * and return `{ dataAvailable: false }` until their owning phase wires the real data.
+ * Default widget set, per docs/03_ROLES_DASHBOARDS_PERMISSIONS.md §2. One row per unique
+ * widget (not per persona) — `minScope` is the lowest data-scope that sees it by default;
+ * a tenant admin can widen/narrow further with per-role overrides on the Dashboard Widgets
+ * settings page. Widgets without a real query yet fall through getWidgetData's default
+ * case and return `{ dataAvailable: false }` until their owning phase wires the real data.
  */
 export const DEFAULT_DASHBOARD_WIDGETS: DashboardWidgetDefault[] = [
-  { category: 'employee', widgetKey: 'my-attendance-today', order: 0 },
-  { category: 'employee', widgetKey: 'my-leave-balance', order: 1 },
-  { category: 'employee', widgetKey: 'my-todo', order: 2 },
+  { widgetKey: 'my-attendance-today', order: 0, minScope: 'self' },
+  { widgetKey: 'my-leave-balance', order: 1, minScope: 'self' },
+  { widgetKey: 'my-todo', order: 2, minScope: 'self' },
 
-  { category: 'reporting_manager', widgetKey: 'team-attendance-today', order: 0 },
-  { category: 'reporting_manager', widgetKey: 'pending-approvals', order: 1 },
-  { category: 'reporting_manager', widgetKey: 'meetings-summary', order: 2 },
-  { category: 'reporting_manager', widgetKey: 'my-todo', order: 3 },
+  { widgetKey: 'team-attendance-today', order: 10, minScope: 'team' },
+  { widgetKey: 'meetings-summary', order: 11, minScope: 'team' },
+  { widgetKey: 'pending-approvals', order: 12, minScope: 'team' },
 
-  { category: 'hod', widgetKey: 'department-attendance', order: 0 },
-  { category: 'hod', widgetKey: 'department-headcount', order: 1 },
-  { category: 'hod', widgetKey: 'pending-approvals', order: 2 },
-  { category: 'hod', widgetKey: 'pms-appraisal-status', order: 3 },
+  { widgetKey: 'department-attendance', order: 20, minScope: 'department' },
+  { widgetKey: 'department-headcount', order: 21, minScope: 'department' },
+  { widgetKey: 'pms-appraisal-status', order: 22, minScope: 'department' },
 
-  { category: 'hr', widgetKey: 'org-headcount', order: 0 },
-  { category: 'hr', widgetKey: 'hiring-pipeline-summary', order: 1 },
-  { category: 'hr', widgetKey: 'pending-approvals', order: 2 },
-  { category: 'hr', widgetKey: 'meetings-summary', order: 3 },
-  { category: 'hr', widgetKey: 'communications-summary', order: 4 },
-  { category: 'hr', widgetKey: 'disciplinary-cases-open', order: 5 },
-  { category: 'hr', widgetKey: 'exit-formalities-pending', order: 6 },
-  { category: 'hr', widgetKey: 'pms-appraisal-status', order: 7 },
+  { widgetKey: 'org-headcount', order: 30, minScope: 'company' },
+  { widgetKey: 'hiring-pipeline-summary', order: 31, minScope: 'company' },
+  { widgetKey: 'communications-summary', order: 32, minScope: 'company' },
+  { widgetKey: 'disciplinary-cases-open', order: 33, minScope: 'company' },
+  { widgetKey: 'exit-formalities-pending', order: 34, minScope: 'company' },
+  { widgetKey: 'master-data-health', order: 35, minScope: 'company' },
+  { widgetKey: 'payroll-pending', order: 36, minScope: 'company' },
+  { widgetKey: 'obligations-due', order: 37, minScope: 'company' },
+  { widgetKey: 'agreements-active', order: 38, minScope: 'company' },
+  { widgetKey: 'tenant-feature-usage', order: 39, minScope: 'company' },
 
-  { category: 'hr_admin', widgetKey: 'org-headcount', order: 0 },
-  { category: 'hr_admin', widgetKey: 'hiring-pipeline-summary', order: 1 },
-  { category: 'hr_admin', widgetKey: 'pending-approvals', order: 2 },
-  { category: 'hr_admin', widgetKey: 'disciplinary-cases-open', order: 3 },
-  { category: 'hr_admin', widgetKey: 'exit-formalities-pending', order: 4 },
-  { category: 'hr_admin', widgetKey: 'master-data-health', order: 5 },
-
-  { category: 'finance', widgetKey: 'payroll-pending', order: 0 },
-  { category: 'finance', widgetKey: 'obligations-due', order: 1 },
-  { category: 'finance', widgetKey: 'agreements-active', order: 2 },
-
-  { category: 'admin', widgetKey: 'org-headcount', order: 0 },
-  { category: 'admin', widgetKey: 'master-data-health', order: 1 },
-
-  { category: 'company_admin', widgetKey: 'org-headcount', order: 0 },
-  { category: 'company_admin', widgetKey: 'tenant-feature-usage', order: 1 },
-  { category: 'company_admin', widgetKey: 'hiring-pipeline-summary', order: 2 },
-  { category: 'company_admin', widgetKey: 'payroll-pending', order: 3 },
-  { category: 'company_admin', widgetKey: 'obligations-due', order: 4 },
-  { category: 'company_admin', widgetKey: 'meetings-summary', order: 5 },
-  { category: 'company_admin', widgetKey: 'communications-summary', order: 6 },
-  { category: 'company_admin', widgetKey: 'agreements-active', order: 7 },
-  { category: 'company_admin', widgetKey: 'master-data-health', order: 8 },
-
-  { category: 'developer', widgetKey: 'developer-tasks', order: 0 },
-  { category: 'developer', widgetKey: 'my-todo', order: 1 },
+  // Genuinely job-specific rather than scope-driven — defaults to the top scope tier as a
+  // safe ceiling, but stays effectively hidden until a tenant admin opts a specific role in
+  // via roleIds on the Dashboard Widgets settings page.
+  { widgetKey: 'developer-tasks', order: 40, minScope: 'company' },
 ];

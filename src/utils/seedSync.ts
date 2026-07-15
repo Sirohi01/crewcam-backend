@@ -176,11 +176,17 @@ export const syncSidebarDefaults = async (tenantId: string) => {
   }
 };
 export const syncDashboardWidgetDefaults = async (tenantId: string) => {
-  const existing = await DashboardWidgetConfig.find({ tenantId }, { category: 1, widgetKey: 1 });
-  const existingKeys = new Set(existing.map((w) => `${w.category}::${w.widgetKey}`));
+  const existing = await DashboardWidgetConfig.find({ tenantId }, { widgetKey: 1 });
+  const existingKeys = new Set(existing.map((w) => w.widgetKey));
 
-  const missing = DEFAULT_DASHBOARD_WIDGETS.filter((w) => !existingKeys.has(`${w.category}::${w.widgetKey}`));
+  const missing = DEFAULT_DASHBOARD_WIDGETS.filter((w) => !existingKeys.has(w.widgetKey));
   if (missing.length > 0) {
-    await DashboardWidgetConfig.insertMany(missing.map((w) => ({ ...w, tenantId })));
+    await DashboardWidgetConfig.bulkWrite(missing.map((w) => ({
+      updateOne: {
+        filter: { tenantId, widgetKey: w.widgetKey } as any,
+        update: { $setOnInsert: { ...w, tenantId } },
+        upsert: true,
+      },
+    })));
   }
 };
