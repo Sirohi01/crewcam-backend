@@ -11,6 +11,7 @@ import { AiUsageLog } from '../models/AiUsageLog';
 import { AuditLog } from '../models/AuditLog';
 import { Payment } from '../models/Payment';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
+import { Counter } from '../models/Counter';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, sendMail } from '../services/mailer';
@@ -28,6 +29,8 @@ const createTenantSchema = z.object({
   adminLastName: z.string().trim().min(1, 'Admin last name is required'),
   adminEmail: z.string().trim().email('A valid admin email is required'),
   adminPassword: passwordSchema,
+  adminDesignation: z.string().optional(),
+  adminPhone: z.string().optional(),
   country: z.string().trim().min(1).default('India'),
   tradeName: z.string().optional(),
   industry: z.string().optional(),
@@ -63,6 +66,40 @@ const createTenantSchema = z.object({
   billingCycle: z.enum(['MONTHLY', 'YEARLY']).optional().default('MONTHLY'),
   subscriptionAmount: z.coerce.number().min(0).optional().default(0),
   subscriptionCurrency: z.enum(['INR', 'USD']).optional().default('INR'),
+  estimatedEmployees: z.coerce.number().min(0).optional(),
+
+  // Company wizard extras (all optional — the quick-create modal never sends these)
+  corporateId: z.string().trim().optional(),
+  companySize: z.string().optional(),
+  description: z.string().optional(),
+  incorporationDate: z.coerce.date().optional(),
+  alternateEmail: z.string().optional(),
+  whatsappNumber: z.string().optional(),
+  preferredLanguage: z.string().optional(),
+  supportEmail: z.string().optional(),
+  supportPhone: z.string().optional(),
+  linkedInUrl: z.string().optional(),
+  selectedModules: z.array(z.string()).optional(),
+  addonModules: z.array(z.string()).optional(),
+  documents: z.object({
+    incorporationCertUrl: z.string().optional(),
+    gstCertUrl: z.string().optional(),
+    panCardUrl: z.string().optional(),
+    otherDocumentUrl: z.string().optional(),
+  }).optional(),
+  notificationPreferences: z.object({
+    biometric: z.boolean().optional(),
+    sso: z.boolean().optional(),
+    sms: z.boolean().optional(),
+    geoTracking: z.boolean().optional(),
+    email: z.boolean().optional(),
+    whatsapp: z.boolean().optional(),
+  }).optional(),
+  weekStartsOn: z.string().optional(),
+  dateFormat: z.string().optional(),
+  timeFormat: z.string().optional(),
+  numberFormat: z.string().optional(),
+  leaveYearStartMonth: z.coerce.number().optional(),
 });
 
 const updateTenantSchema = createTenantSchema.partial().extend({
@@ -135,6 +172,25 @@ async function writeAuditLog(params: { tenantId: string; userId?: any; action: s
   }
 }
 
+// Reserves and returns the next corporate ID in the CORP-<year>-NNNNNN sequence.
+// The per-year counter resets automatically since each year gets its own Counter key.
+export const getNextCorporateId = async (req: AuthRequest, res: Response) => {
+  try {
+    const year = new Date().getFullYear();
+    const key = `CORP-${year}`;
+    const counter = await Counter.findOneAndUpdate(
+      { key },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    const corporateId = `CORP-${year}-${String(counter.seq).padStart(6, '0')}`;
+    res.status(200).json({ corporateId });
+  } catch (error) {
+    console.error('Error generating next corporate ID:', error);
+    res.status(500).json({ message: 'Internal server error while generating corporate ID' });
+  }
+};
+
 export const getAllTenants = async (req: AuthRequest, res: Response) => {
   try {
     const tenants = await Tenant.find().populate('packageId').lean();
@@ -159,6 +215,31 @@ export const getAllTenants = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Full-detail single-tenant fetch for the "Edit" wizard flow — unlike getAllTenants'
+// lean row projection (built for table rendering), this returns every field needed
+// to faithfully pre-fill the wizard (e.g. User.designation, the full Company document).
+export const getTenantById = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const tenant = await Tenant.findById(id).populate('packageId').lean();
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    const company = await Company.findOne({ tenantId: id }).lean();
+    const adminRole = await Role.findOne({ tenantId: id, name: 'Company Admin' }).lean();
+    let admin = null;
+    if (adminRole) {
+      admin = await User.findOne({ tenantId: id, roleId: adminRole._id })
+        .select('-passwordHash -twoFactorSecret')
+        .lean();
+    }
+
+    res.status(200).json({ ...tenant, company, admin });
+  } catch (error) {
+    console.error('Error fetching tenant details:', error);
+    res.status(500).json({ message: 'Internal server error while fetching tenant details' });
+  }
+};
+
 export const createTenant = async (req: AuthRequest, res: Response) => {
   let createdTenantId: any = null;
   try {
@@ -167,7 +248,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input', errors: parsed.error.issues });
     }
     const {
-      name, packageId, aiCredits, adminFirstName, adminLastName, adminEmail, adminPassword, country,
+      name, packageId, aiCredits, adminFirstName, adminLastName, adminEmail, adminPassword, adminDesignation, adminPhone, country,
       tradeName, industry, companyType, website, email, phone,
       addressLine1, addressLine2, city, state, postalCode,
       timezone, baseCurrency, financialYearStartMonth,
@@ -175,12 +256,23 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       tin, ein, vatNumber, businessLicenseNumber,
       logoUrl, adminProfilePictureUrl,
       setupFeeAmount, setupFeeCurrency, setupFeeStatus,
-      billingCycle, subscriptionAmount, subscriptionCurrency,
+      billingCycle, subscriptionAmount, subscriptionCurrency, estimatedEmployees,
+      corporateId, companySize, description, incorporationDate,
+      alternateEmail, whatsappNumber, preferredLanguage, supportEmail, supportPhone, linkedInUrl,
+      selectedModules, addonModules, documents, notificationPreferences,
+      weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
     } = parsed.data;
 
     const existingUser = await User.findOne({ email: adminEmail }).setOptions({ bypassTenantIsolation: true });
     if (existingUser) {
       return res.status(400).json({ message: 'User with this admin email already exists' });
+    }
+
+    if (corporateId) {
+      const existingCorporateId = await Company.findOne({ corporateId }).setOptions({ bypassTenantIsolation: true });
+      if (existingCorporateId) {
+        return res.status(400).json({ message: 'Corporate ID is already in use' });
+      }
     }
 
     const pkg = await Package.findById(packageId);
@@ -202,6 +294,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       billingCycle,
       subscriptionAmount,
       subscriptionCurrency,
+      estimatedEmployees,
       subscriptionStatus: 'ACTIVE',
       subscriptionStartDate,
       nextRenewalDate,
@@ -232,6 +325,10 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       panNumber, gstin, cin, tan, epfoNumber, esicNumber, ptNumber, lwfNumber,
       tin, ein, vatNumber, businessLicenseNumber,
       logoUrl,
+      corporateId, companySize, description, incorporationDate,
+      alternateEmail, whatsappNumber, preferredLanguage, supportEmail, supportPhone, linkedInUrl,
+      selectedModules, addonModules, documents, notificationPreferences,
+      weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
       tenantId: tenant._id,
       createdBy: req.user?._id
     });
@@ -258,6 +355,8 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       email: adminEmail,
       passwordHash,
       profilePictureUrl: adminProfilePictureUrl,
+      designation: adminDesignation,
+      mobileNumber: adminPhone,
       roleId: adminRole._id,
       tenantId: tenant._id,
       createdBy: req.user?._id
@@ -387,7 +486,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     }
     const {
       name, packageId, isActive, aiCredits, country,
-      adminFirstName, adminLastName, adminEmail, adminPassword,
+      adminFirstName, adminLastName, adminEmail, adminPassword, adminDesignation, adminPhone,
       tradeName, industry, companyType, website, email, phone,
       addressLine1, addressLine2, city, state, postalCode,
       timezone, baseCurrency, financialYearStartMonth,
@@ -395,7 +494,11 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       tin, ein, vatNumber, businessLicenseNumber,
       logoUrl, adminProfilePictureUrl,
       setupFeeAmount, setupFeeCurrency, setupFeeStatus,
-      billingCycle, subscriptionAmount, subscriptionCurrency, subscriptionStatus,
+      billingCycle, subscriptionAmount, subscriptionCurrency, subscriptionStatus, estimatedEmployees,
+      corporateId, companySize, description, incorporationDate,
+      alternateEmail, whatsappNumber, preferredLanguage, supportEmail, supportPhone, linkedInUrl,
+      selectedModules, addonModules, documents, notificationPreferences,
+      weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
     } = parsed.data;
 
     const existingTenant = await Tenant.findById(id);
@@ -417,6 +520,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     if (subscriptionAmount !== undefined) billingUpdate.subscriptionAmount = subscriptionAmount;
     if (subscriptionCurrency !== undefined) billingUpdate.subscriptionCurrency = subscriptionCurrency;
     if (subscriptionStatus !== undefined) billingUpdate.subscriptionStatus = subscriptionStatus;
+    if (estimatedEmployees !== undefined) billingUpdate.estimatedEmployees = estimatedEmployees;
 
     const tenant = await Tenant.findByIdAndUpdate(
       id,
@@ -448,7 +552,11 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       addressLine1, addressLine2, city, state, postalCode,
       timezone, baseCurrency, financialYearStartMonth,
       panNumber, gstin, cin, tan, epfoNumber, esicNumber, ptNumber, lwfNumber,
-      tin, ein, vatNumber, businessLicenseNumber
+      tin, ein, vatNumber, businessLicenseNumber,
+      corporateId, companySize, description, incorporationDate,
+      alternateEmail, whatsappNumber, preferredLanguage, supportEmail, supportPhone, linkedInUrl,
+      selectedModules, addonModules, documents, notificationPreferences,
+      weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
     };
     if (logoUrl) updatePayload.logoUrl = logoUrl;
     if (isActive !== undefined) {
@@ -466,6 +574,8 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       if (adminFirstName) adminUser.firstName = adminFirstName;
       if (adminLastName) adminUser.lastName = adminLastName;
       if (adminProfilePictureUrl) adminUser.profilePictureUrl = adminProfilePictureUrl;
+      if (adminDesignation !== undefined) adminUser.designation = adminDesignation;
+      if (adminPhone !== undefined) adminUser.mobileNumber = adminPhone;
       if (adminEmail) {
         if (adminEmail !== adminUser.email) {
           const existing = await User.findOne({ email: adminEmail }).setOptions({ bypassTenantIsolation: true });

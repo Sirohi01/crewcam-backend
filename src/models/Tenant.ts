@@ -37,6 +37,9 @@ export interface ITenant extends Document, IAuditable {
   billingCycle: 'MONTHLY' | 'YEARLY';
   subscriptionAmount: number;
   subscriptionCurrency: 'INR' | 'USD';
+  // Employee count entered at subscription time, used to compute subscriptionAmount
+  // (price/employee * estimatedEmployees) — persisted so it can be reloaded on edit.
+  estimatedEmployees?: number;
 
   userLimit: number;
   storageLimitGB: number;
@@ -75,6 +78,7 @@ const TenantSchema = new Schema<ITenant>({
   billingCycle: { type: String, enum: ['MONTHLY', 'YEARLY'], default: 'MONTHLY' },
   subscriptionAmount: { type: Number, default: 0 },
   subscriptionCurrency: { type: String, enum: ['INR', 'USD'], default: 'INR' },
+  estimatedEmployees: { type: Number },
 
   userLimit: { type: Number, default: 0 },
   storageLimitGB: { type: Number, default: 5 },
