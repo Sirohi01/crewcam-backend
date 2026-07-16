@@ -12,6 +12,9 @@ export interface IUser extends ITenantScoped, IAuditable {
   branchId?: mongoose.Types.ObjectId;
   departmentId?: mongoose.Types.ObjectId;
   designationId?: mongoose.Types.ObjectId;
+  // Free-text job title captured at account creation (e.g. via the super-admin company
+  // wizard), before the user is assigned into the org chart via designationId.
+  designation?: string;
   reportingToId?: mongoose.Types.ObjectId;
   employeeCode?: string;
   mobileNumber?: string;
@@ -62,6 +65,7 @@ const UserSchema = new Schema<IUser>({
   branchId: { type: Schema.Types.ObjectId, ref: 'Branch' },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
   designationId: { type: Schema.Types.ObjectId, ref: 'Designation' },
+  designation: { type: String },
   reportingToId: { type: Schema.Types.ObjectId, ref: 'User' },
   employeeCode: { type: String, index: true },
   mobileNumber: { type: String },

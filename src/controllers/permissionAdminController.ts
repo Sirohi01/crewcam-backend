@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { User } from '../models/User';
-import { Role, resolveRoleCategory } from '../models/Role';
+import { Role, resolveRoleScope } from '../models/Role';
 import { EmployeePermissionOverride } from '../models/EmployeePermissionOverride';
 import { SidebarConfig } from '../models/SidebarConfig';
 import { DashboardWidgetConfig } from '../models/DashboardWidgetConfig';
@@ -30,7 +30,17 @@ const PERMISSION_CATALOG = [
   { name: 'SUPPORT_WRITE', module: 'Support' },
   { name: 'ATS_READ', module: 'Hiring & ATS' },
   { name: 'ATS_WRITE', module: 'Hiring & ATS' },
+  { name: 'RECRUITMENT_APPROVE', module: 'Hiring & ATS' },
   { name: 'ROLE_ADMIN', module: 'Platform Admin' },
+  // Employer-side (Owner/Director/CFO/...) concepts with no dedicated page/route yet — kept
+  // in the catalog so they can already be assigned to a role, but nothing enforces them
+  // server-side until the corresponding Subscription/Billing/Payroll-approval routes exist.
+  { name: 'SUBSCRIPTION_READ', module: 'Subscription & Billing' },
+  { name: 'SUBSCRIPTION_WRITE', module: 'Subscription & Billing' },
+  { name: 'BILLING_READ', module: 'Subscription & Billing' },
+  { name: 'BILLING_WRITE', module: 'Subscription & Billing' },
+  { name: 'PAYROLL_APPROVE', module: 'Payroll' },
+  { name: 'REPORTS_READ', module: 'Reports' },
 ];
 
 export const getPermissionCatalog = async (_req: AuthRequest, res: Response) => {
@@ -61,7 +71,7 @@ export const getEffectivePermissionsForUser = async (req: AuthRequest, res: Resp
     res.status(200).json({
       userId,
       roleName: role?.name || null,
-      roleCategory: resolveRoleCategory(role),
+      roleScope: resolveRoleScope(role),
       rolePermissions: role?.permissions || [],
       override: override ? { grants: override.grants, revokes: override.revokes, reason: override.reason, expiresAt: override.expiresAt } : null,
       effectivePermissions: computeEffective(role?.permissions || [], override),
@@ -110,7 +120,7 @@ export const getSidebarConfig = async (req: AuthRequest, res: Response) => {
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
     await syncSidebarDefaults(tenantId);
-    const items = await SidebarConfig.find({ tenantId }).sort({ sectionOrder: 1, order: 1 });
+    const items = await SidebarConfig.find({ tenantId }).populate('roleIds', 'name').sort({ sectionOrder: 1, order: 1 });
     res.status(200).json(items);
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching sidebar configuration' });
@@ -123,10 +133,10 @@ export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) =
     const { id } = req.params;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const { label, order, requiredPermission, requiredFeature, categories, isActive } = req.body;
+    const { label, order, requiredPermission, requiredFeature, roleIds, isActive } = req.body;
     const item = await SidebarConfig.findOneAndUpdate(
       { _id: id, tenantId } as any,
-      { label, order, requiredPermission, requiredFeature, categories, isActive },
+      { label, order, requiredPermission, requiredFeature, roleIds, isActive },
       { returnDocument: 'after' }
     );
     if (!item) return res.status(404).json({ message: 'Sidebar item not found' });
@@ -148,8 +158,8 @@ export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) =
 };
 
 /**
- * Returns the sidebar items the CURRENT user should see — filtered by their
- * effective permissions, their role's category, and the tenant's enabled features.
+ * Returns the sidebar items the CURRENT user should see — filtered by their effective
+ * permissions, their specific role (roleIds opt-in), and the tenant's enabled features.
  * Unlike getSidebarConfig (admin-only, full unfiltered list for editing), this is
  * what the actual app sidebar renders, so it's open to any authenticated user.
  */
@@ -167,10 +177,14 @@ export const getMySidebar = async (req: AuthRequest, res: Response) => {
       getTenantFeatures(tenantId),
     ]);
 
-    const ctx = { category: resolveRoleCategory(role), effectivePermissions, tenantFeatures };
+    const ctx = {
+      roleId: req.user.roleId ? String(req.user.roleId) : undefined,
+      effectivePermissions,
+      tenantFeatures,
+    };
     const visible = items.filter((item) => isVisible(item, ctx));
 
-    res.status(200).json({ items: visible, roleCategory: ctx.category });
+    res.status(200).json({ items: visible, roleScope: resolveRoleScope(role) });
   } catch (error: any) {
     console.error('getMySidebar error:', error);
     res.status(500).json({ message: 'Error fetching sidebar' });
@@ -183,9 +197,39 @@ export const getDashboardWidgetConfig = async (req: AuthRequest, res: Response) 
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
     await syncDashboardWidgetDefaults(tenantId);
-    const widgets = await DashboardWidgetConfig.find({ tenantId }).sort({ category: 1, order: 1 });
+    const widgets = await DashboardWidgetConfig.find({ tenantId }).populate('roleIds', 'name').sort({ order: 1 });
     res.status(200).json(widgets);
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching dashboard widget configuration' });
+  }
+};
+
+export const updateDashboardWidgetConfigItem = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const { order, minScope, roleIds, isActive } = req.body;
+    const item = await DashboardWidgetConfig.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { order, minScope, roleIds, isActive },
+      { returnDocument: 'after', runValidators: true }
+    );
+    if (!item) return res.status(404).json({ message: 'Widget not found' });
+
+    await AuditLog.create({
+      tenantId,
+      userId: req.user!._id as any,
+      action: 'UPDATE_DASHBOARD_WIDGET_CONFIG',
+      module: 'Platform Admin',
+      status: 'SUCCESS',
+      ipAddress: req.ip as string,
+      details: { itemId: id },
+    });
+
+    res.status(200).json(item);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating dashboard widget' });
   }
 };
