@@ -50,6 +50,12 @@ export interface ICompany extends ITenantScoped, IAuditable {
   ownerName?: string;
   hrName?: string;
   alternatePhone?: string;
+  alternateEmail?: string;
+  whatsappNumber?: string;
+  preferredLanguage?: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  linkedInUrl?: string;
 
   pendingAdminFirstName?: string;
   pendingAdminLastName?: string;
@@ -57,6 +63,29 @@ export interface ICompany extends ITenantScoped, IAuditable {
   pendingAdminPhone?: string;
 
   selectedModules: string[];
+  addonModules?: string[];
+
+  documents?: {
+    incorporationCertUrl?: string;
+    gstCertUrl?: string;
+    panCardUrl?: string;
+    otherDocumentUrl?: string;
+  };
+
+  notificationPreferences?: {
+    biometric?: boolean;
+    sso?: boolean;
+    sms?: boolean;
+    geoTracking?: boolean;
+    email?: boolean;
+    whatsapp?: boolean;
+  };
+
+  weekStartsOn?: string;
+  dateFormat?: string;
+  timeFormat?: string;
+  numberFormat?: string;
+  leaveYearStartMonth?: number;
 
   organizationSetupPlan?: {
     branchesPlanned: number;
@@ -123,6 +152,12 @@ const CompanySchema = new Schema<ICompany>({
   ownerName: { type: String },
   hrName: { type: String },
   alternatePhone: { type: String },
+  alternateEmail: { type: String },
+  whatsappNumber: { type: String },
+  preferredLanguage: { type: String, default: 'English' },
+  supportEmail: { type: String },
+  supportPhone: { type: String },
+  linkedInUrl: { type: String },
 
   pendingAdminFirstName: { type: String },
   pendingAdminLastName: { type: String },
@@ -130,6 +165,29 @@ const CompanySchema = new Schema<ICompany>({
   pendingAdminPhone: { type: String },
 
   selectedModules: [{ type: String }],
+  addonModules: [{ type: String }],
+
+  documents: {
+    incorporationCertUrl: { type: String },
+    gstCertUrl: { type: String },
+    panCardUrl: { type: String },
+    otherDocumentUrl: { type: String },
+  },
+
+  notificationPreferences: {
+    biometric: { type: Boolean, default: false },
+    sso: { type: Boolean, default: false },
+    sms: { type: Boolean, default: false },
+    geoTracking: { type: Boolean, default: false },
+    email: { type: Boolean, default: true },
+    whatsapp: { type: Boolean, default: false },
+  },
+
+  weekStartsOn: { type: String },
+  dateFormat: { type: String },
+  timeFormat: { type: String },
+  numberFormat: { type: String },
+  leaveYearStartMonth: { type: Number },
 
   organizationSetupPlan: {
     branchesPlanned: { type: Number, default: 0 },

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import {
   createFeature, createPackage, createPermission, createTenant, deleteFeature, deleteTenant, getAiUsageLogs,
-  getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, updateFeature, updatePackage, updateTenant,
+  getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
-  resendCompanyCredentials,
+  resendCompanyCredentials, getNextCorporateId,
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
@@ -29,7 +29,9 @@ router.get('/audit-logs', getPlatformAuditLogs);
 router.get('/tickets', getPlatformTickets);
 router.get('/reports/summary', getReportsSummary);
 
+router.get('/next-corporate-id', getNextCorporateId);
 router.get('/tenants', getAllTenants);
+router.get('/tenants/:id', getTenantById);
 router.post('/tenants', createTenant);
 router.put('/tenants/:id', updateTenant);
 router.delete('/tenants/:id', deleteTenant);
