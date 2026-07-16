@@ -17,6 +17,11 @@ import { createCompanyDraft } from '../controllers/companyWizardController';
 import { getLifecycleTimeline, advanceLifecycle, setLifecycleStatus, provisionWorkspace } from '../controllers/companyLifecycleController';
 import { getAllBanners, createBanner, updateBanner, deleteBanner } from '../controllers/bannerController';
 import { getAutomationRules, updateAutomationRule, getAutomationLogs, runAutomationNow } from '../controllers/automationController';
+import {
+  getAllIndustries, createIndustry, updateIndustry, deleteIndustry,
+  getAllCompanySizes, createCompanySize, updateCompanySize, deleteCompanySize,
+  getAllTimeZones, createTimeZone, updateTimeZone, deleteTimeZone
+} from '../controllers/platformMasterDataController';
 import { authenticate } from '../middleware/auth';
 import { checkPermission } from '../middleware/rbac';
 
@@ -117,5 +122,20 @@ router.get('/automation/rules', getAutomationRules);
 router.put('/automation/rules/:type', updateAutomationRule);
 router.get('/automation/logs', getAutomationLogs);
 router.post('/automation/run', runAutomationNow);
+
+router.get('/industries', getAllIndustries);
+router.post('/industries', createIndustry);
+router.put('/industries/:id', updateIndustry);
+router.delete('/industries/:id', deleteIndustry);
+
+router.get('/company-sizes', getAllCompanySizes);
+router.post('/company-sizes', createCompanySize);
+router.put('/company-sizes/:id', updateCompanySize);
+router.delete('/company-sizes/:id', deleteCompanySize);
+
+router.get('/time-zones', getAllTimeZones);
+router.post('/time-zones', createTimeZone);
+router.put('/time-zones/:id', updateTimeZone);
+router.delete('/time-zones/:id', deleteTimeZone);
 
 export default router;
