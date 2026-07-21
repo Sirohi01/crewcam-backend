@@ -780,6 +780,7 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
   try {
     const {
       name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features,
+      planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD,
     } = req.body;
@@ -793,6 +794,10 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
       maxDesignations,
       maxUsers,
       features,
+      planCode,
+      planBadge,
+      displayOrder,
+      targetAudience,
       priceINR,
       priceUSD,
       pricePerUserMonthlyINR,
@@ -819,6 +824,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const {
       name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features,
+      planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD, isActive,
     } = req.body;
@@ -835,6 +841,10 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(maxDesignations !== undefined && { maxDesignations }),
         ...(maxUsers !== undefined && { maxUsers }),
         ...(features !== undefined && { features }),
+        ...(planCode !== undefined && { planCode }),
+        ...(planBadge !== undefined && { planBadge }),
+        ...(displayOrder !== undefined && { displayOrder }),
+        ...(targetAudience !== undefined && { targetAudience }),
         ...(priceINR !== undefined && { priceINR }),
         ...(priceUSD !== undefined && { priceUSD }),
         ...(pricePerUserMonthlyINR !== undefined && { pricePerUserMonthlyINR }),
