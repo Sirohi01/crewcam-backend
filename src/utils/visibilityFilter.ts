@@ -4,6 +4,8 @@ import { RoleScope, SCOPE_RANK } from '../models/Role';
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 export const getTenantFeatures = async (tenantId: string): Promise<string[]> => {
+  if (tenantId === 'SUPER_ADMIN') return ['*'];
+  
   const tenant = await Tenant.findById(tenantId).populate('packageId').lean();
   const pkg: any = (tenant as any)?.packageId;
   if (!pkg || !pkg.isActive) return [];
