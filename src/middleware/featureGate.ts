@@ -12,6 +12,11 @@ export const requireFeature = (feature: string) => {
       }
 
       const tenantId = req.tenantId || req.user?.tenantId;
+      
+      if (tenantId === 'SUPER_ADMIN') {
+        return next();
+      }
+
       const tenant = await Tenant.findById(tenantId).populate('packageId').lean();
       const pkg: any = tenant?.packageId;
 
