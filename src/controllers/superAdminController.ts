@@ -10,6 +10,9 @@ import { User } from '../models/User';
 import { AiUsageLog } from '../models/AiUsageLog';
 import { AuditLog } from '../models/AuditLog';
 import { Payment } from '../models/Payment';
+import { Attendance } from '../models/Attendance';
+import { LeaveRequest } from '../models/LeaveRequest';
+import { Ticket } from '../models/Ticket';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
 import { Counter } from '../models/Counter';
 import bcrypt from 'bcrypt';
@@ -237,6 +240,40 @@ export const getTenantById = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error fetching tenant details:', error);
     res.status(500).json({ message: 'Internal server error while fetching tenant details' });
+  }
+};
+
+export const getTenantDashboardStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const tenantId = id;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const [totalEmployees, presentToday, onLeave, newJoiners, openTickets] = await Promise.all([
+      User.countDocuments({ tenantId, isActive: true }),
+      Attendance.countDocuments({ tenantId, date: { $gte: startOfDay, $lte: endOfDay }, status: 'Present' }),
+      LeaveRequest.countDocuments({ tenantId, status: 'Approved', startDate: { $lte: endOfDay }, endDate: { $gte: startOfDay } }),
+      User.countDocuments({ tenantId, createdAt: { $gte: startOfMonth } }),
+      Ticket.countDocuments({ tenantId, status: { $ne: 'Closed' } })
+    ]);
+
+    res.status(200).json({
+      totalEmployees,
+      presentToday,
+      onLeave,
+      newJoiners,
+      openTickets,
+      monthlyPayroll: 2875000 // Placeholder
+    });
+  } catch (error) {
+    console.error('Error fetching tenant dashboard stats:', error);
+    res.status(500).json({ message: 'Internal server error while fetching tenant dashboard stats' });
   }
 };
 
@@ -768,11 +805,11 @@ export const topUpAiCredits = async (req: AuthRequest, res: Response) => {
 
 export const getAllPackages = async (req: AuthRequest, res: Response) => {
   try {
-    const packages = await Package.find({ isActive: true });
+    const packages = await Package.find({ isActive: true }).lean();
     res.status(200).json(packages);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching packages:', error);
-    res.status(500).json({ message: 'Internal server error while fetching packages' });
+    res.status(500).json({ message: 'Internal server error while fetching packages', error: error?.message, stack: error?.stack });
   }
 };
 
@@ -780,6 +817,7 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
   try {
     const {
       name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features,
+      planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD,
     } = req.body;
@@ -793,6 +831,10 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
       maxDesignations,
       maxUsers,
       features,
+      planCode,
+      planBadge,
+      displayOrder,
+      targetAudience,
       priceINR,
       priceUSD,
       pricePerUserMonthlyINR,
@@ -819,6 +861,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const {
       name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features,
+      planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD, isActive,
     } = req.body;
@@ -835,6 +878,10 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(maxDesignations !== undefined && { maxDesignations }),
         ...(maxUsers !== undefined && { maxUsers }),
         ...(features !== undefined && { features }),
+        ...(planCode !== undefined && { planCode }),
+        ...(planBadge !== undefined && { planBadge }),
+        ...(displayOrder !== undefined && { displayOrder }),
+        ...(targetAudience !== undefined && { targetAudience }),
         ...(priceINR !== undefined && { priceINR }),
         ...(priceUSD !== undefined && { priceUSD }),
         ...(pricePerUserMonthlyINR !== undefined && { pricePerUserMonthlyINR }),

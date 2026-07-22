@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   createFeature, createPackage, createPermission, createTenant, deleteFeature, deleteTenant, getAiUsageLogs,
-  getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, updateFeature, updatePackage, updateTenant,
+  getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
   resendCompanyCredentials, getNextCorporateId,
 } from '../controllers/superAdminController';
@@ -37,6 +37,7 @@ router.get('/reports/summary', getReportsSummary);
 router.get('/next-corporate-id', getNextCorporateId);
 router.get('/tenants', getAllTenants);
 router.get('/tenants/:id', getTenantById);
+router.get('/tenants/:id/dashboard-stats', getTenantDashboardStats);
 router.post('/tenants', createTenant);
 router.put('/tenants/:id', updateTenant);
 router.delete('/tenants/:id', deleteTenant);
