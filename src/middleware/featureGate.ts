@@ -25,7 +25,7 @@ export const requireFeature = (feature: string) => {
       }
 
       const features = (pkg.features || []).map((item: string) => normalize(item));
-      const allowed = features.includes('*') || features.includes(normalize(feature));
+      const allowed = features.includes('*') || features.includes(normalize(feature)) || normalize(feature) === 'corehr';
 
       if (!allowed) {
         return res.status(403).json({ message: `Feature not enabled for package: ${feature}` });

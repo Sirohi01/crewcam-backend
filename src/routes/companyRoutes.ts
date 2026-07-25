@@ -7,7 +7,7 @@ import { requireFeature } from '../middleware/featureGate';
 
 import { 
   getBranches, createBranch, deleteBranch,
-  getDepartments, createDepartment, deleteDepartment,
+  getDepartments, createDepartment, deleteDepartment, getDepartmentById,
   getDesignations, createDesignation, deleteDesignation,
   updateBranch, updateDepartment, updateDesignation
 } from '../controllers/organizationController';
@@ -31,6 +31,7 @@ router.put('/branches/:id', requireFeature('Core HR'), checkPermission('ORG_WRIT
 router.delete('/branches/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteBranch);
 
 router.get('/departments', requireFeature('Core HR'), checkPermission('ORG_READ'), getDepartments);
+router.get('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_READ'), getDepartmentById);
 router.post('/departments', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createDepartment);
 router.put('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateDepartment);
 router.delete('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteDepartment);

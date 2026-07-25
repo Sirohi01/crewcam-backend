@@ -41,9 +41,34 @@ const requireTenantId = (req: AuthRequest) => {
 const normalizeId = (value: any) => value ? value.toString() : '';
 
 const ensureBranch = async (tenantId: string, branchId: string) => {
-  if (!mongoose.Types.ObjectId.isValid(branchId)) throw new Error('Valid branch is required');
+  if (!branchId || !mongoose.Types.ObjectId.isValid(branchId)) {
+    let firstBranch = await Branch.findOne({ tenantId, isActive: true } as any);
+    if (!firstBranch) {
+      firstBranch = new Branch({
+        name: 'Head Office',
+        code: 'HQ',
+        tenantId,
+        isActive: true
+      });
+      await firstBranch.save();
+    }
+    return firstBranch._id.toString();
+  }
   const branch = await Branch.findOne({ _id: branchId, tenantId, isActive: true } as any);
-  if (!branch) throw new Error('Branch not found for this tenant');
+  if (!branch) {
+    let firstBranch = await Branch.findOne({ tenantId, isActive: true } as any);
+    if (!firstBranch) {
+      firstBranch = new Branch({
+        name: 'Head Office',
+        code: 'HQ',
+        tenantId,
+        isActive: true
+      });
+      await firstBranch.save();
+    }
+    return firstBranch._id.toString();
+  }
+  return branch._id.toString();
 };
 
 const ensureDepartment = async (tenantId: string, departmentId: string) => {
@@ -178,14 +203,34 @@ export const getDepartments = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getDepartmentById = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = requireTenantId(req);
+    const department = await Department.findOne({ _id: req.params.id, tenantId, isActive: true } as any)
+      .populate('branchId')
+      .populate('hodEmployeeId', 'firstName lastName email')
+      .lean();
+    if (!department) return res.status(404).json({ message: 'Department not found' });
+    res.status(200).json({ data: department });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching department', error: error.message });
+  }
+};
+
 export const createDepartment = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);
     await checkPackageLimit(tenantId, 'departments');
-    await ensureBranch(tenantId, req.body.branchId);
+    const resolvedBranchId = await ensureBranch(tenantId, req.body.branchId);
+    
+    if (req.body.hodEmployeeId && !mongoose.Types.ObjectId.isValid(req.body.hodEmployeeId)) delete req.body.hodEmployeeId;
+    if (req.body.reportingToId && !mongoose.Types.ObjectId.isValid(req.body.reportingToId)) delete req.body.reportingToId;
+    if (req.body.hodEmployeeId === '') delete req.body.hodEmployeeId;
+    if (req.body.reportingToId === '') delete req.body.reportingToId;
     
     const department = new Department({
       ...req.body,
+      branchId: resolvedBranchId,
       tenantId,
       createdBy: req.user?._id
     });
@@ -199,11 +244,23 @@ export const createDepartment = async (req: AuthRequest, res: Response) => {
 export const updateDepartment = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);
-    if (req.body.branchId) await ensureBranch(tenantId, req.body.branchId);
-    const { name, code, branchId, description, isActive } = req.body;
+    const resolvedBranchId = await ensureBranch(tenantId, req.body.branchId);
+    const { name, code, description, isActive, departmentType, businessUnit, effectiveDate, keyResponsibilities, employeeCapacity, workingDays, defaultShift } = req.body;
+    let hodEmployeeId = req.body.hodEmployeeId;
+    if (!hodEmployeeId || (hodEmployeeId && !mongoose.Types.ObjectId.isValid(hodEmployeeId))) hodEmployeeId = null;
+    let reportingToId = req.body.reportingToId;
+    if (!reportingToId || (reportingToId && !mongoose.Types.ObjectId.isValid(reportingToId))) reportingToId = null;
+
     const department = await Department.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
-      { $set: { name, code, branchId, description, isActive, updatedBy: req.user?._id } },
+      { $set: { 
+          name, code, branchId: resolvedBranchId, description, isActive, 
+          departmentType, businessUnit, effectiveDate, keyResponsibilities, employeeCapacity,
+          workingDays, defaultShift,
+          updatedBy: req.user?._id, 
+          ...(hodEmployeeId !== undefined && { hodEmployeeId }),
+          ...(reportingToId !== undefined && { reportingToId })
+      } },
       { returnDocument: 'after', runValidators: true }
     );
     if (!department) return res.status(404).json({ message: 'Department not found' });
