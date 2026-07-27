@@ -56,7 +56,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   { section: 'Company Setup', label: 'Company Profile', href: '/dashboard/settings/company', icon: 'UserCog', order: 0, requiredPermission: 'COMPANY_PROFILE_READ' },
   { section: 'Company Setup', label: 'Manage Branch', href: '/dashboard/branches', icon: 'Building2', order: 1, requiredPermission: 'ORG_READ' },
   { section: 'Company Setup', label: 'Manage Department', href: '/dashboard/departments', icon: 'ListTree', order: 2, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Manage Designation', href: '/dashboard/designations', icon: 'Briefcase', order: 3, requiredPermission: 'ORG_READ' },
+  { section: 'Company Setup', label: 'Manage Designation', href: '/dashboard/divisions/designations', icon: 'Briefcase', order: 3, requiredPermission: 'ORG_READ' },
   { section: 'Company Setup', label: 'Manage Roles', href: '/dashboard/roles', icon: 'KeyRound', order: 4, requiredPermission: 'ORG_READ' },
   ...[
     ['Job Levels', 'levels'], ['Statuses', 'statuses'], ['Policies', 'policies'],
@@ -206,7 +206,9 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
 
   // ---- Sidebar Section ----
   { section: 'Sidebar Section', label: 'Side Bar List', href: '/dashboard/settings/sidebar', icon: 'ListTree', order: 0, requiredPermission: 'ROLE_ADMIN' },
+  { section: 'Sidebar Section', label: 'Sidebar Management', href: '/dashboard/settings/sidebar-management', icon: 'ListTree', order: 0.5, requiredPermission: 'ROLE_ADMIN' },
   { section: 'Sidebar Section', label: 'User Role', href: '/dashboard/settings/roles', icon: 'ShieldCheck', order: 1, requiredPermission: 'ROLE_ADMIN' },
+  { section: 'Sidebar Section', label: 'Role Rights', href: '/dashboard/settings/role-rights', icon: 'ShieldCheck', order: 1.5, requiredPermission: 'ROLE_ADMIN' },
   { section: 'Sidebar Section', label: 'Dashboard Widgets', href: '/dashboard/settings/dashboard-widgets', icon: 'LayoutDashboard', order: 2, requiredPermission: 'ROLE_ADMIN' },
 
   // ---- Admin Section ----
