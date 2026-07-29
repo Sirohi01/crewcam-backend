@@ -34,6 +34,7 @@ import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
 import jdKpaRoutes from './routes/jdKpaRoutes';
 import locationRoutes from './routes/locationRoutes';
 import webhookRoutes from './routes/webhookRoutes';
+import designationRoutes from './routes/designationRoutes';
 
 export function createApp() {
   const app = express();
@@ -117,6 +118,7 @@ export function createApp() {
   app.use('/api/v1/ai', aiHiringRoutes);
   app.use('/api/v1/ai', aiEmployeeRoutes);
   app.use('/api/v1', jdKpaRoutes);
+  app.use('/api/v1/designations', designationRoutes);
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
