@@ -322,7 +322,7 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
       details: { interviewId: id },
     } as any);
 
-    const populated = await Interview.findById(id)
+    const populated = await Interview.findOne({ _id: id, tenantId } as any)
       .populate('candidateId', 'firstName lastName email phone jobRole status profileImageUrl source rating comments resumeUrl')
       .populate('interviewerId', 'firstName lastName email');
     res.status(200).json(populated);

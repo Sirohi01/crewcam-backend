@@ -606,7 +606,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     if (adminRole) {
       adminUser = await User.findOne({ tenantId: id as string, roleId: adminRole._id });
     }
-    
+
     if (adminUser) {
       if (adminFirstName) adminUser.firstName = adminFirstName;
       if (adminLastName) adminUser.lastName = adminLastName;

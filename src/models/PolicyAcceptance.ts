@@ -2,6 +2,13 @@ import mongoose, { Schema, Types } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IPolicyAcceptance extends ITenantScoped {
+  candidateName?: string;
+  employeeCode?: string;
+  designation?: string;
+  department?: string;
+  dateOfJoining?: string;
+  workLocation?: string;
+
   candidateId?: Types.ObjectId;
   employeeId?: Types.ObjectId;
   policyId?: Types.ObjectId;
@@ -24,6 +31,13 @@ export interface IPolicyAcceptance extends ITenantScoped {
 }
 
 const policyAcceptanceSchema = new Schema<IPolicyAcceptance>({
+  candidateName: { type: String },
+  employeeCode: { type: String },
+  designation: { type: String },
+  department: { type: String },
+  dateOfJoining: { type: String },
+  workLocation: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate' },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
   policyId: { type: Schema.Types.ObjectId, ref: 'Policy' },

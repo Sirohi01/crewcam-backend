@@ -2,6 +2,14 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IJoiningConfirmation extends ITenantScoped {
+  candidateName?: string;
+  designation?: string;
+  department?: string;
+  joiningDate?: string;
+  reportingTo?: string;
+  failureToReportDate?: string;
+  subject?: string;
+
   candidateId: Types.ObjectId;
   confirmedJoiningDate: Date;
   reportingManagerId?: Types.ObjectId;
@@ -16,6 +24,14 @@ export interface IJoiningConfirmation extends ITenantScoped {
 }
 
 const joiningConfirmationSchema = new Schema<IJoiningConfirmation>({
+  candidateName: { type: String },
+  designation: { type: String },
+  department: { type: String },
+  joiningDate: { type: String },
+  reportingTo: { type: String },
+  failureToReportDate: { type: String },
+  subject: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   confirmedJoiningDate: { type: Date, required: true },
   reportingManagerId: { type: Schema.Types.ObjectId, ref: 'User' },

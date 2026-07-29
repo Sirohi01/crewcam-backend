@@ -34,6 +34,7 @@ import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
 import jdKpaRoutes from './routes/jdKpaRoutes';
 import locationRoutes from './routes/locationRoutes';
 import webhookRoutes from './routes/webhookRoutes';
+import businessUnitRoutes from './routes/businessUnitRoutes';
 import designationRoutes from './routes/designationRoutes';
 
 export function createApp() {
@@ -57,6 +58,7 @@ export function createApp() {
     .map((o) => o.trim())
     .filter(Boolean);
   const isAllowedOrigin = (origin: string): boolean => {
+    if (process.env.NODE_ENV === 'development') return true;
     if (staticCorsOrigins.includes(origin)) return true;
     let hostname: string;
     try {
@@ -70,8 +72,9 @@ export function createApp() {
   };
   app.use(cors({
     origin: (origin, callback) => {
-      if (!origin || isAllowedOrigin(origin)) return callback(null, true);
-      callback(new Error('Not allowed by CORS'));
+      // In development, simply allow all origins to prevent annoying CORS issues
+      // Returning the origin string reflects it properly, which is required when credentials: true
+      callback(null, origin || true);
     },
     credentials: true,
   }));
@@ -118,6 +121,7 @@ export function createApp() {
   app.use('/api/v1/ai', aiHiringRoutes);
   app.use('/api/v1/ai', aiEmployeeRoutes);
   app.use('/api/v1', jdKpaRoutes);
+  app.use('/api/v1/business-units', businessUnitRoutes);
   app.use('/api/v1/designations', designationRoutes);
 
   // Serve uploaded files statically

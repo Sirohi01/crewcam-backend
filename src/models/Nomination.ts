@@ -15,6 +15,33 @@ export interface INominee {
 }
 
 export interface INomination extends ITenantScoped {
+  employeeName?: string;
+  empCode?: string;
+  designation?: string;
+  department?: string;
+  fatherHusbandSpouse?: string;
+  gender?: string;
+  dateOfJoining?: string;
+  mobileNumber?: string;
+  emailId?: string;
+  reportingTo?: string;
+  workLocation?: string;
+  nominee1FullName?: string;
+  nominee1Relationship?: string;
+  nominee1Dob?: string;
+  nominee1Mobile?: string;
+  nominee1Address?: string;
+  nominee1Percentage?: string;
+  nominee2FullName?: string;
+  nominee2Relationship?: string;
+  nominee2Dob?: string;
+  nominee2Mobile?: string;
+  nominee2Percentage?: string;
+  nominee2Address?: string;
+  guardianMobile?: string;
+  verifiedBy?: string;
+  verifierRemarks?: string;
+
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
   nominationType: 'PF' | 'Gratuity' | 'Insurance';
@@ -32,6 +59,33 @@ export interface INomination extends ITenantScoped {
 }
 
 const nominationSchema = new Schema<INomination>({
+  employeeName: { type: String },
+  empCode: { type: String },
+  designation: { type: String },
+  department: { type: String },
+  fatherHusbandSpouse: { type: String },
+  gender: { type: String },
+  dateOfJoining: { type: String },
+  mobileNumber: { type: String },
+  emailId: { type: String },
+  reportingTo: { type: String },
+  workLocation: { type: String },
+  nominee1FullName: { type: String },
+  nominee1Relationship: { type: String },
+  nominee1Dob: { type: String },
+  nominee1Mobile: { type: String },
+  nominee1Address: { type: String },
+  nominee1Percentage: { type: String },
+  nominee2FullName: { type: String },
+  nominee2Relationship: { type: String },
+  nominee2Dob: { type: String },
+  nominee2Mobile: { type: String },
+  nominee2Percentage: { type: String },
+  nominee2Address: { type: String },
+  guardianMobile: { type: String },
+  verifiedBy: { type: String },
+  verifierRemarks: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
   nominationType: { type: String, enum: ['PF', 'Gratuity', 'Insurance'], required: true },

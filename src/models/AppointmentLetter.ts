@@ -2,6 +2,20 @@ import mongoose, { Schema, Types } from 'mongoose';
 import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IAppointmentLetter extends ITenantScoped {
+  date?: string;
+  candidateName?: string;
+  dearName?: string;
+  department?: string;
+  position?: string;
+  commencementDate?: string;
+  reportingTime?: string;
+  reportingLocation?: string;
+  monthlyCTC?: string;
+  annualCTC?: string;
+  probationPeriod?: string;
+  workingHoursStart?: string;
+  subject?: string;
+
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
 
@@ -43,6 +57,20 @@ export interface IAppointmentLetter extends ITenantScoped {
 }
 
 const appointmentLetterSchema = new Schema<IAppointmentLetter>({
+  date: { type: String },
+  candidateName: { type: String },
+  dearName: { type: String },
+  department: { type: String },
+  position: { type: String },
+  commencementDate: { type: String },
+  reportingTime: { type: String },
+  reportingLocation: { type: String },
+  monthlyCTC: { type: String },
+  annualCTC: { type: String },
+  probationPeriod: { type: String },
+  workingHoursStart: { type: String },
+  subject: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
 

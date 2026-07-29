@@ -8,6 +8,23 @@ export interface IEvaluationCriterion {
 }
 
 export interface IInterviewEvaluation extends ITenantScoped {
+  candidateName?: string;
+  department?: string;
+  position?: string;
+  contactNo?: string;
+  emailId?: string;
+  interviewDate?: string;
+  interviewMode?: string;
+  interviewerName?: string;
+  workLocation?: string;
+  reportingTo?: string;
+  topStrengths?: string;
+  salaryRangeFrom?: string;
+  earliestJoining?: string;
+  interviewerStatus?: string;
+  hrReviewStatus?: string;
+  hodFinalStatus?: string;
+
   candidateId: Types.ObjectId;
   interviewId?: Types.ObjectId;
   interviewerId: Types.ObjectId;
@@ -35,6 +52,23 @@ export interface IInterviewEvaluation extends ITenantScoped {
 }
 
 const interviewEvaluationSchema = new Schema<IInterviewEvaluation>({
+  candidateName: { type: String },
+  department: { type: String },
+  position: { type: String },
+  contactNo: { type: String },
+  emailId: { type: String },
+  interviewDate: { type: String },
+  interviewMode: { type: String },
+  interviewerName: { type: String },
+  workLocation: { type: String },
+  reportingTo: { type: String },
+  topStrengths: { type: String },
+  salaryRangeFrom: { type: String },
+  earliestJoining: { type: String },
+  interviewerStatus: { type: String },
+  hrReviewStatus: { type: String },
+  hodFinalStatus: { type: String },
+
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   interviewId: { type: Schema.Types.ObjectId, ref: 'Interview' },
   interviewerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },

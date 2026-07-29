@@ -42,5 +42,5 @@
     "skipLibCheck": true,
   },
   "include": ["src/**/*"],
-  "exclude": ["scripts", "dist", "node_modules"]
+  "exclude": ["scripts", "dist", "node_modules", "seedPackages.ts"]
 }

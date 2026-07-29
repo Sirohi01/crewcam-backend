@@ -117,3 +117,29 @@ export function buildPasswordResetEmail(params: {
     `,
   };
 }
+
+export function buildEmployeeWelcomeEmail(params: {
+  companyName: string;
+  firstName: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+}): { subject: string; html: string } {
+  const { companyName, firstName, email, password, loginUrl } = params;
+  return {
+    subject: `Welcome to ${companyName}! Your login credentials are inside.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #18181b;">
+        <h2 style="margin-bottom: 4px;">Welcome to ${companyName}!</h2>
+        <p style="color: #52525b;">Hi ${firstName}, your employee account has been created on CrewCam HR Cloud.</p>
+        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+          <tr><td style="padding: 8px 0; color: #71717a; width: 120px;">Login URL</td><td style="padding: 8px 0;"><a href="${loginUrl}">${loginUrl}</a></td></tr>
+          <tr><td style="padding: 8px 0; color: #71717a;">Email</td><td style="padding: 8px 0;">${email}</td></tr>
+          <tr><td style="padding: 8px 0; color: #71717a;">Password</td><td style="padding: 8px 0; font-family: monospace; font-size: 16px;">${password}</td></tr>
+        </table>
+        <p style="color: #71717a; font-size: 13px;">For security, please log in and change your password as soon as possible.</p>
+      </div>
+    `,
+  };
+}
+
