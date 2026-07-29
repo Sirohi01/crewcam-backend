@@ -127,17 +127,58 @@ export const getSidebarConfig = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const createSidebarConfigItem = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const { section, sectionOrder, label, href, icon, order, parent, requiredPermission, requiredFeature, roleIds, isActive } = req.body;
+    
+    const item = await SidebarConfig.create({
+      tenantId,
+      section,
+      sectionOrder,
+      label,
+      href,
+      icon,
+      order,
+      parent,
+      requiredPermission,
+      requiredFeature,
+      roleIds,
+      isActive
+    });
+
+    await AuditLog.create({
+      tenantId,
+      userId: req.user!._id as any,
+      action: 'CREATE_SIDEBAR_CONFIG',
+      module: 'Platform Admin',
+      status: 'SUCCESS',
+      ipAddress: req.ip as string,
+      details: { itemId: item._id },
+    });
+
+    res.status(201).json(item);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error creating sidebar item' });
+  }
+};
+
 export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const { label, order, requiredPermission, requiredFeature, roleIds, isActive } = req.body;
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.tenantId;
+
     const item = await SidebarConfig.findOneAndUpdate(
       { _id: id, tenantId } as any,
-      { label, order, requiredPermission, requiredFeature, roleIds, isActive },
-      { returnDocument: 'after' }
+      { $set: updateData },
+      { new: true }
     );
     if (!item) return res.status(404).json({ message: 'Sidebar item not found' });
 
@@ -154,6 +195,31 @@ export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) =
     res.status(200).json(item);
   } catch (error: any) {
     res.status(500).json({ message: 'Error updating sidebar item' });
+  }
+};
+
+export const deleteSidebarConfigItem = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const item = await SidebarConfig.findOneAndDelete({ _id: id, tenantId } as any);
+    if (!item) return res.status(404).json({ message: 'Sidebar item not found' });
+
+    await AuditLog.create({
+      tenantId,
+      userId: req.user!._id as any,
+      action: 'DELETE_SIDEBAR_CONFIG',
+      module: 'Platform Admin',
+      status: 'SUCCESS',
+      ipAddress: req.ip as string,
+      details: { itemId: id, label: item.label },
+    });
+
+    res.status(200).json({ message: 'Sidebar item deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error deleting sidebar item' });
   }
 };
 
