@@ -11,6 +11,9 @@ import {
   getDesignations, createDesignation, deleteDesignation,
   updateBranch, updateDepartment, updateDesignation
 } from '../controllers/organizationController';
+import {
+  getJobFamilies, getJobFamilyById, createJobFamily, updateJobFamily, deleteJobFamily
+} from '../controllers/jobFamilyController';
 
 const router = Router();
 router.use(authenticate);
@@ -40,5 +43,11 @@ router.get('/designations', requireFeature('Core HR'), checkPermission('ORG_READ
 router.post('/designations', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createDesignation);
 router.put('/designations/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateDesignation);
 router.delete('/designations/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteDesignation);
+
+router.get('/job-families', requireFeature('Core HR'), checkPermission('ORG_READ'), getJobFamilies);
+router.get('/job-families/:id', requireFeature('Core HR'), checkPermission('ORG_READ'), getJobFamilyById);
+router.post('/job-families', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createJobFamily);
+router.put('/job-families/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateJobFamily);
+router.delete('/job-families/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteJobFamily);
 
 export default router;

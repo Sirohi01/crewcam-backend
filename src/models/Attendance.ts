@@ -34,6 +34,9 @@ const attendanceSchema = new Schema<IAttendance>({
   timestamps: true
 });
 
+attendanceSchema.index({ tenantId: 1, userId: 1, date: -1 });
+attendanceSchema.index({ tenantId: 1, date: -1, status: 1 });
+
 import { tenantPlugin } from './plugins/tenantPlugin';
 attendanceSchema.plugin(tenantPlugin);
 
