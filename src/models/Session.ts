@@ -27,6 +27,8 @@ const SessionSchema = new Schema<ISession>({
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
+SessionSchema.index({ userId: 1, isActive: 1 });
+
 // Auto-expire sessions
 SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

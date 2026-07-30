@@ -26,6 +26,9 @@ const notificationSchema = new Schema<INotification>({
   readBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
+notificationSchema.index({ tenantId: 1, createdAt: -1 });
+notificationSchema.index({ tenantId: 1, audienceType: 1, audienceValue: 1 });
+
 notificationSchema.plugin(tenantPlugin);
 
 export const Notification = mongoose.model<INotification>('Notification', notificationSchema);
