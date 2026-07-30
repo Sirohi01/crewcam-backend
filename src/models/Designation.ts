@@ -5,8 +5,8 @@ import { auditPlugin, IAuditable } from './plugins/auditPlugin';
 export interface IDesignation extends ITenantScoped, IAuditable {
   name: string;
   code: string;
-  jobGrade?: string;
-  jobFamily?: string;
+  jobGrade?: mongoose.Types.ObjectId;
+  jobFamily?: mongoose.Types.ObjectId;
   businessUnit?: string;
   division?: string;
   departmentId?: mongoose.Types.ObjectId;
@@ -31,8 +31,8 @@ export interface IDesignation extends ITenantScoped, IAuditable {
 const DesignationSchema = new Schema<IDesignation>({
   name: { type: String, required: true },
   code: { type: String, required: true },
-  jobGrade: { type: String },
-  jobFamily: { type: String },
+  jobGrade: { type: Schema.Types.ObjectId, ref: 'JobGrade' },
+  jobFamily: { type: Schema.Types.ObjectId, ref: 'JobFamily' },
   businessUnit: { type: String },
   division: { type: String },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
