@@ -98,18 +98,13 @@ const UserSchema = new Schema<IUser>({
   shiftTimingId: { type: Schema.Types.ObjectId, ref: 'ShiftTiming' },
   allocatedInventoryIds: [{ type: Schema.Types.ObjectId, ref: 'ITInventory' }],
   jobLevelId: { type: Schema.Types.ObjectId, ref: 'Level' },
-  employmentStatus: { type: String, enum: ['active', 'ex'], default: 'active', index: true },
-  isActive: { type: Boolean, default: true, index: true },
+  employmentStatus: { type: String, enum: ['active', 'ex'], default: 'active' },
+  isActive: { type: Boolean, default: true },
   twoFactorEnabled: { type: Boolean, default: false },
   twoFactorSecret: { type: String },
   failedLoginAttempts: { type: Number, default: 0 },
   lockoutUntil: { type: Date },
 }, { timestamps: true });
-
-UserSchema.index({ tenantId: 1, isActive: 1, employmentStatus: 1 });
-UserSchema.index({ tenantId: 1, email: 1 });
-UserSchema.index({ tenantId: 1, departmentId: 1 });
-UserSchema.index({ tenantId: 1, reportingToId: 1 });
 
 // Plugins
 UserSchema.plugin(tenantPlugin);

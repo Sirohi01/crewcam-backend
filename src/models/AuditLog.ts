@@ -24,9 +24,6 @@ const auditLogSchema = new Schema<IAuditLog>({
   createdAt: { type: Date, default: Date.now },
 });
 
-auditLogSchema.index({ tenantId: 1, createdAt: -1 });
-auditLogSchema.index({ tenantId: 1, userId: 1, action: 1 });
-
 auditLogSchema.plugin(tenantPlugin);
 
 export const AuditLog = mongoose.model<IAuditLog>('AuditLog', auditLogSchema);

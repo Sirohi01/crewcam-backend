@@ -111,10 +111,6 @@ const applyHierarchyAssignments = async (tenantId: string, employeeId: any, body
 
 export const getEmployees = async (req: AuthRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const skip = (page - 1) * limit;
-
     const status = req.query.status === 'ex' ? 'ex' : 'active';
     const filter = status === 'active'
       ? { tenantId: requireTenantId(req), $or: [{ employmentStatus: 'active' }, { employmentStatus: { $exists: false } }] }
@@ -131,8 +127,6 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
       .populate('holidayGroupId', 'name')
       .populate('jobLevelId', 'name')
       .select('-passwordHash')
-      .skip(skip)
-      .limit(limit)
       .lean();
     res.status(200).json({ data: employees });
   } catch (error) {

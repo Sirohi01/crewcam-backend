@@ -29,9 +29,6 @@ const leaveRequestSchema = new Schema<ILeaveRequest>({
   timestamps: true
 });
 
-leaveRequestSchema.index({ tenantId: 1, userId: 1, status: 1 });
-leaveRequestSchema.index({ tenantId: 1, status: 1 });
-
 leaveRequestSchema.plugin(tenantPlugin);
 
 export const LeaveRequest = mongoose.model<ILeaveRequest>('LeaveRequest', leaveRequestSchema);

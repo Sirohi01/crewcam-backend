@@ -131,10 +131,6 @@ const LeadSchema = new Schema<ILead>({
   lastFollowUpReminderAt: { type: Date },
 }, { timestamps: true });
 
-LeadSchema.index({ stage: 1, temperature: 1 });
-LeadSchema.index({ assignedTo: 1, stage: 1 });
-LeadSchema.index({ followUpDate: 1 });
-
 LeadSchema.plugin(auditPlugin);
 
 export const Lead = mongoose.model<ILead>('Lead', LeadSchema);
