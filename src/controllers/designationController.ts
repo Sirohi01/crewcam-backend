@@ -8,6 +8,8 @@ export const getDesignations = async (req: AuthRequest, res: Response) => {
     const designations = await Designation.find({ tenantId: req.user!.tenantId })
       .populate('departmentId', 'name code')
       .populate('reportsToDesignationId', 'name code')
+      .populate('jobGrade', 'name code level')
+      .populate('jobFamily', 'name code')
       .sort({ createdAt: -1 });
     res.json(designations);
   } catch (error: any) {
@@ -19,7 +21,9 @@ export const getDesignationById = async (req: AuthRequest, res: Response) => {
   try {
     const designation = await Designation.findOne({ _id: req.params.id, tenantId: req.user!.tenantId } as any)
       .populate('departmentId', 'name code')
-      .populate('reportsToDesignationId', 'name code');
+      .populate('reportsToDesignationId', 'name code')
+      .populate('jobGrade', 'name code level')
+      .populate('jobFamily', 'name code');
     if (!designation) return res.status(404).json({ message: 'Designation not found' });
     res.json(designation);
   } catch (error: any) {
@@ -37,6 +41,16 @@ export const createDesignation = async (req: AuthRequest, res: Response) => {
     if (req.body.departmentId !== undefined) {
       if (!req.body.departmentId || !mongoose.Types.ObjectId.isValid(req.body.departmentId)) {
         req.body.departmentId = null;
+      }
+    }
+    if (req.body.jobGrade !== undefined) {
+      if (!req.body.jobGrade || !mongoose.Types.ObjectId.isValid(req.body.jobGrade)) {
+        req.body.jobGrade = null;
+      }
+    }
+    if (req.body.jobFamily !== undefined) {
+      if (!req.body.jobFamily || !mongoose.Types.ObjectId.isValid(req.body.jobFamily)) {
+        req.body.jobFamily = null;
       }
     }
 
@@ -61,6 +75,16 @@ export const updateDesignation = async (req: AuthRequest, res: Response) => {
     if (req.body.departmentId !== undefined) {
       if (!req.body.departmentId || !mongoose.Types.ObjectId.isValid(req.body.departmentId)) {
         req.body.departmentId = null;
+      }
+    }
+    if (req.body.jobGrade !== undefined) {
+      if (!req.body.jobGrade || !mongoose.Types.ObjectId.isValid(req.body.jobGrade)) {
+        req.body.jobGrade = null;
+      }
+    }
+    if (req.body.jobFamily !== undefined) {
+      if (!req.body.jobFamily || !mongoose.Types.ObjectId.isValid(req.body.jobFamily)) {
+        req.body.jobFamily = null;
       }
     }
 

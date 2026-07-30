@@ -36,6 +36,8 @@ import locationRoutes from './routes/locationRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import businessUnitRoutes from './routes/businessUnitRoutes';
 import designationRoutes from './routes/designationRoutes';
+import jobFamilyRoutes from './routes/jobFamilyRoutes';
+import jobGradeRoutes from './routes/jobGradeRoutes';
 
 export function createApp() {
   const app = express();
@@ -123,6 +125,8 @@ export function createApp() {
   app.use('/api/v1', jdKpaRoutes);
   app.use('/api/v1/business-units', businessUnitRoutes);
   app.use('/api/v1/designations', designationRoutes);
+  app.use('/api/v1/job-families', jobFamilyRoutes);
+  app.use('/api/v1/job-grades', jobGradeRoutes);
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));

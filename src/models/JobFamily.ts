@@ -6,20 +6,20 @@ export interface IJobFamily extends ITenantScoped, IAuditable {
   name: string;
   code: string;
   description?: string;
-  parentFamilyId?: mongoose.Types.ObjectId;
-  businessUnit?: string;
-  keyResponsibilities?: string;
   isActive: boolean;
+  parentFamily?: mongoose.Types.ObjectId;
+  businessUnitId?: mongoose.Types.ObjectId;
+  keyResponsibilities?: string;
 }
 
 const JobFamilySchema = new Schema<IJobFamily>({
   name: { type: String, required: true },
   code: { type: String, required: true },
   description: { type: String },
-  parentFamilyId: { type: Schema.Types.ObjectId, ref: 'JobFamily' },
-  businessUnit: { type: String },
-  keyResponsibilities: { type: String },
   isActive: { type: Boolean, default: true },
+  parentFamily: { type: Schema.Types.ObjectId, ref: 'JobFamily' },
+  businessUnitId: { type: Schema.Types.ObjectId, ref: 'BusinessUnit' },
+  keyResponsibilities: { type: String },
 }, { timestamps: true });
 
 JobFamilySchema.plugin(tenantPlugin);
