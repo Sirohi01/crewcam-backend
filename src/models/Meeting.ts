@@ -35,7 +35,7 @@ const meetingSchema = new Schema<IMeeting>({
   organizerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   attendeeIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   meetingLink: { type: String },
-  status: { type: String, required: true, default: 'Scheduled' },
+  status: { type: String, required: true, default: 'Scheduled', index: true },
   mode: { type: String, enum: ['Online', 'Field'], default: 'Online' },
   location: { type: String },
   address: { type: String },

@@ -29,7 +29,8 @@ const candidateSchema = new Schema<ICandidate>({
   status: {
     type: String,
     enum: ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected'],
-    default: 'Applied'
+    default: 'Applied',
+    index: true
   },
   resumeUrl: { type: String },
   resumeUpdatedAt: { type: Date },

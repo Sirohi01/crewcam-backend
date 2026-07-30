@@ -121,7 +121,8 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/CREWCAM';
-mongoose.connect(MONGODB_URI)
+
+mongoose.connect(MONGODB_URI, { maxPoolSize: 20 })
   .then(() => {
     console.log('Connected to MongoDB');
     startRetentionJobs();
