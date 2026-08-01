@@ -217,7 +217,14 @@ export const getDepartments = async (req: AuthRequest, res: Response) => {
 export const getDepartmentById = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);
-    const department = await Department.findOne({ _id: req.params.id, tenantId, isActive: true } as any)
+    const id = req.params.id as string;
+    
+    // In case the frontend passes a dummy ID (like "1"), don't crash with a CastError 500
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+
+    const department = await Department.findOne({ _id: id, tenantId, isActive: true } as any)
       .populate('branchId')
       .populate('hodEmployeeId', 'firstName lastName email')
       .lean();
