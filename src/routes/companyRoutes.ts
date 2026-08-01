@@ -6,7 +6,7 @@ import { checkPermission } from '../middleware/rbac';
 import { requireFeature } from '../middleware/featureGate';
 
 import { 
-  getBranches, createBranch, deleteBranch,
+  getBranches, getBranchById, createBranch, deleteBranch,
   getDepartments, createDepartment, deleteDepartment, getDepartmentById,
   getDesignations, createDesignation, deleteDesignation,
   updateBranch, updateDepartment, updateDesignation
@@ -29,6 +29,7 @@ router.delete('/roles/:id', checkPermission('EMPLOYEE_WRITE'), deleteCompanyRole
 
 // Organization Structure
 router.get('/branches', requireFeature('Core HR'), checkPermission('ORG_READ'), getBranches);
+router.get('/branches/:id', requireFeature('Core HR'), checkPermission('ORG_READ'), getBranchById);
 router.post('/branches', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createBranch);
 router.put('/branches/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateBranch);
 router.delete('/branches/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteBranch);
