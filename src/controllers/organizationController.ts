@@ -120,6 +120,17 @@ export const getBranches = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getBranchById = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = requireTenantId(req);
+    const branch = await Branch.findOne({ _id: req.params.id, tenantId } as any).lean();
+    if (!branch) return res.status(404).json({ message: 'Branch not found' });
+    res.status(200).json({ data: branch });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching branch', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
+
 export const createBranch = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);
