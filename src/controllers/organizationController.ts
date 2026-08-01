@@ -140,10 +140,10 @@ export const createBranch = async (req: AuthRequest, res: Response) => {
 export const updateBranch = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = tenantIdOf(req);
-    const { name, code, location, address, pincode, city, state, country, contactPerson, contactPhone, contactEmail, lat, lng, isActive } = req.body;
+    const { name, code, location, address, pincode, city, state, country, contactPerson, contactPhone, contactEmail, reportingTo, effectiveDate, timezone, workingDays, workStart, workEnd, logoUrl, lat, lng, isActive } = req.body;
     const branch = await Branch.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
-      { $set: { name, code, location, address, pincode, city, state, country, contactPerson, contactPhone, contactEmail, lat, lng, isActive, updatedBy: req.user?._id } },
+      { $set: { name, code, location, address, pincode, city, state, country, contactPerson, contactPhone, contactEmail, reportingTo, effectiveDate, timezone, workingDays, workStart, workEnd, logoUrl, lat, lng, isActive, updatedBy: req.user?._id } },
       { returnDocument: 'after', runValidators: true }
     );
     if (!branch) return res.status(404).json({ message: 'Branch not found' });

@@ -14,6 +14,13 @@ export interface IBranch extends ITenantScoped, IAuditable {
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
+  reportingTo?: string;
+  effectiveDate?: string;
+  timezone?: string;
+  workingDays?: string[];
+  workStart?: string;
+  workEnd?: string;
+  logoUrl?: string;
   lat?: number;
   lng?: number;
   isActive: boolean;
@@ -31,6 +38,13 @@ const BranchSchema = new Schema<IBranch>({
   contactPerson: { type: String },
   contactPhone: { type: String },
   contactEmail: { type: String },
+  reportingTo: { type: String },
+  effectiveDate: { type: String },
+  timezone: { type: String, default: 'Asia/Kolkata' },
+  workingDays: [{ type: String }],
+  workStart: { type: String, default: '09:30' },
+  workEnd: { type: String, default: '18:30' },
+  logoUrl: { type: String },
   lat: { type: Number },
   lng: { type: Number },
   isActive: { type: Boolean, default: true },
