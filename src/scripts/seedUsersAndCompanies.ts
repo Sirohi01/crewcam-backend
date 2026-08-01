@@ -71,7 +71,6 @@ async function seed() {
         name: 'Admin',
         description: 'System Administrator',
         permissions: ['*'],
-        category: 'company_admin',
       });
       console.log('Created Admin Role');
     }
