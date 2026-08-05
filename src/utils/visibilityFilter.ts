@@ -35,7 +35,7 @@ export interface VisibilityGated {
 const hasFullAccess = (effectivePermissions: string[]) =>
   effectivePermissions.includes('*') || effectivePermissions.includes('SUPER_ADMIN');
 
-export const isVisible = (item: VisibilityGated, ctx: VisibilityContext): boolean => {
+export const isVisible = (item: VisibilityGated & { label?: string }, ctx: VisibilityContext): boolean => {
   const bypass = hasFullAccess(ctx.effectivePermissions);
 
   if (!bypass && item.roleIds && item.roleIds.length > 0) {
@@ -43,9 +43,18 @@ export const isVisible = (item: VisibilityGated, ctx: VisibilityContext): boolea
     if (!ctx.roleId || !allowedIds.includes(ctx.roleId)) return false;
   }
 
-  if (!bypass && item.requiredPermission) {
-    const hasPermission = hasFullAccess(ctx.effectivePermissions) || ctx.effectivePermissions.includes(item.requiredPermission);
-    if (!hasPermission) return false;
+  if (!bypass) {
+    let reqPerm = item.requiredPermission;
+    // Fallback: if no explicit permission is required, assume it requires its label's auto-generated permission.
+    // (This matches the Role Rights page behavior and prevents custom modules like Business Unit from leaking globally).
+    if (!reqPerm && item.label && item.label !== 'Dashboard') {
+      reqPerm = `${item.label.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_READ`;
+    }
+
+    if (reqPerm) {
+      const hasPermission = hasFullAccess(ctx.effectivePermissions) || ctx.effectivePermissions.includes(reqPerm);
+      if (!hasPermission) return false;
+    }
   }
 
   if (item.requiredFeature) {

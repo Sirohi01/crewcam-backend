@@ -34,7 +34,7 @@ export interface IRole extends ITenantScoped, IAuditable {
 }
 
 const RoleSchema = new Schema<IRole>({
-  name: { type: String, required: true },
+  name: { type: String, required: true, unique: true },
   description: { type: String },
   permissions: [{ type: String }],
   scope: { type: String, enum: ROLE_SCOPES, default: 'self' },

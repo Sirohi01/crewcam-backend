@@ -73,7 +73,7 @@ export const getCompanyRoles = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID is required' });
-    const roles = await Role.find({ tenantId, isActive: true })
+    const roles = await Role.find({ tenantId })
       .populate('createdBy', 'firstName lastName')
       .populate('updatedBy', 'firstName lastName')
       .sort({ name: 1 })
