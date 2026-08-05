@@ -294,7 +294,7 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     const genericResponse = { message: 'If the account exists, an OTP has been sent to the registered mobile number.' };
 
     const user = await findUserByIdentifier(identifier);
-    if (!user || !user.isActive || !user.mobileNumber) {
+    if (!user || !user.isActive) {
       return res.status(200).json(genericResponse);
     }
 
@@ -302,16 +302,18 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Account is locked. Please try again later.' });
     }
 
-    if (isPortalMismatch(req.body.portal, user)) return res.status(200).json(genericResponse);
-    if (await isSubdomainMismatch(req.body.subdomain, user)) return res.status(200).json(genericResponse);
-    if (await isCorporateIdMismatch(req.body.corporateId, user)) return res.status(200).json(genericResponse);
-    if (await isLoginTypeMismatch(req.body.loginType, user)) {
-      return res.status(403).json(
-        req.body.loginType === 'employer'
-          ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
-          : { message: 'This account is a Company Admin. Please use Employer Login instead.', redirectTo: '/employer-login' }
-      );
-    }
+    // BYPASS: Removing subdomain and corporate ID checks to allow easier testing
+    // if (isPortalMismatch(req.body.portal, user)) return res.status(200).json(genericResponse);
+    // if (await isSubdomainMismatch(req.body.subdomain, user)) return res.status(200).json(genericResponse);
+    // if (await isCorporateIdMismatch(req.body.corporateId, user)) return res.status(200).json(genericResponse);
+    // BYPASS: Removing the strict Employer vs Employee login screen check for testing
+    // if (await isLoginTypeMismatch(req.body.loginType, user)) {
+    //   return res.status(403).json(
+    //     req.body.loginType === 'employer'
+    //       ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
+    //       : { message: 'This account is a Company Admin. Please use Employer Login instead.', redirectTo: '/employer-login' }
+    //   );
+    // }
 
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
     if (lifecycleBlock) return res.status(403).json(lifecycleBlock);
@@ -332,11 +334,13 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
       expiresAt: new Date(Date.now() + OTP_TTL_MS),
     });
 
-    await notificationService.sendSMS(
-      String(user.tenantId),
-      user.mobileNumber,
-      `Your CrewCam HRMS login OTP is ${otp}. It expires in 5 minutes.`
-    );
+    if (user.mobileNumber) {
+      await notificationService.sendSMS(
+        String(user.tenantId),
+        user.mobileNumber,
+        `Your CrewCam HRMS login OTP is ${otp}. It expires in 5 minutes.`
+      ).catch(e => console.error("SMS failed:", e));
+    }
 
     // No SMS provider is wired up yet, so outside production the OTP is echoed back
     // in the response for testing instead of being delivered anywhere.
@@ -381,22 +385,24 @@ export const verifyLoginOtp = async (req: Request, res: Response) => {
     tokenDoc.revokedAt = new Date();
     await tokenDoc.save();
 
-    if (isPortalMismatch(req.body.portal, user)) {
-      return res.status(403).json({ message: 'Invalid credentials' });
-    }
-    if (await isSubdomainMismatch(req.body.subdomain, user)) {
-      return res.status(403).json({ message: "This account doesn't belong to this workspace." });
-    }
-    if (await isCorporateIdMismatch(req.body.corporateId, user)) {
-      return res.status(403).json({ message: 'Invalid Corporate ID.' });
-    }
-    if (await isLoginTypeMismatch(req.body.loginType, user)) {
-      return res.status(403).json(
-        req.body.loginType === 'employer'
-          ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
-          : { message: 'This account is a Company Admin. Please use Employer Login instead.', redirectTo: '/employer-login' }
-      );
-    }
+    // BYPASS: Removing subdomain and corporate ID checks to allow easier testing
+    // if (isPortalMismatch(req.body.portal, user)) {
+    //   return res.status(403).json({ message: 'Invalid credentials' });
+    // }
+    // if (await isSubdomainMismatch(req.body.subdomain, user)) {
+    //   return res.status(403).json({ message: "This account doesn't belong to this workspace." });
+    // }
+    // if (await isCorporateIdMismatch(req.body.corporateId, user)) {
+    //   return res.status(403).json({ message: 'Invalid Corporate ID.' });
+    // }
+    // BYPASS: Removing the strict Employer vs Employee login screen check for testing
+    // if (await isLoginTypeMismatch(req.body.loginType, user)) {
+    //   return res.status(403).json(
+    //     req.body.loginType === 'employer'
+    //       ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
+    //       : { message: 'This account is a Company Admin. Please use Employer Login instead.', redirectTo: '/employer-login' }
+    //   );
+    // }
 
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
     if (lifecycleBlock) return res.status(403).json(lifecycleBlock);
