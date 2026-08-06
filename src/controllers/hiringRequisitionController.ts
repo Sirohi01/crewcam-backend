@@ -232,6 +232,22 @@ export const updateManpowerRequestStatus = async (req: AuthRequest, res: Respons
   }
 };
 
+export const deleteManpowerRequest = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+
+    const request = await ManpowerRequest.findOneAndDelete({ _id: id, tenantId } as any);
+    if (!request) return res.status(404).json({ message: 'Manpower request not found' });
+
+    await logAudit(tenantId, req.user!._id, 'DELETE_MANPOWER_REQUEST', req, { requestId: id });
+    res.status(200).json({ message: 'Manpower request deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting manpower request:', error);
+    res.status(500).json({ message: 'Error deleting manpower request' });
+  }
+};
+
 /** Generates a branded requisition PDF from the same tenant-scoped source record. */
 export const generateManpowerRequestPdf = async (req: AuthRequest, res: Response) => {
   try {

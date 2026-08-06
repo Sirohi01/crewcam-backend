@@ -38,7 +38,8 @@ import {
   getSelectionApprovals,
   updateSelectionApproval,
   updateSelectionApprovalDecision,
-  deleteSelectionApproval
+  deleteSelectionApproval,
+  deleteManpowerRequest
 } from '../controllers/hiringRequisitionController';
 import {
   createCTCBreakup,
@@ -159,6 +160,7 @@ router.get('/manpower-request/stats', checkPermission('ORG_READ'), getManpowerRe
 router.get('/manpower-request/:id', checkPermission('ORG_READ'), getManpowerRequestById);
 router.put('/manpower-request/:id', checkPermission('ORG_WRITE'), updateManpowerRequest);
 router.put('/manpower-request/:id/status', checkPermission('ORG_WRITE'), updateManpowerRequestStatus);
+router.delete('/manpower-request/:id', checkPermission('ORG_WRITE'), deleteManpowerRequest);
 router.post('/manpower-request/:id/generate-pdf', checkPermission('ORG_READ'), generateManpowerRequestPdf);
 
 // Step 2: Interview Evaluation Sheet
