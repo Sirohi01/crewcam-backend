@@ -39,6 +39,9 @@ import designationRoutes from './routes/designationRoutes';
 import jobFamilyRoutes from './routes/jobFamilyRoutes';
 import jobGradeRoutes from './routes/jobGradeRoutes';
 import companyPolicyRoutes from './routes/companyPolicyRoutes';
+import departmentKpiRoutes from './routes/departmentKpiRoutes';
+import customFieldRoutes from './routes/customFieldRoutes';
+
 
 export function createApp() {
   const app = express();
@@ -129,6 +132,8 @@ export function createApp() {
   app.use('/api/v1/job-families', jobFamilyRoutes);
   app.use('/api/v1/job-grades', jobGradeRoutes);
   app.use('/api/v1/company-policies', companyPolicyRoutes);
+  app.use('/api/v1/department-kpis', departmentKpiRoutes);
+  app.use('/api/v1/custom-fields', customFieldRoutes);
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));

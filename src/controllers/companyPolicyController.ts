@@ -45,6 +45,7 @@ export const getCompanyPolicies = async (req: Request, res: Response) => {
       .populate('category', 'name')
       .populate('subCategory', 'name')
       .populate('createdBy', 'firstName lastName')
+      .populate('updatedBy', 'firstName lastName')
       .sort({ createdAt: -1 });
       
     res.status(200).json({ data: policies });
