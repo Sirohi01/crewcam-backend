@@ -18,12 +18,27 @@ export interface IManpowerRequest extends Document {
   keyResponsibilities?: string[];
   qualificationReq?: string;
   experienceReq?: string;
-  technicalSkills?: string;
-  softSkills?: string;
+  technicalSkills?: string[];
+  softSkills?: string[];
   numberOfPositions: number;
   employmentType: string;
   reasonForHiring: string;
   priority: string;
+  jobCode?: string;
+  attachments?: string[];
+  publishChannels?: string[];
+  applicationLastDate?: Date;
+  applicationEmail?: string;
+  whoCanApply?: string;
+  genderPreference?: string;
+  relocationAssistance?: string;
+  preferredQualifications?: string[];
+  certifications?: string[];
+  languages?: string[];
+  replacementReason?: string;
+  lastWorkingDate?: Date;
+  impact?: string;
+  replacedEmployeeId?: Types.ObjectId;
   budgetCTC?: number;
   salaryCtcMin?: number;
   salaryCtcMax?: number;
@@ -67,12 +82,27 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   keyResponsibilities: [{ type: String }],
   qualificationReq: { type: String },
   experienceReq: { type: String },
-  technicalSkills: { type: String },
-  softSkills: { type: String },
+  technicalSkills: [{ type: String }],
+  softSkills: [{ type: String }],
   numberOfPositions: { type: Number, required: true, default: 1 },
   employmentType: { type: String, required: true, default: 'Full-time' },
   reasonForHiring: { type: String, required: true, default: 'New Position' },
   priority: { type: String, enum: ['Low', 'Medium', 'High', 'Urgent'], default: 'Medium' },
+  jobCode: { type: String },
+  attachments: [{ type: String }],
+  publishChannels: [{ type: String }],
+  applicationLastDate: { type: Date },
+  applicationEmail: { type: String },
+  whoCanApply: { type: String },
+  genderPreference: { type: String },
+  relocationAssistance: { type: String },
+  preferredQualifications: [{ type: String }],
+  certifications: [{ type: String }],
+  languages: [{ type: String }],
+  replacementReason: { type: String },
+  lastWorkingDate: { type: Date },
+  impact: { type: String },
+  replacedEmployeeId: { type: Schema.Types.ObjectId, ref: 'User' },
   budgetCTC: { type: Number },
   salaryCtcMin: { type: Number },
   salaryCtcMax: { type: Number },
