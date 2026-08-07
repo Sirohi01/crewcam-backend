@@ -31,6 +31,7 @@ import aiHiringRoutes from './routes/aiHiringRoutes';
 import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
 import locationRoutes from './routes/locationRoutes';
 import webhookRoutes from './routes/webhookRoutes';
+import budgetAllocationRoutes from './routes/budgetAllocationRoutes';
 import path from 'path';
 import { startRetentionJobs } from './utils/retentionJobs';
 import { startCronJobs } from './utils/cronJobs';
@@ -106,6 +107,7 @@ app.use('/api/v1/tracking', liveTrackingRoutes);
 app.use('/api/v1/locations', locationRoutes);
 app.use('/api/v1/ai', aiHiringRoutes);
 app.use('/api/v1/ai', aiEmployeeRoutes);
+app.use('/api/v1/companies', budgetAllocationRoutes);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
