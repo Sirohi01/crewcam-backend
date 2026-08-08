@@ -186,9 +186,9 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'User account is inactive' });
     }
 
-    if (isPortalMismatch(req.body.portal, user)) {
-      return res.status(403).json({ message: 'Invalid credentials' });
-    }
+    // if (isPortalMismatch(req.body.portal, user)) {
+    //   return res.status(403).json({ message: 'Invalid credentials' });
+    // }
 
     if (await isSubdomainMismatch(req.body.subdomain, user)) {
       return res.status(403).json({ message: "This account doesn't belong to this workspace." });
@@ -261,9 +261,9 @@ export const login2FA = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid 2FA token' });
     }
 
-    if (isPortalMismatch(req.body.portal, user)) {
-      return res.status(403).json({ message: 'Invalid credentials' });
-    }
+    // if (isPortalMismatch(req.body.portal, user)) {
+    //   return res.status(403).json({ message: 'Invalid credentials' });
+    // }
 
     if (await isSubdomainMismatch(req.body.subdomain, user)) {
       return res.status(403).json({ message: "This account doesn't belong to this workspace." });
@@ -302,11 +302,9 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Account is locked. Please try again later.' });
     }
 
-    // BYPASS: Removing subdomain and corporate ID checks to allow easier testing
     // if (isPortalMismatch(req.body.portal, user)) return res.status(200).json(genericResponse);
     // if (await isSubdomainMismatch(req.body.subdomain, user)) return res.status(200).json(genericResponse);
     // if (await isCorporateIdMismatch(req.body.corporateId, user)) return res.status(200).json(genericResponse);
-    // BYPASS: Removing the strict Employer vs Employee login screen check for testing
     // if (await isLoginTypeMismatch(req.body.loginType, user)) {
     //   return res.status(403).json(
     //     req.body.loginType === 'employer'
@@ -385,7 +383,6 @@ export const verifyLoginOtp = async (req: Request, res: Response) => {
     tokenDoc.revokedAt = new Date();
     await tokenDoc.save();
 
-    // BYPASS: Removing subdomain and corporate ID checks to allow easier testing
     // if (isPortalMismatch(req.body.portal, user)) {
     //   return res.status(403).json({ message: 'Invalid credentials' });
     // }
@@ -395,7 +392,6 @@ export const verifyLoginOtp = async (req: Request, res: Response) => {
     // if (await isCorporateIdMismatch(req.body.corporateId, user)) {
     //   return res.status(403).json({ message: 'Invalid Corporate ID.' });
     // }
-    // BYPASS: Removing the strict Employer vs Employee login screen check for testing
     // if (await isLoginTypeMismatch(req.body.loginType, user)) {
     //   return res.status(403).json(
     //     req.body.loginType === 'employer'
