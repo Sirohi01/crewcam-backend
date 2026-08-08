@@ -156,7 +156,7 @@ export const login = async (req: Request, res: Response) => {
     if (user.lockoutUntil && user.lockoutUntil > new Date()) {
       return res.status(403).json({ message: 'Account is locked. Please try again later.' });
     }
-    
+
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
@@ -240,7 +240,7 @@ export const login2FA = async (req: Request, res: Response) => {
   try {
     const { email, password, token: totpToken } = req.body;
     const user = await User.findOne({ email }).setOptions({ bypassTenantIsolation: true });
-    
+
     if (!user || !user.isActive || !user.twoFactorEnabled || !user.twoFactorSecret) {
       return res.status(401).json({ message: 'Invalid 2FA request' });
     }
@@ -598,7 +598,7 @@ export const verifyAndEnable2FA = async (req: any, res: Response) => {
   try {
     const { token } = req.body;
     const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any);
-    
+
     if (!user || !user.twoFactorSecret) {
       return res.status(400).json({ message: '2FA setup not initialized' });
     }
@@ -626,7 +626,7 @@ export const disable2FA = async (req: any, res: Response) => {
   try {
     const { token } = req.body;
     const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any);
-    
+
     if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
       return res.status(400).json({ message: '2FA is not enabled' });
     }
