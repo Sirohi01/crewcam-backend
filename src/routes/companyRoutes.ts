@@ -14,6 +14,9 @@ import {
 import {
   getJobFamilies, getJobFamilyById, createJobFamily, updateJobFamily, deleteJobFamily
 } from '../controllers/jobFamilyController';
+import {
+  getSubDepartments, getSubDepartmentById, createSubDepartment, updateSubDepartment, deleteSubDepartment
+} from '../controllers/subDepartmentController';
 
 const router = Router();
 router.use(authenticate);
@@ -39,6 +42,12 @@ router.get('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_R
 router.post('/departments', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createDepartment);
 router.put('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateDepartment);
 router.delete('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteDepartment);
+
+router.get('/sub-departments', requireFeature('Core HR'), checkPermission('ORG_READ'), getSubDepartments);
+router.get('/sub-departments/:id', requireFeature('Core HR'), checkPermission('ORG_READ'), getSubDepartmentById);
+router.post('/sub-departments', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createSubDepartment);
+router.put('/sub-departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateSubDepartment);
+router.delete('/sub-departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteSubDepartment);
 
 router.get('/designations', requireFeature('Core HR'), checkPermission('ORG_READ'), getDesignations);
 router.post('/designations', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createDesignation);
