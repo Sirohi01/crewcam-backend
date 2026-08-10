@@ -10,18 +10,13 @@ import {
 
 const router = Router();
 
-/**
- * GET
- * /sub-departments/:subDepartment/team-members
- */
+/*** GET * /sub-departments/:subDepartment/team-members */
 router.get(
   '/:subDepartment/team-members',
   getTeamMembers
 );
 
-/**
- * GET ONE
- */
+/** GET ONE */
 router.get(
   '/:subDepartment/team-members/:id',
   getTeamMemberById
