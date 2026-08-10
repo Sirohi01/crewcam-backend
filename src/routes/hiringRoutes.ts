@@ -10,6 +10,7 @@ import {
   getCandidates,
   getCandidateById,
   getCandidatePipelineState,
+  updateCandidate,
   updateCandidateStatus,
   scheduleInterview,
   getAllInterviews,
@@ -139,6 +140,7 @@ router.get('/candidates/:candidateId/hiring-profile', checkPermission('ORG_READ'
 router.get('/employees/:employeeId/candidate', checkPermission('ORG_READ'), getCandidateForEmployee);
 router.get('/candidates/:candidateId/pipeline', checkPermission('ORG_READ'), getCandidatePipelineState);
 router.get('/candidates/:id', checkPermission('ORG_READ'), getCandidateById);
+router.put('/candidates/:id', checkPermission('ORG_WRITE'), updateCandidate);
 router.put('/candidates/:id/status', checkPermission('ORG_WRITE'), updateCandidateStatus);
 
 // Interviews
