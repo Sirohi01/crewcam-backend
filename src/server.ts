@@ -32,6 +32,7 @@ import aiEmployeeRoutes from './routes/aiEmployeeRoutes';
 import locationRoutes from './routes/locationRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import budgetAllocationRoutes from './routes/budgetAllocationRoutes';
+import teamMemberRoutes from './routes/teamMemberRoutes';
 import path from 'path';
 import { startRetentionJobs } from './utils/retentionJobs';
 import { startCronJobs } from './utils/cronJobs';
@@ -60,7 +61,7 @@ const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
   .map((o) => o.trim())
   .filter(Boolean);
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin || serverCorsOrigins.includes(origin)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
@@ -108,6 +109,7 @@ app.use('/api/v1/locations', locationRoutes);
 app.use('/api/v1/ai', aiHiringRoutes);
 app.use('/api/v1/ai', aiEmployeeRoutes);
 app.use('/api/v1/companies', budgetAllocationRoutes);
+app.use('/api/v1/sub-departments', teamMemberRoutes);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));

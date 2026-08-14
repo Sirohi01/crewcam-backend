@@ -46,6 +46,40 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateCandidate = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+
+    const candidate = await Candidate.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { 
+        ...req.body,
+        ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {}) 
+      },
+      { returnDocument: 'after', runValidators: true }
+    );
+
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    await AuditLog.create({
+      tenantId,
+      userId: req.user!._id as any,
+      action: 'UPDATE_CANDIDATE',
+      module: 'ATS',
+      status: 'SUCCESS',
+      ipAddress: req.ip as string,
+      userAgent: req.headers['user-agent'] as string,
+      details: { candidateId: id }
+    } as any);
+
+    res.status(200).json(candidate);
+  } catch (error: any) {
+    console.error('Error updating candidate:', error);
+    res.status(500).json({ message: 'Error updating candidate' });
+  }
+};
+
 export const getCandidates = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -87,7 +121,7 @@ export const getCandidateById = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const candidate = await Candidate.findOne({ _id: id, tenantId } as any);
+    const candidate = await Candidate.findOne({ _id: id, tenantId } as any).populate('departmentId');
     if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
     res.status(200).json(candidate);
   } catch (error: any) {
