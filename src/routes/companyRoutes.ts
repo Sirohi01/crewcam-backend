@@ -19,7 +19,7 @@ import {
 } from '../controllers/subDepartmentController';
 import {
   createBudgetAllocation,
-  getBudgetAllocations,
+  getAllBudgetAllocations,
   getBudgetAllocationByDepartment
 } from '../controllers/budgetAllocationController';
 
@@ -56,7 +56,7 @@ router.delete('/sub-departments/:id', requireFeature('Core HR'), checkPermission
 // Department Budget Allocations
 router.get('/departments/:departmentId/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_READ'), getBudgetAllocationByDepartment);
 router.post('/departments/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createBudgetAllocation);
-router.get('/departments/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_READ'), getBudgetAllocations);
+router.get('/departments/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_READ'), getAllBudgetAllocations);
 
 router.get('/designations', requireFeature('Core HR'), checkPermission('ORG_READ'), getDesignations);
 router.post('/designations', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createDesignation);

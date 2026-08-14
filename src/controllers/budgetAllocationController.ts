@@ -140,7 +140,7 @@ export const getBudgetAllocationById = async (req: Request, res: Response) => {
 /**
  * POST /companies/departments/budget-allocations - create or update (upsert)
  */
-export const saveBudgetAllocation = async (req: Request, res: Response) => {
+export const createBudgetAllocation = async (req: Request, res: Response) => {
     try {
         const {
             departmentId,
