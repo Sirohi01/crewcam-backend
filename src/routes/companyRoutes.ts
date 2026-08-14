@@ -15,6 +15,9 @@ import {
   getJobFamilies, getJobFamilyById, createJobFamily, updateJobFamily, deleteJobFamily
 } from '../controllers/jobFamilyController';
 import {
+  getSubDepartments, getSubDepartmentById, createSubDepartment, updateSubDepartment, deleteSubDepartment
+} from '../controllers/subDepartmentController';
+import {
   createBudgetAllocation,
   getBudgetAllocations,
   getBudgetAllocationByDepartment
@@ -45,6 +48,11 @@ router.post('/departments', requireFeature('Core HR'), checkPermission('ORG_WRIT
 router.put('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateDepartment);
 router.delete('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteDepartment);
 
+router.get('/sub-departments', requireFeature('Core HR'), checkPermission('ORG_READ'), getSubDepartments);
+router.get('/sub-departments/:id', requireFeature('Core HR'), checkPermission('ORG_READ'), getSubDepartmentById);
+router.post('/sub-departments', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createSubDepartment);
+router.put('/sub-departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateSubDepartment);
+router.delete('/sub-departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteSubDepartment);
 // Department Budget Allocations
 router.get('/departments/:departmentId/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_READ'), getBudgetAllocationByDepartment);
 router.post('/departments/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createBudgetAllocation);

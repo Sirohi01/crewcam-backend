@@ -5,30 +5,32 @@ import { auditPlugin, IAuditable } from './plugins/auditPlugin';
 export interface ISubDepartment extends ITenantScoped, IAuditable {
   name: string;
   code: string;
-  department: string;
-  parentDepartment?: string;
-  hodEmployeeId?: mongoose.Types.ObjectId;
+  shortName?: string;
   description?: string;
+  parentDepartmentId: mongoose.Types.ObjectId;
+  reportingToId?: mongoose.Types.ObjectId;
+  businessUnit?: string;
+  costCenter?: string;
+  location?: string;
   isActive: boolean;
-  // Added by Mongoose `timestamps: true`
-  createdAt: Date;
-  updatedAt: Date;
+  effectiveDate?: Date;
 }
 
-const SubDepartmentSchema = new Schema<ISubDepartment>(
-  {
-    name: { type: String, required: true, trim: true },
-    code: { type: String, required: true, unique: true, trim: true },
-    department: { type: String, required: true },
-    parentDepartment: { type: String },
-    hodEmployeeId: { type: Schema.Types.ObjectId, ref: 'User' },
-    description: { type: String },
-    isActive: { type: Boolean, default: true },
-  },
-  { timestamps: true }
-);
+const SubDepartmentSchema = new Schema<ISubDepartment>({
+  name: { type: String, required: true },
+  code: { type: String, required: true },
+  shortName: { type: String },
+  description: { type: String },
+  parentDepartmentId: { type: Schema.Types.ObjectId, ref: 'Department', required: true },
+  reportingToId: { type: Schema.Types.ObjectId, ref: 'Department' },
+  businessUnit: { type: String },
+  costCenter: { type: String },
+  location: { type: String },
+  isActive: { type: Boolean, default: true },
+  effectiveDate: { type: Date },
+}, { timestamps: true });
 
 SubDepartmentSchema.plugin(tenantPlugin);
 SubDepartmentSchema.plugin(auditPlugin);
 
-export default mongoose.model<ISubDepartment>('SubDepartment', SubDepartmentSchema);
+export const SubDepartment = mongoose.model<ISubDepartment>('SubDepartment', SubDepartmentSchema);
