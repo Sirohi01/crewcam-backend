@@ -1,15 +1,49 @@
 import { Tenant } from '../models/Tenant';
+import { Company } from '../models/Company';
 import { RoleScope, SCOPE_RANK } from '../models/Role';
 
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 
+const MODULE_MAP: Record<string, string> = {
+  'employeemgmt': 'employee',
+  'attendance': 'attendance',
+  'leavemgmt': 'leave',
+  'payroll': 'payroll',
+  'performance': 'performance',
+  'recruitment': 'recruitment',
+  'training': 'training',
+  'assets': 'assets',
+  'documents': 'documents',
+  'helpdesk': 'helpdesk',
+  'expense': 'expense',
+  'mobile': 'mobile',
+};
+
 export const getTenantFeatures = async (tenantId: string): Promise<string[]> => {
   if (tenantId === 'SUPER_ADMIN') return ['*'];
   
-  const tenant = await Tenant.findById(tenantId).populate('packageId').lean();
+  const [tenant, company] = await Promise.all([
+    Tenant.findById(tenantId).populate('packageId').lean(),
+    Company.findOne({ tenantId }).select('selectedModules').lean()
+  ]);
+  
   const pkg: any = (tenant as any)?.packageId;
   if (!pkg || !pkg.isActive) return [];
-  return pkg.features || [];
+  
+  let features: string[] = pkg.features || [];
+  
+  if (company && company.selectedModules && company.selectedModules.length > 0) {
+    features = features.filter((f: string) => {
+      const normF = normalize(f);
+      const modKey = MODULE_MAP[normF];
+      if (modKey) {
+        return company.selectedModules!.includes(modKey);
+      }
+      return true;
+    });
+  }
+  
+  return features;
 };
 
 export interface VisibilityContext {
