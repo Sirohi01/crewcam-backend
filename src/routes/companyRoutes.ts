@@ -14,6 +14,11 @@ import {
 import {
   getJobFamilies, getJobFamilyById, createJobFamily, updateJobFamily, deleteJobFamily
 } from '../controllers/jobFamilyController';
+import {
+  createBudgetAllocation,
+  getBudgetAllocations,
+  getBudgetAllocationByDepartment
+} from '../controllers/budgetAllocationController';
 
 const router = Router();
 router.use(authenticate);
@@ -39,6 +44,11 @@ router.get('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_R
 router.post('/departments', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createDepartment);
 router.put('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), updateDepartment);
 router.delete('/departments/:id', requireFeature('Core HR'), checkPermission('ORG_WRITE'), deleteDepartment);
+
+// Department Budget Allocations
+router.get('/departments/:departmentId/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_READ'), getBudgetAllocationByDepartment);
+router.post('/departments/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createBudgetAllocation);
+router.get('/departments/budget-allocations', requireFeature('Core HR'), checkPermission('ORG_READ'), getBudgetAllocations);
 
 router.get('/designations', requireFeature('Core HR'), checkPermission('ORG_READ'), getDesignations);
 router.post('/designations', requireFeature('Core HR'), checkPermission('ORG_WRITE'), createDesignation);
