@@ -3,7 +3,7 @@ import {
     getBudgetAllocationByDepartment,
     getAllBudgetAllocations,
     getBudgetAllocationById,
-    saveBudgetAllocation,
+    createBudgetAllocation,
     updateBudgetAllocation,
     approveBudgetAllocation,
     deleteBudgetAllocation,
@@ -16,7 +16,7 @@ const router = Router();
 router.get('/departments/:departmentId/budget-allocations', getBudgetAllocationByDepartment);
 
 // Matches: api.post('/companies/departments/budget-allocations', payload)
-router.post('/departments/budget-allocations', saveBudgetAllocation);
+router.post('/departments/budget-allocations', createBudgetAllocation);
 
 // Extra CRUD endpoints
 router.get('/departments/budget-allocations', getAllBudgetAllocations);
