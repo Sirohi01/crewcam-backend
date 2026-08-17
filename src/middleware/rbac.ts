@@ -35,6 +35,11 @@ export const getEffectivePermissions = async (req: AuthRequest): Promise<string[
 export const checkPermission = (requiredPermission: string) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      // Hardcoded Super Admin bypass matching authController.ts logic
+      if (req.user?.tenantId === 'SUPER_ADMIN' || req.user?.email === 'admin@crewcam.app') {
+        return next();
+      }
+
       if (!req.user || !req.user.roleId) {
         return res.status(403).json({ message: 'Access denied: No role assigned' });
       }

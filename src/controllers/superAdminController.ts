@@ -109,6 +109,13 @@ const updateTenantSchema = createTenantSchema.partial().extend({
   isActive: z.coerce.boolean().optional(),
   setupFeeStatus: z.enum(['PENDING', 'PAID', 'WAIVED']).optional(),
   subscriptionStatus: z.enum(['ACTIVE', 'PENDING', 'PAST_DUE', 'CANCELLED']).optional(),
+  lifecycleStatus: z.enum(['LEAD', 'DEMO_SCHEDULED', 'PROPOSAL_SENT', 'QUOTATION_APPROVED',
+    'SUBSCRIPTION_PENDING', 'SUBSCRIPTION_PAID', 'SETUP_FEE_PENDING', 'SETUP_FEE_PAID',
+    'IMPLEMENTATION_IN_PROGRESS', 'WORKSPACE_PROVISIONING', 'CONFIGURATION', 'QA_VERIFICATION',
+    'ADMIN_CREDENTIALS_GENERATED', 'ACTIVATION_PENDING', 'ACTIVE', 'LIVE', 'SUSPENDED', 'EXPIRED', 'CLOSED']).optional(),
+  modules: z.array(z.object({ key: z.string(), enabled: z.boolean() })).optional(),
+  preferences: z.array(z.object({ key: z.string(), enabled: z.boolean() })).optional(),
+  payrollSetup: z.any().optional(),
 });
 
 function computeNextRenewalDate(from: Date, billingCycle: 'MONTHLY' | 'YEARLY'): Date {
@@ -181,12 +188,9 @@ export const getNextCorporateId = async (req: AuthRequest, res: Response) => {
   try {
     const year = new Date().getFullYear();
     const key = `CORP-${year}`;
-    const counter = await Counter.findOneAndUpdate(
-      { key },
-      { $inc: { seq: 1 } },
-      { new: true, upsert: true }
-    );
-    const corporateId = `CORP-${year}-${String(counter.seq).padStart(6, '0')}`;
+    const counter = await Counter.findOne({ key });
+    const nextSeq = (counter?.seq || 0) + 1;
+    const corporateId = `CORP-${year}-${String(nextSeq).padStart(6, '0')}`;
     res.status(200).json({ corporateId });
   } catch (error) {
     console.error('Error generating next corporate ID:', error);
@@ -332,6 +336,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       subscriptionAmount,
       subscriptionCurrency,
       estimatedEmployees,
+      // lifecycleStatus: 'ACTIVE',
       subscriptionStatus: 'ACTIVE',
       subscriptionStartDate,
       nextRenewalDate,
@@ -351,6 +356,18 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    let finalCorporateId = corporateId;
+    if (!finalCorporateId) {
+      const year = new Date().getFullYear().toString();
+      const counter = await Counter.findOneAndUpdate(
+        { key: `CORP-${year}` },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+      const seq = counter?.seq ?? 1;
+      finalCorporateId = `CORP-${year}-${String(seq).padStart(4, '0')}`;
+    }
+
     // Create Company (Root)
     const company = new Company({
       legalName: name,
@@ -362,7 +379,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       panNumber, gstin, cin, tan, epfoNumber, esicNumber, ptNumber, lwfNumber,
       tin, ein, vatNumber, businessLicenseNumber,
       logoUrl,
-      corporateId, companySize, description, incorporationDate,
+      corporateId: finalCorporateId, companySize, description, incorporationDate,
       alternateEmail, whatsappNumber, preferredLanguage, supportEmail, supportPhone, linkedInUrl,
       selectedModules, addonModules, documents, notificationPreferences,
       weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
@@ -372,6 +389,21 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     await company.save();
 
     // Create Company Admin Role
+    if (finalCorporateId && finalCorporateId.startsWith('CORP-')) {
+      const parts = finalCorporateId.split('-');
+      if (parts.length === 3) {
+        const year = parts[1]!;
+        const seq = parseInt(parts[2]!, 10);
+        if (!isNaN(seq)) {
+          await Counter.updateOne(
+            { key: `CORP-${year}` },
+            { $max: { seq: seq } },
+            { upsert: true }
+          );
+        }
+      }
+    }
+
     const adminRole = new Role({
       name: 'Company Admin',
       description: 'Full access to company operations',
@@ -536,6 +568,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       alternateEmail, whatsappNumber, preferredLanguage, supportEmail, supportPhone, linkedInUrl,
       selectedModules, addonModules, documents, notificationPreferences,
       weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
+      lifecycleStatus, modules, preferences, payrollSetup
     } = parsed.data;
 
     const existingTenant = await Tenant.findById(id);
@@ -566,6 +599,10 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
         packageId,
         isActive,
         ...(aiCredits !== undefined && { aiCredits: Math.max(0, Number(aiCredits) || 0) }),
+        ...(lifecycleStatus !== undefined && { lifecycleStatus, lifecycleUpdatedAt: new Date() }),
+        ...(modules !== undefined && { modules }),
+        ...(preferences !== undefined && { preferences }),
+        ...(payrollSetup !== undefined && { payrollSetup }),
         ...billingUpdate,
       },
       { returnDocument: 'after' }
@@ -1085,6 +1122,27 @@ export const getTenantRoles = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getTenantEmployees = async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = req.params.id;
+      const users = await User.find({ tenantId } as any).populate('roleId').lean();
+      
+      const employees = users.filter((u: any) => {
+        const role = u.roleId;
+        if (!role) return true; 
+        if (role.permissions && (role.permissions.includes('*') || role.permissions.includes('SUPER_ADMIN'))) return false;
+        if (role.loginType === 'employer') return false;
+        if (role.name && role.name.toLowerCase().includes('admin')) return false;
+        return true;
+      });
+  
+      res.status(200).json(employees);
+    } catch (error) {
+      console.error('Error fetching tenant employees:', error);
+      res.status(500).json({ message: 'Internal server error while fetching employees' });
+    }
+  };
+
 export const getTenantAdmins = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.params.id;
@@ -1299,3 +1357,43 @@ export const bulkImportEmployees = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const deleteTenantEmployee = async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const employeeId = req.params.employeeId as string;
+  
+      const user = await User.findOneAndDelete({ _id: employeeId, tenantId: id });
+      if (!user) {
+        return res.status(404).json({ message: 'Employee not found' });
+      }
+  
+      res.status(200).json({ message: 'Employee deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+      res.status(500).json({ message: 'Internal server error while deleting employee' });
+    }
+};
+
+export const updateTenantEmployee = async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const employeeId = req.params.employeeId as string;
+      
+      const updateData = req.body;
+  
+      const user = await User.findOneAndUpdate(
+          { _id: employeeId, tenantId: id }, 
+          { $set: updateData },
+          { new: true }
+      );
+      
+      if (!user) {
+        return res.status(404).json({ message: 'Employee not found' });
+      }
+  
+      res.status(200).json({ message: 'Employee updated successfully', user });
+    } catch (error) {
+      console.error('Error updating employee:', error);
+      res.status(500).json({ message: 'Internal server error while updating employee' });
+    }
+};
