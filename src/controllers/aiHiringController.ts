@@ -74,7 +74,7 @@ export const getResumeScreenings = async (req: AuthRequest, res: Response) => {
   res.json(screenings);
 };
 
-const CANDIDATE_STATUSES = ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected'];
+const CANDIDATE_STATUSES = ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected', 'Hold'];
 
 export const getResumeScreeningQueue = async (req: AuthRequest, res: Response) => {
   const tenantId = (req.tenantId || req.user!.tenantId) as string;
