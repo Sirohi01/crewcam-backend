@@ -73,12 +73,15 @@ const issueSession = async (user: any, req: Request, res: Response, portal: unkn
   res.cookie(cookieNames.refreshToken, refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
 
   return {
-    id: user._id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    profilePictureUrl: user.profilePictureUrl,
-    tenantId: user.tenantId,
+    user: {
+      id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profilePictureUrl: user.profilePictureUrl,
+      tenantId: user.tenantId,
+    },
+    token
   };
 };
 
@@ -138,9 +141,10 @@ const isLoginTypeMismatch = async (loginTypeRaw: unknown, user: any): Promise<bo
 
 // Employer and super-admin portals are separate front-end apps hitting the same endpoint;
 // this keeps a tenant user out of the platform-admin login and vice versa.
-const isPortalMismatch = (portal: unknown, user: any): boolean => {
+const isPortalMismatch = async (portal: unknown, user: any): Promise<boolean> => {
   if (portal !== 'super-admin' && portal !== 'employer') return false;
-  const isSuperAdmin = user.tenantId === 'SUPER_ADMIN';
+  const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
+  const isSuperAdmin = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
   return (portal === 'super-admin' && !isSuperAdmin) || (portal === 'employer' && isSuperAdmin);
 };
 
@@ -186,16 +190,23 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'User account is inactive' });
     }
 
-    // if (isPortalMismatch(req.body.portal, user)) {
-    //   return res.status(403).json({ message: 'Invalid credentials' });
-    // }
+    if (await isPortalMismatch(req.body.portal, user)) {
+      return res.status(403).json(
+        req.body.portal === 'employer'
+          ? { message: 'This account is a Super Admin. Please use the Super Admin portal instead.' }
+          : { message: 'This account is a Company Admin. Please use the Employer portal instead.' }
+      );
+    }
 
     if (await isSubdomainMismatch(req.body.subdomain, user)) {
       return res.status(403).json({ message: "This account doesn't belong to this workspace." });
     }
 
+    const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
+    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
+
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
-    if (lifecycleBlock) {
+    if (lifecycleBlock && !isSuperAdminRole) {
       await AuditLog.create({
         tenantId: user.tenantId,
         userId: user._id,
@@ -217,7 +228,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const userResponse = await issueSession(user, req, res, req.body.portal);
+    const sessionResponse = await issueSession(user, req, res, req.body.portal);
 
     await AuditLog.create({
       tenantId: user.tenantId,
@@ -229,7 +240,7 @@ export const login = async (req: Request, res: Response) => {
       userAgent: req.headers['user-agent'] || ''
     });
 
-    res.status(200).json({ message: 'Login successful', user: userResponse });
+    res.status(200).json({ message: 'Login successful', ...sessionResponse });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -261,16 +272,20 @@ export const login2FA = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid 2FA token' });
     }
 
-    // if (isPortalMismatch(req.body.portal, user)) {
-    //   return res.status(403).json({ message: 'Invalid credentials' });
-    // }
+    if (await isPortalMismatch(req.body.portal, user)) {
+      return res.status(403).json(
+        req.body.portal === 'employer'
+          ? { message: 'This account is a Super Admin. Please use the Super Admin portal instead.' }
+          : { message: 'This account is a Company Admin. Please use the Employer portal instead.' }
+      );
+    }
 
     if (await isSubdomainMismatch(req.body.subdomain, user)) {
       return res.status(403).json({ message: "This account doesn't belong to this workspace." });
     }
 
-    const userResponse = await issueSession(user, req, res, req.body.portal);
-    res.status(200).json({ message: 'Login successful', user: userResponse });
+    const sessionResponse = await issueSession(user, req, res, req.body.portal);
+    res.status(200).json({ message: 'Login successful', ...sessionResponse });
   } catch (error) {
     res.status(500).json({ message: 'Internal server error' });
   }
@@ -302,7 +317,7 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Account is locked. Please try again later.' });
     }
 
-    // if (isPortalMismatch(req.body.portal, user)) return res.status(200).json(genericResponse);
+    if (await isPortalMismatch(req.body.portal, user)) return res.status(200).json(genericResponse);
     // if (await isSubdomainMismatch(req.body.subdomain, user)) return res.status(200).json(genericResponse);
     // if (await isCorporateIdMismatch(req.body.corporateId, user)) return res.status(200).json(genericResponse);
     // if (await isLoginTypeMismatch(req.body.loginType, user)) {
@@ -313,8 +328,11 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     //   );
     // }
 
+    const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
+    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
+
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
-    if (lifecycleBlock) return res.status(403).json(lifecycleBlock);
+    if (lifecycleBlock && !isSuperAdminRole) return res.status(403).json(lifecycleBlock);
 
     const recentOtp = await AuthToken.findOne({
       userId: user._id,
@@ -383,9 +401,13 @@ export const verifyLoginOtp = async (req: Request, res: Response) => {
     tokenDoc.revokedAt = new Date();
     await tokenDoc.save();
 
-    // if (isPortalMismatch(req.body.portal, user)) {
-    //   return res.status(403).json({ message: 'Invalid credentials' });
-    // }
+    if (await isPortalMismatch(req.body.portal, user)) {
+      return res.status(403).json(
+        req.body.portal === 'employer'
+          ? { message: 'This account is a Super Admin. Please use the Super Admin portal instead.' }
+          : { message: 'This account is a Company Admin. Please use the Employer portal instead.' }
+      );
+    }
     // if (await isSubdomainMismatch(req.body.subdomain, user)) {
     //   return res.status(403).json({ message: "This account doesn't belong to this workspace." });
     // }
@@ -400,14 +422,17 @@ export const verifyLoginOtp = async (req: Request, res: Response) => {
     //   );
     // }
 
+    const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
+    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
+
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
-    if (lifecycleBlock) return res.status(403).json(lifecycleBlock);
+    if (lifecycleBlock && !isSuperAdminRole) return res.status(403).json(lifecycleBlock);
 
     user.failedLoginAttempts = 0;
     user.lockoutUntil = undefined as any;
     await user.save();
 
-    const userResponse = await issueSession(user, req, res, req.body.portal);
+    const sessionResponse = await issueSession(user, req, res, req.body.portal);
 
     await AuditLog.create({
       tenantId: user.tenantId,
@@ -420,7 +445,7 @@ export const verifyLoginOtp = async (req: Request, res: Response) => {
       details: { method: 'OTP' },
     });
 
-    res.status(200).json({ message: 'Login successful', user: userResponse });
+    res.status(200).json({ message: 'Login successful', ...sessionResponse });
   } catch (error) {
     res.status(500).json({ message: 'Internal server error' });
   }

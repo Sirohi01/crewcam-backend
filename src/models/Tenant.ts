@@ -47,6 +47,14 @@ export interface ITenant extends Document, IAuditable {
   // intent only — there is no automated dedicated-DB provisioning pipeline yet.
   dbType: 'SHARED' | 'DEDICATED';
 
+  modules?: { key: string; enabled: boolean }[];
+  preferences?: { key: string; enabled: boolean }[];
+  payrollSetup?: {
+    form?: any;
+    components?: any[];
+    compliance?: any[];
+  };
+
   credentialsEmailStatus?: 'SENT' | 'FAILED' | 'PENDING';
   credentialsEmailSentAt?: Date;
   credentialsEmailError?: string;
@@ -83,6 +91,20 @@ const TenantSchema = new Schema<ITenant>({
   userLimit: { type: Number, default: 0 },
   storageLimitGB: { type: Number, default: 5 },
   dbType: { type: String, enum: ['SHARED', 'DEDICATED'], default: 'SHARED' },
+
+  modules: [{
+    key: { type: String },
+    enabled: { type: Boolean }
+  }],
+  preferences: [{
+    key: { type: String },
+    enabled: { type: Boolean }
+  }],
+  payrollSetup: {
+    form: { type: Schema.Types.Mixed },
+    components: [{ type: Schema.Types.Mixed }],
+    compliance: [{ type: Schema.Types.Mixed }]
+  },
 
   credentialsEmailStatus: { type: String, enum: ['SENT', 'FAILED', 'PENDING'] },
   credentialsEmailSentAt: { type: Date },
