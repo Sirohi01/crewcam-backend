@@ -54,6 +54,13 @@ export interface IEmergencyContact extends ITenantScoped {
     name: string;
     status: 'Pending' | 'Submitted' | 'Verified';
   }[];
+  docs?: {
+    aadhaarNominee?: boolean;
+    aadhaarGuardian?: boolean;
+    aadhaarEmployee?: boolean;
+    other?: boolean;
+  };
+  otherDocText?: string;
   hrVerifiedBy?: string;
   hrVerifiedDate?: Date;
   hrRemarks?: string;
@@ -112,6 +119,14 @@ const emergencyContactSchema = new Schema<IEmergencyContact>({
     name: { type: String, required: true },
     status: { type: String, enum: ['Pending', 'Submitted', 'Verified'], default: 'Pending' },
   }],
+
+  docs: {
+    aadhaarNominee: { type: Boolean, default: false },
+    aadhaarGuardian: { type: Boolean, default: false },
+    aadhaarEmployee: { type: Boolean, default: false },
+    other: { type: Boolean, default: false },
+  },
+  otherDocText: { type: String },
 
   hrVerifiedBy: { type: String },
   hrVerifiedDate: { type: Date },

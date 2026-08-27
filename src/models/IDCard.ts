@@ -3,6 +3,9 @@ import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IIDCard extends ITenantScoped {
   employeeId: Types.ObjectId;
+  employeeName?: string;
+  mobileNumber?: string;
+  department?: string;
   cardType: 'ID Card' | 'Visiting Card';
   employeeCode?: string;
   designation?: string;
@@ -23,6 +26,9 @@ export interface IIDCard extends ITenantScoped {
 
 const idCardSchema = new Schema<IIDCard>({
   employeeId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  employeeName: { type: String },
+  mobileNumber: { type: String },
+  department: { type: String },
   cardType: { type: String, enum: ['ID Card', 'Visiting Card'], default: 'ID Card' },
   employeeCode: { type: String },
   designation: { type: String },

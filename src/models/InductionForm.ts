@@ -4,6 +4,11 @@ import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 export interface IInductionForm extends ITenantScoped {
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
+  employeeName?: string;
+  uniqueId?: string;
+  designation?: string;
+  department?: string;
+  joiningDate?: string;
   inductionDate?: Date;
   modules: {
     moduleName: string;
@@ -18,6 +23,11 @@ export interface IInductionForm extends ITenantScoped {
 const inductionFormSchema = new Schema<IInductionForm>({
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
+  employeeName: { type: String },
+  uniqueId: { type: String },
+  designation: { type: String },
+  department: { type: String },
+  joiningDate: { type: String },
   inductionDate: { type: Date },
   modules: [{
     moduleName: { type: String, required: true },

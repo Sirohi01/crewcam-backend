@@ -59,6 +59,8 @@ import {
   generateNDAPdf,
   signNDA,
   createAppointmentLetter,
+  updateAppointmentLetter,
+  deleteAppointmentLetter,
   getAppointmentLetters,
   generateAppointmentLetterPdf,
   acknowledgeAppointmentLetter
@@ -98,24 +100,42 @@ import {
   generateConductAcceptancePdf,
   createAssetAccessForm,
   getAssetAccessForms,
+  updateAssetAccessForm,
+  deleteAssetAccessForm,
   createEngagementConfirmation,
+  updateEngagementConfirmation,
   getEngagementConfirmations,
   createInductionForm,
   getInductionForms,
+  updateInductionForm,
+  deleteInductionForm,
   updateInductionModule,
   createTeamIntro,
-  getTeamIntros
+  getTeamIntros,
+  updateTeamIntro,
+  verifyTeamIntro,
+  deleteTeamIntro
 } from '../controllers/hiringOnboardingController';
 import {
   createProbationReview,
   getProbationReviews,
   updateProbationDecision,
+  updateProbationReview,
+  deleteProbationReview,
   createHiringPerformanceEval,
   getHiringPerformanceEvals,
+  updateHiringPerformanceEval,
+  deleteHiringPerformanceEval,
   createIDCard,
   getIDCards,
+  updateIDCard,
+  deleteIDCard,
   generateIDCardPdf,
-  markIDCardIssued
+  markIDCardIssued,
+  createReleaseQA,
+  getReleaseQAs,
+  updateReleaseQA,
+  deleteReleaseQA
 } from '../controllers/hiringPostJoiningController';
 import {
   generateInterviewEvaluationPdf, generateSelectionApprovalPdf, generateCTCBreakupPdf,
@@ -259,46 +279,68 @@ router.post('/code-of-conduct-accept/:id/generate-pdf', checkPermission('ORG_REA
 
 // Step 17: Appointment Letter
 router.post('/appointment-letter', checkPermission('ORG_WRITE'), requireStepUnlocked('appointmentLetter'), createAppointmentLetter);
+router.put('/appointment-letter/:id', checkPermission('ORG_WRITE'), requireStepUnlocked('appointmentLetter'), updateAppointmentLetter);
+router.delete('/appointment-letter/:id', checkPermission('ORG_WRITE'), deleteAppointmentLetter);
 router.get('/appointment-letter', checkPermission('ORG_READ'), getAppointmentLetters);
 router.post('/appointment-letter/:id/generate-pdf', checkPermission('ORG_WRITE'), generateAppointmentLetterPdf);
 router.put('/appointment-letter/:id/acknowledge', checkPermission('ORG_WRITE'), acknowledgeAppointmentLetter);
 
 // Step 18: IT Assets / IT Access / Stationery Form
 router.post('/asset-access', checkPermission('ORG_WRITE'), requireStepUnlocked('assetAccessForm'), createAssetAccessForm);
+router.put('/asset-access/:id', checkPermission('ORG_WRITE'), requireStepUnlocked('assetAccessForm'), updateAssetAccessForm);
+router.delete('/asset-access/:id', checkPermission('ORG_WRITE'), deleteAssetAccessForm);
 router.get('/asset-access', checkPermission('ORG_READ'), getAssetAccessForms);
 router.post('/asset-access/:id/generate-pdf', checkPermission('ORG_READ'), generateAssetAccessPdf);
 
 // Step 19: Engagement Confirmation Form
 router.post('/engagement-confirm', checkPermission('ORG_WRITE'), requireStepUnlocked('engagementConfirmation'), createEngagementConfirmation);
+router.put('/engagement-confirm/:id', checkPermission('ORG_WRITE'), requireStepUnlocked('engagementConfirmation'), updateEngagementConfirmation);
 router.get('/engagement-confirm', checkPermission('ORG_READ'), getEngagementConfirmations);
 router.post('/engagement-confirm/:id/generate-pdf', checkPermission('ORG_READ'), generateEngagementPdf);
 
 // Step 20: Induction Form
 router.post('/induction', checkPermission('ORG_WRITE'), requireStepUnlocked('induction'), createInductionForm);
 router.get('/induction', checkPermission('ORG_READ'), getInductionForms);
+router.put('/induction/:id', checkPermission('ORG_WRITE'), requireStepUnlocked('induction'), updateInductionForm);
+router.delete('/induction/:id', checkPermission('ORG_WRITE'), deleteInductionForm);
 router.put('/induction/:id/modules/:moduleIndex/complete', checkPermission('ORG_WRITE'), updateInductionModule);
 router.post('/induction/:id/generate-pdf', checkPermission('ORG_READ'), generateInductionPdf);
 
 // Step 21: Team Introduction Note
 router.post('/team-intro', checkPermission('ORG_WRITE'), requireStepUnlocked('teamIntro'), createTeamIntro);
 router.get('/team-intro', checkPermission('ORG_READ'), getTeamIntros);
+router.put('/team-intro/:id', checkPermission('ORG_WRITE'), requireStepUnlocked('teamIntro'), updateTeamIntro);
+router.delete('/team-intro/:id', checkPermission('ORG_WRITE'), deleteTeamIntro);
+router.put('/team-intro/:id/verify', checkPermission('ORG_WRITE'), verifyTeamIntro);
 router.post('/team-intro/:id/generate-pdf', checkPermission('ORG_READ'), generateTeamIntroPdf);
 
 // Step 22: Probation Review Form
 router.post('/probation-review', checkPermission('ORG_WRITE'), requireStepUnlocked('probationReview', { candidateField: 'employeeId' }), createProbationReview);
 router.get('/probation-review', checkPermission('ORG_READ'), getProbationReviews);
 router.put('/probation-review/:id/decision', checkPermission('ORG_WRITE'), updateProbationDecision);
+router.put('/probation-review/:id', checkPermission('ORG_WRITE'), updateProbationReview);
+router.delete('/probation-review/:id', checkPermission('ORG_WRITE'), deleteProbationReview);
 router.post('/probation-review/:id/generate-pdf', checkPermission('ORG_READ'), generateProbationPdf);
 
 // Step 23: Employee Performance Evaluation Sheet
 router.post('/perf-eval', checkPermission('ORG_WRITE'), requireStepUnlocked('performanceEval', { candidateField: 'employeeId' }), createHiringPerformanceEval);
 router.get('/perf-eval', checkPermission('ORG_READ'), getHiringPerformanceEvals);
+router.put('/perf-eval/:id', checkPermission('ORG_WRITE'), updateHiringPerformanceEval);
+router.delete('/perf-eval/:id', checkPermission('ORG_WRITE'), deleteHiringPerformanceEval);
 router.post('/perf-eval/:id/generate-pdf', checkPermission('ORG_READ'), generatePerformancePdf);
 
 // Step 24: Visiting Card / ID Card
 router.post('/id-card', checkPermission('ORG_WRITE'), requireStepUnlocked('idCard', { candidateField: 'employeeId' }), createIDCard);
 router.get('/id-card', checkPermission('ORG_READ'), getIDCards);
+router.put('/id-card/:id', checkPermission('ORG_WRITE'), updateIDCard);
+router.delete('/id-card/:id', checkPermission('ORG_WRITE'), deleteIDCard);
 router.post('/id-card/:id/generate-pdf', checkPermission('ORG_WRITE'), generateIDCardPdf);
 router.put('/id-card/:id/issue', checkPermission('ORG_WRITE'), markIDCardIssued);
+
+// Step 25: Release QA Checks
+router.post('/release-qa', checkPermission('ORG_WRITE'), requireStepUnlocked('releaseQA', { candidateField: 'employeeId' }), createReleaseQA);
+router.get('/release-qa', checkPermission('ORG_READ'), getReleaseQAs);
+router.put('/release-qa/:id', checkPermission('ORG_WRITE'), updateReleaseQA);
+router.delete('/release-qa/:id', checkPermission('ORG_WRITE'), deleteReleaseQA);
 
 export default router;

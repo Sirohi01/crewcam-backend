@@ -98,9 +98,8 @@ export const getJoiningConfirmations = async (req: AuthRequest, res: Response) =
       .sort({ createdAt: -1 })
       .lean();
 
-    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: confirmations });
-
     const mapped = confirmations.map((c: any) => ({
+      ...c,
       _id: c._id,
       candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : 'Unknown',
       position: (c.candidateId as any)?.jobRole || 'N/A',
@@ -185,6 +184,53 @@ export const createDocumentChecklist = async (req: AuthRequest, res: Response) =
   }
 };
 
+export const updateDocumentChecklist = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+
+    const checklist = await DocumentChecklist.findOne({ _id: id, tenantId } as any);
+    if (!checklist) return res.status(404).json({ message: 'Document checklist not found' });
+
+    if (req.body.items && Array.isArray(req.body.items)) {
+      checklist.items = req.body.items.map((item: any) => ({
+        documentName: String(item.documentName || 'Document'),
+        isMandatory: item.isMandatory !== 'false' && item.isMandatory !== false,
+        status: item.status || 'Pending',
+        fileUrl: item.fileUrl || undefined,
+        remarks: item.remarks || undefined,
+      })) as any;
+    }
+    
+    if (req.body.employeeName !== undefined) checklist.employeeName = req.body.employeeName;
+    if (req.body.designation !== undefined) (checklist as any).designation = req.body.designation;
+    if (req.body.department !== undefined) (checklist as any).department = req.body.department;
+    if (req.body.dateOfJoining !== undefined) (checklist as any).dateOfJoining = req.body.dateOfJoining;
+    if (req.body.workLocation !== undefined) (checklist as any).workLocation = req.body.workLocation;
+    if (req.body.employeeCode !== undefined) (checklist as any).employeeCode = req.body.employeeCode;
+    if (req.body.employeeSignatureDate !== undefined) (checklist as any).employeeSignatureDate = req.body.employeeSignatureDate;
+    if (req.body.hrName !== undefined) (checklist as any).hrName = req.body.hrName;
+    if (req.body.hrRemarks !== undefined) (checklist as any).hrRemarks = req.body.hrRemarks;
+    if (req.body.hrSignatureDate !== undefined) (checklist as any).hrSignatureDate = req.body.hrSignatureDate;
+
+    const allVerified = checklist.items.every(i => i.status === 'Verified');
+    const allSubmitted = checklist.items.every(i => i.status === 'Submitted' || i.status === 'Verified');
+    checklist.overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete';
+
+    await checklist.save();
+
+    if (checklist.overallStatus === 'Complete' || checklist.overallStatus === 'Verified') {
+      await advanceStep(req, tenantId, String(checklist.candidateId), 'documentChecklist', 'completed', checklist._id as any);
+    }
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_DOC_CHECKLIST', req, { checklistId: id });
+    res.status(200).json(checklist);
+  } catch (error: any) {
+    console.error('Error updating document checklist:', error);
+    res.status(500).json({ message: 'Error updating document checklist' });
+  }
+};
+
 export const getDocumentChecklists = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -197,17 +243,16 @@ export const getDocumentChecklists = async (req: AuthRequest, res: Response) => 
       .sort({ createdAt: -1 })
       .lean();
 
-    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: checklists });
-
     const mapped = checklists.map((c: any) => {
       const items = c.items || [];
       const submittedCount = items.filter((i: any) => i.status === 'Submitted' || i.status === 'Verified').length;
       
       return {
+        ...c,
         _id: c._id,
-        candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : 'Unknown',
-        position: (c.candidateId as any)?.jobRole || 'N/A',
-        documentsSubmitted: `${submittedCount}/${items.length || 3}`,
+        candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : c.employeeName || 'Unknown',
+        position: (c.candidateId as any)?.jobRole || c.designation || '-',
+        docsSubmitted: `${submittedCount}/${items.length || 3}`,
         bgvStatus: 'Pending', // BGV is a separate schema, so we keep pending or pull if needed
         status: c.overallStatus || 'Pending',
         createdBy: null,
@@ -267,12 +312,21 @@ export const createBGVRequest = async (req: AuthRequest, res: Response) => {
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
     const bgv = await BGVRequest.create({ ...req.body, tenantId, requestedBy: req.user!._id });
-    await advanceStep(req, tenantId, req.body.candidateId, 'bgvRequest', 'in_progress', (bgv as any)._id);
+
+    if ((bgv as any).overallResult === 'Discrepancy') {
+      await advanceStep(req, tenantId, req.body.candidateId, 'bgvRequest', 'rejected', (bgv as any)._id);
+    } else if ((bgv as any).status === 'Completed' || (bgv as any).overallResult === 'Clear') {
+      await advanceStep(req, tenantId, req.body.candidateId, 'bgvRequest', 'completed', (bgv as any)._id);
+    } else {
+      await advanceStep(req, tenantId, req.body.candidateId, 'bgvRequest', 'in_progress', (bgv as any)._id);
+    }
+
     await logAudit(tenantId, req.user!._id, 'CREATE_BGV_REQUEST', req, { bgvId: (bgv as any)._id });
     res.status(201).json(bgv);
   } catch (error: any) {
     console.error('Error creating BGV request:', error);
-    res.status(500).json({ message: 'Error creating BGV request' });
+    require('fs').writeFileSync('d:/NewHrCrm/crewcam-backend/bgv_error.log', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    res.status(500).json({ message: 'Error creating BGV request', error: error.message });
   }
 };
 
@@ -288,10 +342,14 @@ export const getBGVRequests = async (req: AuthRequest, res: Response) => {
       .populate('requestedBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .lean();
-    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: requests });
     const mapped = requests.map((r: any) => ({
+      ...r,
       _id: r._id,
-      candidateName: r.candidateId ? `${(r.candidateId as any).firstName} ${(r.candidateId as any).lastName}`.trim() : 'Unknown',
+      candidateName: r.candidateId ? `${(r.candidateId as any).firstName} ${(r.candidateId as any).lastName}`.trim() : r.fullName || r.reportCandidateName || 'Unknown',
+      position: r.positionFor || (r.candidateId && (r.candidateId as any).jobRole) || '-',
+      phoneNumber: r.mobileNo || r.homeNo || '-',
+      email: r.emailId || '-',
+      department: r.department || r.reportDepartment || '-',
       status: r.status || 'Pending',
       updatedAt: r.updatedAt
     }));
@@ -299,6 +357,34 @@ export const getBGVRequests = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching BGV requests:', error);
     res.status(500).json({ message: 'Error fetching BGV requests' });
+  }
+};
+
+export const updateBGVRequest = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+
+    const bgv = await BGVRequest.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { ...req.body },
+      { returnDocument: 'after' }
+    );
+    if (!bgv) return res.status(404).json({ message: 'BGV request not found' });
+
+    // Handle standard progression based on result or status if needed, 
+    // but typically the BGV generic form will just save data.
+    if (bgv.overallResult === 'Discrepancy') {
+      await advanceStep(req, tenantId, String(bgv.candidateId), 'bgvRequest', 'rejected', bgv._id as any);
+    } else if (bgv.status === 'Completed' || bgv.overallResult === 'Clear') {
+      await advanceStep(req, tenantId, String(bgv.candidateId), 'bgvRequest', 'completed', bgv._id as any);
+    }
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_BGV_REQUEST', req, { bgvId: id });
+    res.status(200).json(bgv);
+  } catch (error: any) {
+    console.error('Error updating BGV request:', error);
+    res.status(500).json({ message: 'Error updating BGV request' });
   }
 };
 

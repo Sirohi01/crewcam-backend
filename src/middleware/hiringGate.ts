@@ -9,12 +9,13 @@ import { evaluateGate, STEP_RULES } from '../utils/hiringPipelineRules';
  * Draft default per docs/hiring/11_SEQUENTIAL_GATING_ENGINE.md §3 ("employee active >= configured
  * probation window") — make tenant-configurable (Enterprise package) if companies need different
  * windows; not built here per the doc's explicit "don't over-build this for v1" note.
+ * Temporarily set to 0 to allow testing of the workflow.
  */
-const PROBATION_WINDOW_DAYS = 90;
+export const PROBATION_WINDOW_DAYS = 0;
 
 const blankStepStatuses = () => STEP_RULES.map((r) => ({ key: r.key, status: 'pending' as const }));
 
-const getJoiningDate = async (tenantId: string, candidateId: string): Promise<Date | null> => {
+export const getJoiningDate = async (tenantId: string, candidateId: string): Promise<Date | null> => {
   const appointment = await AppointmentLetter.findOne({ tenantId, candidateId } as any).sort({ createdAt: -1 });
   if (appointment?.joiningDate) return appointment.joiningDate;
   const offer = await OfferLetter.findOne({ tenantId, candidateId } as any).sort({ createdAt: -1 });

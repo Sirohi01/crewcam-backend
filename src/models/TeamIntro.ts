@@ -19,6 +19,7 @@ export interface ITeamIntro extends ITenantScoped {
   introductionNote?: string;
   sentBy: Types.ObjectId;
   sentDate?: Date;
+  status?: string;
 }
 
 const teamIntroSchema = new Schema<ITeamIntro>({
@@ -38,7 +39,8 @@ const teamIntroSchema = new Schema<ITeamIntro>({
   }],
   introductionNote: { type: String },
   sentBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  sentDate: { type: Date }
+  sentDate: { type: Date },
+  status: { type: String, default: 'Saved' }
 }, { timestamps: true });
 
 teamIntroSchema.plugin(tenantPlugin);

@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { ProbationReview } from '../models/ProbationReview';
 import { HiringPerformanceEval } from '../models/HiringPerformanceEval';
 import { IDCard } from '../models/IDCard';
+import { ReleaseQA } from '../models/ReleaseQA';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
@@ -100,6 +101,47 @@ export const updateProbationDecision = async (req: AuthRequest, res: Response) =
   }
 };
 
+export const deleteProbationReview = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const review = await ProbationReview.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!review) return res.status(404).json({ message: 'Probation review not found' });
+
+    await logAudit(tenantId, req.user!._id, 'DELETE_PROBATION_REVIEW', req, { reviewId: req.params.id });
+    res.status(200).json({ message: 'Probation review deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting probation review:', error);
+    res.status(500).json({ message: 'Error deleting probation review' });
+  }
+};
+
+export const updateProbationReview = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const ratings = req.body.ratings || [];
+    const overallRating = ratings.length
+      ? ratings.reduce((sum: number, r: any) => sum + (r.score || 0), 0) / ratings.length
+      : undefined;
+
+    const review = await ProbationReview.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: { ...req.body, overallRating } },
+      { new: true }
+    );
+
+    if (!review) return res.status(404).json({ message: 'Probation review not found' });
+    await logAudit(tenantId, req.user!._id, 'UPDATE_PROBATION_REVIEW', req, { reviewId: req.params.id });
+    res.status(200).json(review);
+  } catch (error: any) {
+    console.error('Error updating probation review:', error);
+    res.status(500).json({ message: 'Error updating probation review' });
+  }
+};
+
 // Step 23: Employee Performance Evaluation Sheet
 export const createHiringPerformanceEval = async (req: AuthRequest, res: Response) => {
   try {
@@ -125,6 +167,43 @@ export const createHiringPerformanceEval = async (req: AuthRequest, res: Respons
   } catch (error: any) {
     console.error('Error creating performance evaluation:', error);
     res.status(500).json({ message: 'Error creating performance evaluation' });
+  }
+};
+
+export const updateHiringPerformanceEval = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const kpis = req.body.kpis || [];
+    const overallScore = kpis.length
+      ? kpis.reduce((sum: number, k: any) => sum + (k.score || 0), 0) / kpis.length
+      : undefined;
+
+    const evaluation = await HiringPerformanceEval.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: { ...req.body, overallScore } },
+      { new: true }
+    );
+    if (!evaluation) return res.status(404).json({ message: 'Performance evaluation not found' });
+    res.status(200).json(evaluation);
+  } catch (error: any) {
+    console.error('Error updating performance evaluation:', error);
+    res.status(500).json({ message: 'Error updating performance evaluation' });
+  }
+};
+
+export const deleteHiringPerformanceEval = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const evaluation = await HiringPerformanceEval.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!evaluation) return res.status(404).json({ message: 'Performance evaluation not found' });
+    res.status(200).json({ message: 'Performance evaluation deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting performance evaluation:', error);
+    res.status(500).json({ message: 'Error deleting performance evaluation' });
   }
 };
 
@@ -173,6 +252,42 @@ export const getIDCards = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching ID cards:', error);
     res.status(500).json({ message: 'Error fetching ID cards' });
+  }
+};
+
+export const updateIDCard = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const card = await IDCard.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!card) return res.status(404).json({ message: 'ID card not found' });
+    
+    await logAudit(tenantId, req.user!._id, 'UPDATE_ID_CARD', req, { cardId: req.params.id });
+    res.status(200).json(card);
+  } catch (error: any) {
+    console.error('Error updating ID card:', error);
+    res.status(500).json({ message: 'Error updating ID card' });
+  }
+};
+
+export const deleteIDCard = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const card = await IDCard.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!card) return res.status(404).json({ message: 'ID card not found' });
+
+    await logAudit(tenantId, req.user!._id, 'DELETE_ID_CARD', req, { cardId: req.params.id });
+    res.status(200).json({ message: 'ID card deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting ID card:', error);
+    res.status(500).json({ message: 'Error deleting ID card' });
   }
 };
 
@@ -243,7 +358,7 @@ export const markIDCardIssued = async (req: AuthRequest, res: Response) => {
         const companyName = tenant?.name || 'Your Company';
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         const loginUrl = `${frontendUrl}/login`;
-        
+
         const emailContent = buildEmployeeWelcomeEmail({
           companyName,
           firstName: employee.firstName,
@@ -264,5 +379,79 @@ export const markIDCardIssued = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error marking ID card issued:', error);
     res.status(500).json({ message: 'Error marking ID card issued' });
+  }
+};
+
+// Step 25: Release QA Checks
+export const createReleaseQA = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const qa = await ReleaseQA.create({ ...req.body, tenantId, checkedBy: req.user!._id });
+    await advanceStepForEmployee(req, tenantId, req.body.employeeId, 'releaseQA', 'in_progress', (qa as any)._id);
+    await logAudit(tenantId, req.user!._id, 'CREATE_RELEASE_QA', req, { qaId: (qa as any)._id });
+    res.status(201).json(qa);
+  } catch (error: any) {
+    console.error('Error creating release QA:', error);
+    res.status(500).json({ message: 'Error creating release QA' });
+  }
+};
+
+export const getReleaseQAs = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { employeeId } = req.query;
+    const filter: any = { tenantId };
+    if (employeeId) filter.employeeId = employeeId;
+
+    const qas = await ReleaseQA.find(filter).sort({ createdAt: -1 });
+    res.status(200).json(qas);
+  } catch (error: any) {
+    console.error('Error fetching release QAs:', error);
+    res.status(500).json({ message: 'Error fetching release QAs' });
+  }
+};
+
+export const updateReleaseQA = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const qa = await ReleaseQA.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!qa) return res.status(404).json({ message: 'Release QA not found' });
+    
+    // Auto-advance if Passed
+    if (qa.qaStatus === 'Passed') {
+      await advanceStepForEmployee(req, tenantId, String(qa.employeeId), 'releaseQA', 'completed', qa._id as any);
+    } else if (qa.qaStatus === 'Failed') {
+      await advanceStepForEmployee(req, tenantId, String(qa.employeeId), 'releaseQA', 'rejected', qa._id as any);
+    }
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_RELEASE_QA', req, { qaId: req.params.id });
+    res.status(200).json(qa);
+  } catch (error: any) {
+    console.error('Error updating release QA:', error);
+    res.status(500).json({ message: 'Error updating release QA' });
+  }
+};
+
+export const deleteReleaseQA = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const qa = await ReleaseQA.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!qa) return res.status(404).json({ message: 'Release QA not found' });
+
+    await logAudit(tenantId, req.user!._id, 'DELETE_RELEASE_QA', req, { qaId: req.params.id });
+    res.status(200).json({ message: 'Release QA deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting release QA:', error);
+    res.status(500).json({ message: 'Error deleting release QA' });
   }
 };

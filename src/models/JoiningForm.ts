@@ -12,6 +12,10 @@ export interface IJoiningForm extends ITenantScoped {
   lastDesignation?: string;
   lastDoj?: string;
   lastDol?: string;
+  lastSalary?: string;
+  totalExperience?: string;
+  reasonForLeaving?: string;
+  employeeImage?: string;
 
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
@@ -147,6 +151,10 @@ const joiningFormSchema = new Schema<IJoiningForm>({
   lastDesignation: { type: String },
   lastDoj: { type: String },
   lastDol: { type: String },
+  lastSalary: { type: String },
+  totalExperience: { type: String },
+  reasonForLeaving: { type: String },
+  employeeImage: { type: String },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
