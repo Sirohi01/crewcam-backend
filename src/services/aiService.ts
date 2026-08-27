@@ -77,8 +77,8 @@ const fetchFileBuffer = async (fileUrl: string): Promise<Buffer> => {
 
 export const extractResumeText = async (fileUrl: string): Promise<string> => {
   const buffer = await fetchFileBuffer(fileUrl);
-  const mimeType = fileUrl.toLowerCase().endsWith('.docx')
-    ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const mimeType = fileUrl.toLowerCase().endsWith('.docx') || fileUrl.toLowerCase().endsWith('.doc')
+    ? 'application/msword'
     : 'application/pdf';
   return extractTextFromBuffer(buffer, mimeType);
 };
@@ -437,6 +437,7 @@ interface CandidateProfileExtraction {
   city: string;
   postalCode: string;
   candidateType: 'Experienced' | 'Fresher';
+  totalExperience: string;
   currentOrMostRecentDesignation: string;
   education: Array<{ qualification: string; university: string; institute: string; monthYear: string; result: string }>;
   technicalSkills: string[];
@@ -460,6 +461,7 @@ const CANDIDATE_PROFILE_JSON_SCHEMA: JsonSchemaDef = {
       city: { type: 'string' },
       postalCode: { type: 'string' },
       candidateType: { type: 'string', enum: ['Experienced', 'Fresher'], description: 'Fresher if no employment history is listed, else Experienced' },
+      totalExperience: { type: 'string', description: 'Total years of experience (e.g. 5, 2.5), else empty string if fresher' },
       currentOrMostRecentDesignation: { type: 'string', description: 'Their current or most recent job title, for suggesting a role applied for' },
       education: {
         type: 'array',

@@ -446,6 +446,28 @@ export const saveInterviewQuestionNote = async (req: AuthRequest, res: Response)
   }
 };
 
+export const updateInterviewQuestions = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const { questions } = req.body;
+
+    if (!Array.isArray(questions)) return res.status(400).json({ message: 'Questions must be an array' });
+
+    const interview = await Interview.findOneAndUpdate(
+      { _id: id, tenantId },
+      { interviewQuestions: questions },
+      { new: true }
+    );
+
+    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+    res.status(200).json(interview);
+  } catch (error: any) {
+    console.error('Error updating interview questions:', error);
+    res.status(500).json({ message: 'Error updating interview questions' });
+  }
+};
+
 export const submitInterviewFeedback = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;

@@ -21,6 +21,7 @@ import {
   addInterviewQuestion,
   deleteInterviewQuestion,
   saveInterviewQuestionNote,
+  updateInterviewQuestions,
   submitInterviewFeedback
 } from '../controllers/hiringController';
 import {
@@ -149,6 +150,7 @@ router.get('/interviews', checkPermission('ATS_READ'), getAllInterviews);
 router.get('/interviews/stats', checkPermission('ATS_READ'), getInterviewStats);
 router.get('/interviews/:candidateId', checkPermission('ATS_READ'), getInterviewsForCandidate);
 router.put('/interviews/:id', checkPermission('ATS_WRITE'), updateInterview);
+router.put('/interviews/:id/questions', checkPermission('ATS_WRITE'), updateInterviewQuestions);
 router.put('/interviews/:id/feedback', checkPermission('ATS_WRITE'), submitInterviewFeedback);
 router.get('/interviews/detail/:id', checkPermission('ATS_READ'), getInterviewById);
 router.post('/interviews/:id/questions', checkPermission('ATS_WRITE'), addInterviewQuestion);
