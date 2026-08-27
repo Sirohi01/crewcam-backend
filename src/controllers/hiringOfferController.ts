@@ -50,6 +50,7 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
       preparedBy: req.user!._id,
       monthlyGross,
       monthlyTakeHome: monthlyGross - monthlyDeductions,
+      status: req.body.status === 'Finalized' ? 'Finalized' : 'Draft',
       approvalStatus: 'Pending'
     });
 
@@ -77,14 +78,13 @@ export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: breakups });
-
     const mapped = breakups.map((b: any) => ({
+      ...b,
       _id: b._id,
       candidateName: b.candidateId ? `${(b.candidateId as any).firstName} ${(b.candidateId as any).lastName}`.trim() : 'Unknown',
       department: (b.candidateId as any)?.jobRole || 'N/A',
       annualCTC: b.annualCTC?.toLocaleString() || '0',
-      netTakeHome: b.monthlyTakeHome?.toLocaleString() || '0',
+      monthlyGross: b.monthlyGross?.toLocaleString() || '0',
       status: b.approvalStatus || 'Pending',
       createdBy: b.preparedBy,
       updatedAt: b.updatedAt
@@ -94,6 +94,39 @@ export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching CTC breakups:', error);
     res.status(500).json({ message: 'Error fetching CTC breakups' });
+  }
+};
+
+export const updateCTCBreakup = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+
+    const annualCTC = parseFloat(String(req.body.annualCTC || '0').replace(/,/g, '')) || 0;
+    const monthlyGross = annualCTC / 12;
+    const breakup = Object.fromEntries(Object.entries(req.body.breakup || {}).map(([key, value]) => [key, Number(value) || 0]));
+    const monthlyDeductions = ((breakup.pfEmployee || 0) + (breakup.otherDeductions || 0)) / 12;
+
+    const ctcBreakup = await CTCBreakup.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      {
+        ...req.body,
+        annualCTC,
+        breakup,
+        monthlyGross,
+        monthlyTakeHome: monthlyGross - monthlyDeductions,
+        status: req.body.status === 'Finalized' ? 'Finalized' : 'Draft'
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!ctcBreakup) return res.status(404).json({ message: 'CTC Breakup not found' });
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_CTC_BREAKUP', req, { ctcBreakupId: id });
+    res.json(ctcBreakup);
+  } catch (error: any) {
+    console.error('Error updating CTC breakup:', error);
+    res.status(500).json({ message: 'Error updating CTC breakup' });
   }
 };
 
@@ -129,6 +162,31 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateLOI = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+
+    const loi = await LetterOfIntent.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      {
+        ...req.body,
+        designation: req.body.designation || req.body.position,
+        joiningDate: req.body.joiningDate
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!loi) return res.status(404).json({ message: 'LOI not found' });
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_LOI', req, { loiId: id });
+    res.json(loi);
+  } catch (error: any) {
+    console.error('Error updating LOI:', error);
+    res.status(500).json({ message: 'Error updating LOI' });
+  }
+};
+
 export const getLOIs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -141,9 +199,8 @@ export const getLOIs = async (req: AuthRequest, res: Response) => {
       .populate('issuedBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .lean();
-    if (candidateId || req.query.details === 'true') return res.status(200).json({ data: lois });
-
     const mapped = lois.map((l: any) => ({
+      ...l,
       _id: l._id,
       candidateName: l.candidateId ? `${(l.candidateId as any).firstName} ${(l.candidateId as any).lastName}`.trim() : 'Unknown',
       department: 'N/A', // or from candidate if needed
@@ -244,6 +301,28 @@ export const createOfferLetter = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const offer = await OfferLetter.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!offer) return res.status(404).json({ message: 'Offer letter not found' });
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_OFFER_LETTER', req, { offerId: id });
+    res.status(200).json(offer);
+  } catch (error: any) {
+    console.error('Error updating offer letter:', error);
+    res.status(500).json({ message: 'Error updating offer letter' });
+  }
+};
+
+
 export const getOfferLetters = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -340,6 +419,27 @@ export const createNDA = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateNDA = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const nda = await NDADocument.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!nda) return res.status(404).json({ message: 'NDA not found' });
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_NDA', req, { ndaId: id });
+    res.status(200).json(nda);
+  } catch (error: any) {
+    console.error('Error updating NDA:', error);
+    res.status(500).json({ message: 'Error updating NDA' });
+  }
+};
+
 export const getNDAs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -423,6 +523,40 @@ export const createAppointmentLetter = async (req: AuthRequest, res: Response) =
   } catch (error: any) {
     console.error('Error creating appointment letter:', error);
     res.status(500).json({ message: 'Error creating appointment letter' });
+  }
+};
+
+export const updateAppointmentLetter = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const letter = await AppointmentLetter.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!letter) return res.status(404).json({ message: 'Appointment letter not found' });
+
+    res.status(200).json(letter);
+  } catch (error: any) {
+    console.error('Error updating appointment letter:', error);
+    res.status(500).json({ message: 'Error updating appointment letter' });
+  }
+};
+
+export const deleteAppointmentLetter = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const letter = await AppointmentLetter.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!letter) return res.status(404).json({ message: 'Appointment letter not found' });
+
+    res.status(200).json({ message: 'Appointment letter deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting appointment letter:', error);
+    res.status(500).json({ message: 'Error deleting appointment letter' });
   }
 };
 

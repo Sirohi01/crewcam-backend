@@ -6,6 +6,7 @@ import { ManpowerRequest } from '../models/ManpowerRequest';
 import { AuditLog } from '../models/AuditLog';
 import { advanceStep, getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
 import { evaluateGate, STEP_RULES } from '../utils/hiringPipelineRules';
+import { getJoiningDate, PROBATION_WINDOW_DAYS } from '../middleware/hiringGate';
 
 // Candidate Controllers
 export const createCandidate = async (req: AuthRequest, res: Response) => {
@@ -164,11 +165,25 @@ export const getCandidatePipelineState = async (req: AuthRequest, res: Response)
       });
     }
 
+    const stepsWithCustomGates = await Promise.all(steps.map(async (step) => {
+      if (step.key === 'probationReview') {
+        const joiningDate = await getJoiningDate(String(tenantId), String(candidateId));
+        const elapsedDays = joiningDate ? (Date.now() - joiningDate.getTime()) / 86400000 : -Infinity;
+        if (elapsedDays < PROBATION_WINDOW_DAYS) {
+          step.gate.unlocked = false;
+          if (!step.gate.blockedBy.includes('probationWindow')) {
+            step.gate.blockedBy.push('probationWindow');
+          }
+        }
+      }
+      return step;
+    }));
+
     res.status(200).json({
       candidateId: state.candidateId,
       employeeId: state.employeeId,
       currentStep: state.currentStep,
-      steps: steps.sort((a, b) => a.stepNumber - b.stepNumber),
+      steps: stepsWithCustomGates.sort((a, b) => a.stepNumber - b.stepNumber),
     });
   } catch (error: any) {
     console.error('Error fetching candidate pipeline state:', error);

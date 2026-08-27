@@ -3,6 +3,17 @@ import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 
 export interface IHiringPerformanceEval extends ITenantScoped {
   employeeId: Types.ObjectId;
+  employeeName?: string;
+  uniqueId?: string;
+  department?: string;
+  designation?: string;
+  joiningDate?: string;
+  reviewPeriod?: string;
+  reportingManager?: string;
+  dateOfEvaluation?: Date;
+  overallRating?: string;
+  managerComments?: string;
+  employeeComments?: string;
   evaluationPeriod?: string;
   evaluatorId: Types.ObjectId;
   kpis: {
@@ -20,6 +31,17 @@ export interface IHiringPerformanceEval extends ITenantScoped {
 
 const hiringPerformanceEvalSchema = new Schema<IHiringPerformanceEval>({
   employeeId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  employeeName: { type: String },
+  uniqueId: { type: String },
+  department: { type: String },
+  designation: { type: String },
+  joiningDate: { type: String },
+  reviewPeriod: { type: String },
+  reportingManager: { type: String },
+  dateOfEvaluation: { type: Date },
+  overallRating: { type: String },
+  managerComments: { type: String },
+  employeeComments: { type: String },
   evaluationPeriod: { type: String },
   evaluatorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   kpis: [{

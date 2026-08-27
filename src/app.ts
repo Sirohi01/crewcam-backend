@@ -50,8 +50,8 @@ export function createApp() {
   // these must be mounted with express.raw() before the global express.json() below.
   app.use('/api/v1/webhooks', express.raw({ type: '*/*' }), webhookRoutes);
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
   app.use(cookieParser());
   app.use(helmet());
 

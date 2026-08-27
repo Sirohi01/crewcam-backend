@@ -22,6 +22,23 @@ export interface IAssetAccessForm extends ITenantScoped {
   }[];
   issuedBy: Types.ObjectId;
   status: 'Pending' | 'Issued' | 'Returned';
+  candidateName?: string;
+  department?: string;
+  designation?: string;
+  uniqueId?: string;
+  personalEmail?: string;
+  officialEmail?: string;
+  mobileNumber?: string;
+  system_other?: string;
+  sharedFolder_other?: string;
+  restrictedRolesDetailed?: string;
+  deviceType?: string;
+  serialNo?: string;
+  modelNo?: string;
+  softwareInstalled?: string;
+  processedBy?: string;
+  accessCreatedOn?: string;
+  itRemarks?: string;
 }
 
 const assetAccessFormSchema = new Schema<IAssetAccessForm>({
@@ -44,7 +61,24 @@ const assetAccessFormSchema = new Schema<IAssetAccessForm>({
     quantity: { type: Number, default: 1 }
   }],
   issuedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  status: { type: String, enum: ['Pending', 'Issued', 'Returned'], default: 'Pending' }
+  status: { type: String, enum: ['Pending', 'Issued', 'Returned'], default: 'Pending' },
+  candidateName: { type: String },
+  department: { type: String },
+  designation: { type: String },
+  uniqueId: { type: String },
+  personalEmail: { type: String },
+  officialEmail: { type: String },
+  mobileNumber: { type: String },
+  system_other: { type: String },
+  sharedFolder_other: { type: String },
+  restrictedRolesDetailed: { type: String },
+  deviceType: { type: String },
+  serialNo: { type: String },
+  modelNo: { type: String },
+  softwareInstalled: { type: String },
+  processedBy: { type: String },
+  accessCreatedOn: { type: String },
+  itRemarks: { type: String }
 }, { timestamps: true });
 
 assetAccessFormSchema.plugin(tenantPlugin);

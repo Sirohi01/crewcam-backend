@@ -272,6 +272,24 @@ export const createEngagementConfirmation = async (req: AuthRequest, res: Respon
   }
 };
 
+export const updateEngagementConfirmation = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const confirmation = await EngagementConfirmation.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!confirmation) return res.status(404).json({ message: 'Engagement confirmation not found' });
+    res.status(200).json(confirmation);
+  } catch (error: any) {
+    console.error('Error updating engagement confirmation:', error);
+    res.status(500).json({ message: 'Error updating engagement confirmation' });
+  }
+};
+
 export const getEngagementConfirmations = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -301,6 +319,24 @@ export const createInductionForm = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateInductionForm = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const form = await InductionForm.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!form) return res.status(404).json({ message: 'Induction form not found' });
+    res.status(200).json(form);
+  } catch (error: any) {
+    console.error('Error updating induction form:', error);
+    res.status(500).json({ message: 'Error updating induction form' });
+  }
+};
+
 export const getInductionForms = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -315,6 +351,20 @@ export const getInductionForms = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const deleteInductionForm = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const form = await InductionForm.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!form) return res.status(404).json({ message: 'Induction form not found' });
+    res.status(200).json({ message: 'Induction form deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting induction form:', error);
+    res.status(500).json({ message: 'Error deleting induction form' });
+  }
+};
+
 export const updateInductionModule = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -324,10 +374,14 @@ export const updateInductionModule = async (req: AuthRequest, res: Response) => 
     if (!form) return res.status(404).json({ message: 'Induction form not found' });
 
     const idx = parseInt(String(moduleIndex), 10);
-    if (!form.modules[idx]) return res.status(404).json({ message: 'Induction module not found' });
+    if (!form.modules || !form.modules[idx]) {
+      return res.status(404).json({ message: 'Induction module not found' });
+    }
 
     form.modules[idx].completed = true;
     form.modules[idx].completedDate = new Date();
+    form.markModified('modules');
+
     const allCompleted = form.modules.every(m => m.completed);
     form.overallStatus = allCompleted ? 'Completed' : 'InProgress';
 
@@ -374,6 +428,42 @@ export const getTeamIntros = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateTeamIntro = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const intro = await TeamIntro.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!intro) return res.status(404).json({ message: 'Team intro not found' });
+    res.status(200).json(intro);
+  } catch (error: any) {
+    console.error('Error updating team intro:', error);
+    res.status(500).json({ message: 'Error updating team intro' });
+  }
+};
+
+export const verifyTeamIntro = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const intro = await TeamIntro.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { status: 'Verified' },
+      { new: true }
+    );
+    if (!intro) return res.status(404).json({ message: 'Team intro not found' });
+    res.status(200).json(intro);
+  } catch (error: any) {
+    console.error('Error verifying team intro:', error);
+    res.status(500).json({ message: 'Error verifying team intro' });
+  }
+};
+
 // ── WP3 Action: Verify Joining Form ───────────────────────────────────────────
 export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
   try {
@@ -409,10 +499,10 @@ export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
         const contact = form.contactDetails as any;
         const identity = form.identificationDetails as any;
         const emergency = form.emergencyContact as any;
-        
+
         const generatedPassword = crypto.randomBytes(6).toString('hex') + 'A1!'; // e.g., 1a2b3c4d5e6fA1!
         const finalFirstName = firstName || candidate.firstName;
-        
+
         const employee = await User.create({
           tenantId,
           firstName: finalFirstName,
@@ -441,14 +531,14 @@ export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
         } as any);
         employeeId = employee._id;
         employeeCreated = true;
-        
+
         // Send Welcome Email with Credentials
         // try {
         //   const tenant = await Tenant.findById(tenantId);
         //   const companyName = tenant?.name || 'Your Company';
         //   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         //   const loginUrl = `${frontendUrl}/login`;
-          
+
         //   const emailContent = buildEmployeeWelcomeEmail({
         //     companyName,
         //     firstName: finalFirstName,
@@ -767,4 +857,51 @@ export const generateConductAcceptancePdf = async (req: AuthRequest, res: Respon
     res.status(500).json({ message: 'Error generating conduct acceptance PDF' });
   }
 };
+
+export const updateAssetAccessForm = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const form = await AssetAccessForm.findOneAndUpdate(
+      { _id: req.params.id, tenantId } as any,
+      { $set: req.body },
+      { new: true }
+    );
+    if (!form) return res.status(404).json({ message: 'Asset Access form not found' });
+    res.status(200).json(form);
+  } catch (error: any) {
+    console.error('Error updating asset/access form:', error);
+    res.status(500).json({ message: 'Error updating asset/access form' });
+  }
+};
+
+export const deleteTeamIntro = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const form = await TeamIntro.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!form) return res.status(404).json({ message: 'Team Intro not found' });
+    res.status(200).json({ message: 'Team Intro deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting team intro:', error);
+    res.status(500).json({ message: 'Error deleting team intro' });
+  }
+};
+
+export const deleteAssetAccessForm = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const form = await AssetAccessForm.findOneAndDelete({ _id: req.params.id, tenantId } as any);
+    if (!form) return res.status(404).json({ message: 'Asset Access form not found' });
+    res.status(200).json({ message: 'Asset Access form deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting asset/access form:', error);
+    res.status(500).json({ message: 'Error deleting asset/access form' });
+  }
+};
+
 
