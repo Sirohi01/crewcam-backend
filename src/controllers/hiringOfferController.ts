@@ -33,8 +33,10 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
 
     const candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for CTC breakup' });
-    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    if (candidateId !== '000000000000000000000000') {
+      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    }
 
     const annualCTC = parseFloat(String(req.body.annualCTC || '0').replace(/,/g, '')) || 0;
     const monthlyGross = annualCTC / 12;
@@ -68,9 +70,14 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
 export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { candidateId } = req.query;
+    let candidateId = req.query.candidateId as string;
     const filter: any = { tenantId };
-    if (candidateId) filter.candidateId = candidateId;
+    if (candidateId) {
+      if (!/^[0-9a-fA-F]{24}$/.test(candidateId)) {
+        candidateId = '000000000000000000000000';
+      }
+      filter.candidateId = candidateId;
+    }
 
     const breakups = await CTCBreakup.find(filter)
       .populate('candidateId', 'firstName lastName jobRole')
@@ -81,8 +88,8 @@ export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
     const mapped = breakups.map((b: any) => ({
       ...b,
       _id: b._id,
-      candidateName: b.candidateId ? `${(b.candidateId as any).firstName} ${(b.candidateId as any).lastName}`.trim() : 'Unknown',
-      department: (b.candidateId as any)?.jobRole || 'N/A',
+      candidateName: b.candidateName || (b.candidateId ? `${(b.candidateId as any).firstName} ${(b.candidateId as any).lastName}`.trim() : 'Unknown'),
+      department: b.department || ((b.candidateId as any)?.jobRole || 'N/A'),
       annualCTC: b.annualCTC?.toLocaleString() || '0',
       monthlyGross: b.monthlyGross?.toLocaleString() || '0',
       status: b.approvalStatus || 'Pending',
@@ -93,7 +100,7 @@ export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
     res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching CTC breakups:', error);
-    res.status(500).json({ message: 'Error fetching CTC breakups' });
+    res.status(500).json({ message: 'Error fetching CTC breakups', error: error.message, stack: error.stack });
   }
 };
 
@@ -138,8 +145,10 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
 
     const candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for LOI' });
-    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    if (candidateId !== '000000000000000000000000') {
+      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    }
 
     const loi = await LetterOfIntent.create({
       ...req.body,

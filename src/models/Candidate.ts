@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface ICandidate extends Document {
   tenantId: Types.ObjectId;
+  candidateCode?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -20,6 +21,7 @@ export interface ICandidate extends Document {
 
 const candidateSchema = new Schema<ICandidate>({
   tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
+  candidateCode: { type: String },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   email: { type: String, required: true },

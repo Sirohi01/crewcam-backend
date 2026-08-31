@@ -147,8 +147,10 @@ export const createDocumentChecklist = async (req: AuthRequest, res: Response) =
 
     const candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for document checklist' });
-    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    if (candidateId !== '000000000000000000000000') {
+      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    }
 
     const items = Array.isArray(req.body.items) && req.body.items.length
       ? req.body.items.map((item: any) => ({
@@ -164,14 +166,9 @@ export const createDocumentChecklist = async (req: AuthRequest, res: Response) =
           ...(req.body.eduStatus ? [{ documentName: 'Educational Certificates', status: req.body.eduStatus }] : []),
         ];
 
-    const allSubmitted = items.every((i: { status: string }) => i.status === 'Submitted' || i.status === 'Verified');
+    let overallStatus = 'Incomplete'; if (req.body.overallStatus !== undefined) { overallStatus = req.body.overallStatus; } else { const allVerified = items.every((i: { status: string }) => i.status === 'Verified'); const allSubmitted = items.every((i: { status: string }) => i.status === 'Submitted' || i.status === 'Verified'); overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete'; }
 
-    const checklist = await DocumentChecklist.create({
-      tenantId,
-      candidateId,
-      ...(items.length > 0 ? { items } : {}),
-      overallStatus: allSubmitted ? 'Complete' : 'Incomplete'
-    });
+const checklist = await DocumentChecklist.create({ tenantId, candidateId, ...(items.length > 0 ? { items } : {}), overallStatus: overallStatus as 'Incomplete' | 'Verified' | 'Complete' });
 
     if (candidateId) {
       await advanceStep(req, tenantId, candidateId, 'documentChecklist', 'in_progress', (checklist as any)._id);
@@ -213,9 +210,7 @@ export const updateDocumentChecklist = async (req: AuthRequest, res: Response) =
     if (req.body.hrRemarks !== undefined) (checklist as any).hrRemarks = req.body.hrRemarks;
     if (req.body.hrSignatureDate !== undefined) (checklist as any).hrSignatureDate = req.body.hrSignatureDate;
 
-    const allVerified = checklist.items.every(i => i.status === 'Verified');
-    const allSubmitted = checklist.items.every(i => i.status === 'Submitted' || i.status === 'Verified');
-    checklist.overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete';
+    if (req.body.overallStatus !== undefined) { checklist.overallStatus = req.body.overallStatus; } else { const allVerified = checklist.items.every(i => i.status === 'Verified'); const allSubmitted = checklist.items.every(i => i.status === 'Submitted' || i.status === 'Verified'); checklist.overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete'; }
 
     await checklist.save();
 
@@ -287,9 +282,7 @@ export const updateDocumentChecklistItem = async (req: AuthRequest, res: Respons
       checklist.items[idx].verifiedAt = new Date();
     }
 
-    const allVerified = checklist.items.every(i => i.status === 'Verified');
-    const allSubmitted = checklist.items.every(i => i.status === 'Submitted' || i.status === 'Verified');
-    checklist.overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete';
+    if (req.body.overallStatus !== undefined) { checklist.overallStatus = req.body.overallStatus; } else { const allVerified = checklist.items.every(i => i.status === 'Verified'); const allSubmitted = checklist.items.every(i => i.status === 'Submitted' || i.status === 'Verified'); checklist.overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete'; }
 
     await checklist.save();
 
@@ -414,5 +407,17 @@ export const updateBGVReport = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error updating BGV report:', error);
     res.status(500).json({ message: 'Error updating BGV report' });
+  }
+};
+
+export const updateJoiningConfirmation = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const updated = await JoiningConfirmation.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.status(200).json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating', error: error.message });
   }
 };

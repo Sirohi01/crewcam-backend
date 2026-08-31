@@ -333,8 +333,10 @@ export const createInterviewEvaluation = async (req: AuthRequest, res: Response)
     const { candidateId } = req.body;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for an interview evaluation' });
 
-    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    if (candidateId !== '000000000000000000000000') {
+      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    }
 
     const permittedRounds = ['Telephonic', 'Technical', 'HR', 'Managerial', 'Final'];
     const roundType = permittedRounds.includes(req.body.roundType)
@@ -442,8 +444,10 @@ export const createSelectionApproval = async (req: AuthRequest, res: Response) =
 
     const candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for selection approval' });
-    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    if (candidateId !== '000000000000000000000000') {
+      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    }
 
     const approvalChain = Array.isArray(req.body.approvalChain) ? req.body.approvalChain.filter((entry: any) => entry?.approverId) : [];
     if (!approvalChain.length) return res.status(400).json({ message: 'Add at least one approver from the employee list' });
@@ -478,9 +482,14 @@ export const createSelectionApproval = async (req: AuthRequest, res: Response) =
 export const getSelectionApprovals = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { candidateId } = req.query;
+    let candidateId = req.query.candidateId as string;
     const filter: any = { tenantId };
-    if (candidateId) filter.candidateId = candidateId;
+    if (candidateId) {
+      if (!/^[0-9a-fA-F]{24}$/.test(candidateId)) {
+        candidateId = '000000000000000000000000';
+      }
+      filter.candidateId = candidateId;
+    }
 
     const approvals = await SelectionApproval.find(filter)
       .populate('approvedBy', 'firstName lastName email')
@@ -491,11 +500,14 @@ export const getSelectionApprovals = async (req: AuthRequest, res: Response) => 
 
     const enriched = approvals.map((app: any) => ({
       ...app,
-      candidateName: app.candidateId ? `${(app.candidateId as any).firstName} ${(app.candidateId as any).lastName}`.trim() : 'Unknown',
-      position: app.jobRole || 'N/A',
-      department: 'N/A',
-      joiningDate: 'N/A',
-      status: app.finalStatus || 'Pending',
+      candidateName: app.candidateName || (app.candidateId ? `${(app.candidateId as any).firstName} ${(app.candidateId as any).lastName}`.trim() : 'Unknown'),
+      position: app.position || app.jobRole || 'N/A',
+      department: app.department || 'N/A',
+      workLocation: app.workLocation || 'N/A',
+      reportingTo: app.reportingTo || 'N/A',
+      joiningDate: app.joiningDate || 'N/A',
+      status: app.status || app.finalStatus || 'Pending',
+      proposedMonthlyCTC: app.proposedMonthlyCTC || undefined,
       proposedAnnualCTC: app.proposedCTC?.toLocaleString() || 'N/A',
       createdBy: app.approvedBy,
       updatedAt: app.updatedAt
@@ -504,7 +516,7 @@ export const getSelectionApprovals = async (req: AuthRequest, res: Response) => 
     res.status(200).json({ data: enriched });
   } catch (error: any) {
     console.error('Error fetching selection approvals:', error);
-    res.status(500).json({ message: 'Error fetching selection approvals' });
+    res.status(500).json({ message: 'Error fetching selection approvals', error: error.message, stack: error.stack });
   }
 };
 

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import History from '../models/History';
-import SubDepartment from '../models/SubDepartment';
+import { SubDepartment } from '../models/SubDepartment';
 
 // ======================================================
 // GET HISTORY
@@ -166,19 +166,19 @@ export const getHistory = async (
                     subDepartment.code,
 
                 department:
-                    subDepartment.department,
+                    (subDepartment as any).department || (subDepartment as any).departmentId,
 
                 parentDepartment:
-                    subDepartment.parentDepartment,
+                    (subDepartment as any).parentDepartment || (subDepartment as any).parentDepartmentId,
 
                 createdBy:
                     subDepartment.createdBy,
 
                 createdOn:
-                    subDepartment.createdAt,
+                    (subDepartment as any).createdAt,
 
                 lastUpdated:
-                    subDepartment.updatedAt,
+                    (subDepartment as any).updatedAt,
 
                 totalChanges:
                     total,

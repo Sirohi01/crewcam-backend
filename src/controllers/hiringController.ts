@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { Candidate } from '../models/Candidate';
 import { Interview } from '../models/Interview';
 import { ManpowerRequest } from '../models/ManpowerRequest';
+import { HiringPipelineState } from '../models/HiringPipelineState';
 import { AuditLog } from '../models/AuditLog';
 import { advanceStep, getOrCreatePipelineState } from '../utils/hiringPipelineHelpers';
 import { evaluateGate, STEP_RULES } from '../utils/hiringPipelineRules';
@@ -20,6 +21,15 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
     const manpowerRequest = await ManpowerRequest.findOne({ _id: req.body.manpowerRequestId, tenantId } as any);
     if (!manpowerRequest || manpowerRequest.status !== 'Approved') {
       return res.status(409).json({ message: 'Select an approved manpower request before adding a candidate' });
+    }
+
+    // Duplicate Check
+    const existing = await Candidate.findOne({ 
+      tenantId, 
+      $or: [{ email: req.body.email }, { phone: req.body.phone }] 
+    } as any);
+    if (existing) {
+      return res.status(409).json({ message: 'A candidate with this email or phone already exists in the system.' });
     }
 
     const candidate = await Candidate.create({ ...req.body, tenantId, ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {}) });
@@ -44,6 +54,39 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error creating candidate:', error);
     res.status(500).json({ message: 'Error creating candidate' });
+  }
+};
+
+export const fastTrackToCTC = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const candidateId = req.params.candidateId as string;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const candidate = await Candidate.findOne({ _id: candidateId, tenantId } as any);
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    // Force complete all prerequisite steps for CTC Breakup
+    await advanceStep(req, String(tenantId), candidateId, 'manpowerRequest', 'completed');
+    await advanceStep(req, String(tenantId), candidateId, 'interview', 'completed');
+    await advanceStep(req, String(tenantId), candidateId, 'interviewEvaluation', 'completed');
+    await advanceStep(req, String(tenantId), candidateId, 'selectionApproval', 'approved');
+
+    await AuditLog.create({
+      tenantId,
+      userId: req.user!._id as any,
+      action: 'FAST_TRACK_CANDIDATE',
+      module: 'ATS',
+      status: 'SUCCESS',
+      ipAddress: req.ip as string,
+      userAgent: req.headers['user-agent'] as string,
+      details: { candidateId: candidateId, fastTrackedTo: 'ctcBreakup' }
+    } as any);
+
+    res.status(200).json({ message: 'Candidate fast-tracked to CTC Breakup successfully' });
+  } catch (error: any) {
+    console.error('Error fast-tracking candidate:', error);
+    res.status(500).json({ message: 'Error fast-tracking candidate' });
   }
 };
 
@@ -84,9 +127,21 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
 export const getCandidates = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { status, page, limit, search } = req.query;
+    const { status, page, limit, search, pipelineStep } = req.query;
     const filter: any = { tenantId };
     if (status) filter.status = status;
+    
+    if (pipelineStep) {
+      const pipelineStates = await HiringPipelineState.find({
+        tenantId,
+        'steps': {
+          $elemMatch: { key: pipelineStep, status: { $in: ['in_progress', 'completed', 'approved'] } }
+        }
+      });
+      const candidateIds = pipelineStates.map(s => s.candidateId);
+      filter._id = { $in: candidateIds };
+    }
+
     if (search && String(search).trim()) {
       const term = String(search).trim();
       filter.$or = [

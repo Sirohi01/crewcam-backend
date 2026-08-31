@@ -102,7 +102,7 @@ export const getAllLeads = async (req: AuthRequest, res: Response) => {
       query.$or = [{ companyName: search }, { contactName: search }, { contactEmail: search }];
     }
 
-    const sort = req.query.followUpStatus ? { followUpDate: 1 as const } : { updatedAt: -1 as const };
+    const sort: any = req.query.followUpStatus ? { followUpDate: 1 as const } : { updatedAt: -1 as const };
     const [leads, total] = await Promise.all([
       Lead.find(query).sort(sort).skip(skip).limit(limit).populate('assignedTo', 'firstName lastName').lean(),
       Lead.countDocuments(query),

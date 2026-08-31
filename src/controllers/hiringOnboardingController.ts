@@ -12,6 +12,8 @@ import { InductionForm } from '../models/InductionForm';
 import { TeamIntro } from '../models/TeamIntro';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
+import { DocumentChecklist } from '../models/DocumentChecklist';
+import { HiringPipelineState } from '../models/HiringPipelineState';
 import { Candidate } from '../models/Candidate';
 import { advanceStep, linkEmployeeId } from '../utils/hiringPipelineHelpers';
 import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
@@ -58,11 +60,119 @@ export const getJoiningForms = async (req: AuthRequest, res: Response) => {
     const { candidateId } = req.query;
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
-    const forms = await JoiningForm.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(forms);
+    const forms = await JoiningForm.find(filter).lean();
+
+    const mapped = forms.map((f: any) => {
+      const personal = f.personalDetails || {};
+      const pos = f.positionDetails || {};
+      const contact = f.contactDetails || {};
+      return {
+        ...f,
+        _id: f._id,
+        candidateName: f.candidateName || personal.fullName || 'Unknown',
+        position: pos.designation || 'N/A',
+        department: pos.department || 'N/A',
+        joiningDate: pos.joiningDate || null,
+        mobileNumber: contact.mobileNumber || 'N/A',
+        status: f.status || 'Pending',
+        updatedAt: f.updatedAt
+      };
+    });
+
+    // Fetch Completed Document Checklists to synthesize Pending Joining Forms
+    const checklistFilter: any = { tenantId, overallStatus: { $in: ['Verified', 'Complete'] } };
+    if (candidateId) checklistFilter.candidateId = candidateId;
+    const completedChecklists = await DocumentChecklist.find(checklistFilter).lean();
+
+    const existingFormCandidateIds = new Set(forms.map(f => String(f.candidateId)));
+    
+    // Fetch candidates for synthetic records
+    const syntheticCandidateIds = completedChecklists
+      .filter((c: any) => !existingFormCandidateIds.has(String(c.candidateId)))
+      .map(c => c.candidateId);
+      
+    const syntheticCandidates = await Candidate.find({ _id: { $in: syntheticCandidateIds } }).select('firstName lastName jobRole').lean();
+    const candidateMap = new Map(syntheticCandidates.map((c: any) => [String(c._id), c]));
+
+    const syntheticForms = completedChecklists
+      .filter((c: any) => !existingFormCandidateIds.has(String(c.candidateId)))
+      .map((c: any) => {
+        const cand = candidateMap.get(String(c.candidateId));
+        return {
+          _id: null,
+          candidateId: cand || c.candidateId,
+          candidateName: c.candidateName || (cand ? `${cand.firstName || ''} ${cand.lastName || ''}`.trim() : 'Unknown'),
+          position: c.designation || cand?.jobRole || 'N/A',
+          department: c.department || 'N/A',
+          joiningDate: null,
+          mobileNumber: 'N/A',
+          status: 'Pending',
+          updatedAt: c.updatedAt || c.createdAt
+        };
+      });
+
+    res.status(200).json( [...mapped, ...syntheticForms] );
   } catch (error: any) {
     console.error('Error fetching joining forms:', error);
     res.status(500).json({ message: 'Error fetching joining forms' });
+  }
+};
+
+export const updateJoiningForm = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+    
+    const form = await JoiningForm.findOneAndUpdate(
+      { _id: id, tenantId } as any,
+      { ...req.body },
+      { returnDocument: 'after' }
+    );
+    if (!form) return res.status(404).json({ message: 'Joining form not found' });
+
+    // Also update existing employee if found
+    const candidate = await Candidate.findOne({ _id: form.candidateId, tenantId } as any);
+    if (candidate) {
+      const existingEmployee = await User.findOne({ tenantId, email: candidate.email } as any);
+      if (existingEmployee) {
+        const [firstName, ...rest] = String((form.personalDetails as any)?.fullName || `${candidate.firstName} ${candidate.lastName}`).trim().split(/\s+/);
+        const position = form.positionDetails as any;
+        const contact = form.contactDetails as any;
+        const identity = form.identificationDetails as any;
+        const emergency = form.emergencyContact as any;
+
+        const finalFirstName = firstName || candidate.firstName;
+        const finalLastName = rest.join(' ') || candidate.lastName || 'Employee';
+
+        await User.findByIdAndUpdate(existingEmployee._id, {
+          firstName: finalFirstName,
+          lastName: finalLastName,
+          profilePictureUrl: candidate.profileImageUrl,
+          employeeCode: position?.empCode || undefined,
+          mobileNumber: contact?.mobileNumber || candidate.phone,
+          dateOfJoining: position?.joiningDate || undefined,
+          dateOfBirth: (form.personalDetails as any)?.dob || undefined,
+          gender: String((form.personalDetails as any)?.gender || '').toLowerCase() || undefined,
+          bloodGroup: (form.personalDetails as any)?.bloodGroup || undefined,
+          maritalStatus: String((form.personalDetails as any)?.maritalStatus || '').toLowerCase() || undefined,
+          currentAddress: contact?.currentAddress || undefined,
+          permanentAddress: contact?.permanentAddress || undefined,
+          panNumber: identity?.panNumber || undefined,
+          aadhaarNumber: identity?.aadhaarNumber || undefined,
+          uanNumber: identity?.uanNumber || undefined,
+          emergencyContactName: emergency?.name || undefined,
+          emergencyContactRelation: emergency?.relationship || undefined,
+          emergencyContactNumber: emergency?.mobileNumber || undefined,
+        });
+      }
+    }
+
+    await logAudit(tenantId, req.user!._id, 'UPDATE_JOINING_FORM', req, { formId: (form as any)._id });
+    res.status(200).json(form);
+  } catch (error: any) {
+    console.error('Error updating joining form:', error);
+    res.status(500).json({ message: 'Error updating joining form' });
   }
 };
 
@@ -489,24 +599,47 @@ export const verifyJoiningForm = async (req: AuthRequest, res: Response) => {
 
     let employeeId = form.employeeId as any;
     let employeeCreated = false;
-    if (!employeeId) {
-      const existingEmployee = await User.findOne({ tenantId, email: candidate.email } as any);
-      if (existingEmployee) {
-        employeeId = existingEmployee._id;
-      } else {
-        const [firstName, ...rest] = String((form.personalDetails as any)?.fullName || `${candidate.firstName} ${candidate.lastName}`).trim().split(/\s+/);
-        const position = form.positionDetails as any;
-        const contact = form.contactDetails as any;
-        const identity = form.identificationDetails as any;
-        const emergency = form.emergencyContact as any;
+      const [firstName, ...rest] = String((form.personalDetails as any)?.fullName || `${candidate.firstName} ${candidate.lastName}`).trim().split(/\s+/);
+      const position = form.positionDetails as any;
+      const contact = form.contactDetails as any;
+      const identity = form.identificationDetails as any;
+      const emergency = form.emergencyContact as any;
 
-        const generatedPassword = crypto.randomBytes(6).toString('hex') + 'A1!'; // e.g., 1a2b3c4d5e6fA1!
-        const finalFirstName = firstName || candidate.firstName;
+      const finalFirstName = firstName || candidate.firstName;
+      const finalLastName = rest.join(' ') || candidate.lastName || 'Employee';
 
-        const employee = await User.create({
+      if (!employeeId) {
+        const existingEmployee = await User.findOne({ tenantId, email: candidate.email } as any);
+        if (existingEmployee) {
+          employeeId = existingEmployee._id;
+          
+          await User.findByIdAndUpdate(employeeId, {
+            firstName: finalFirstName,
+            lastName: finalLastName,
+            profilePictureUrl: candidate.profileImageUrl,
+            employeeCode: position?.empCode || undefined,
+            mobileNumber: contact?.mobileNumber || candidate.phone,
+            dateOfJoining: position?.joiningDate || undefined,
+            dateOfBirth: (form.personalDetails as any)?.dob || undefined,
+            gender: String((form.personalDetails as any)?.gender || '').toLowerCase() || undefined,
+            bloodGroup: (form.personalDetails as any)?.bloodGroup || undefined,
+            maritalStatus: String((form.personalDetails as any)?.maritalStatus || '').toLowerCase() || undefined,
+            currentAddress: contact?.currentAddress || undefined,
+            permanentAddress: contact?.permanentAddress || undefined,
+            panNumber: identity?.panNumber || undefined,
+            aadhaarNumber: identity?.aadhaarNumber || undefined,
+            uanNumber: identity?.uanNumber || undefined,
+            emergencyContactName: emergency?.name || undefined,
+            emergencyContactRelation: emergency?.relationship || undefined,
+            emergencyContactNumber: emergency?.mobileNumber || undefined,
+          });
+        } else {
+          const generatedPassword = crypto.randomBytes(6).toString('hex') + 'A1!'; // e.g., 1a2b3c4d5e6fA1!
+
+          const employee = await User.create({
           tenantId,
           firstName: finalFirstName,
-          lastName: rest.join(' ') || candidate.lastName || 'Employee',
+          lastName: finalLastName,
           email: candidate.email,
           passwordHash: await bcrypt.hash(generatedPassword, 10),
           profilePictureUrl: candidate.profileImageUrl,
@@ -905,3 +1038,63 @@ export const deleteAssetAccessForm = async (req: AuthRequest, res: Response) => 
 };
 
 
+
+export const updateNomination = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const updated = await Nomination.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.status(200).json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating', error: error.message });
+  }
+};
+
+export const updateBankPayrollInfo = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const updated = await BankPayrollInfo.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.status(200).json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating', error: error.message });
+  }
+};
+
+export const updateEmergencyContact = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const updated = await EmergencyContact.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.status(200).json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating', error: error.message });
+  }
+};
+
+export const updatePolicyAcceptance = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const updated = await PolicyAcceptance.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.status(200).json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating', error: error.message });
+  }
+};
+
+export const updateConductAcceptance = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const updated = await ConductAcceptance.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.status(200).json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating', error: error.message });
+  }
+};
