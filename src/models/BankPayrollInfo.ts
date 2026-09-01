@@ -140,7 +140,8 @@ const bankPayrollInfoSchema = new Schema<IBankPayrollInfo>({
       }
       return ret;
     }
-  }
+  },
+  strict: false
 });
 
 // Encrypt sensitive fields before save

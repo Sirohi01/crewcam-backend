@@ -49,7 +49,7 @@ const ndaDocumentSchema = new Schema<INDADocument>({
   signedDate: { type: Date },
   signatureIp: { type: String },
   issuedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 ndaDocumentSchema.plugin(tenantPlugin);
 

@@ -42,7 +42,7 @@ const conductAcceptanceSchema = new Schema<IConductAcceptance>({
   ipAddress: { type: String },
   userAgent: { type: String },
   pdfUrl: { type: String },
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 conductAcceptanceSchema.plugin(tenantPlugin);
 

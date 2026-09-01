@@ -318,7 +318,7 @@ export const createBGVRequest = async (req: AuthRequest, res: Response) => {
     res.status(201).json(bgv);
   } catch (error: any) {
     console.error('Error creating BGV request:', error);
-    require('fs').writeFileSync('d:/NewHrCrm/crewcam-backend/bgv_error.log', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    require('fs').writeFileSync('bgv_error.log', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     res.status(500).json({ message: 'Error creating BGV request', error: error.message });
   }
 };

@@ -77,7 +77,7 @@ const bgvRequestSchema = new Schema<IBGVRequest>({
   overallResult: { type: String, enum: ['Clear', 'Discrepancy', 'Pending'], default: 'Pending' },
   discrepancyDetails: { type: String },
   completedDate: { type: Date }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 bgvRequestSchema.plugin(tenantPlugin);
 

@@ -330,8 +330,12 @@ export const createInterviewEvaluation = async (req: AuthRequest, res: Response)
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const { candidateId } = req.body;
+    let { candidateId } = req.body;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for an interview evaluation' });
+
+    if (!mongoose.isValidObjectId(candidateId)) {
+      candidateId = '000000000000000000000000';
+    }
 
     if (candidateId !== '000000000000000000000000') {
       const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
@@ -442,8 +446,13 @@ export const createSelectionApproval = async (req: AuthRequest, res: Response) =
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const candidateId = req.body.candidateId;
+    let candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for selection approval' });
+    
+    if (!mongoose.isValidObjectId(candidateId)) {
+      candidateId = '000000000000000000000000';
+    }
+
     if (candidateId !== '000000000000000000000000') {
       const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
       if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });

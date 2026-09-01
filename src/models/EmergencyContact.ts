@@ -133,7 +133,7 @@ const emergencyContactSchema = new Schema<IEmergencyContact>({
   hrRemarks: { type: String },
 
   status: { type: String, enum: ['Pending', 'Submitted', 'Verified'], default: 'Pending' },
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 emergencyContactSchema.plugin(tenantPlugin);
 

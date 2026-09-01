@@ -54,7 +54,7 @@ const policyAcceptanceSchema = new Schema<IPolicyAcceptance>({
   ipAddress: { type: String },
   userAgent: { type: String },
   pdfUrl: { type: String },
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 policyAcceptanceSchema.plugin(tenantPlugin);
 

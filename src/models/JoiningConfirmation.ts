@@ -43,7 +43,7 @@ const joiningConfirmationSchema = new Schema<IJoiningConfirmation>({
   status: { type: String, enum: ['Pending', 'Sent', 'Confirmed'], default: 'Pending' },
   confirmedByCandidate: { type: Boolean, default: false },
   sentBy: { type: Schema.Types.ObjectId, ref: 'User', required: true }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 joiningConfirmationSchema.plugin(tenantPlugin);
 

@@ -132,7 +132,7 @@ const nominationSchema = new Schema<INomination>({
   hrRemarks: { type: String },
   pdfUrl: { type: String },
   status: { type: String, enum: ['Pending', 'Submitted', 'Verified'], default: 'Pending' }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 nominationSchema.plugin(tenantPlugin);
 

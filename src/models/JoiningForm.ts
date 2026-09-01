@@ -266,7 +266,7 @@ const joiningFormSchema = new Schema<IJoiningForm>({
   approvalStatus: { type: String, enum: ['Pending', 'Verified'], default: 'Pending' },
   status: { type: String, enum: ['Pending', 'Submitted', 'Verified'], default: 'Pending' },
   pdfUrl: { type: String },
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 joiningFormSchema.plugin(tenantPlugin);
 

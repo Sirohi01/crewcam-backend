@@ -51,7 +51,7 @@ const documentChecklistSchema = new Schema<IDocumentChecklist>({
     verifiedAt: { type: Date }
   }],
   overallStatus: { type: String, enum: ['Incomplete', 'Complete', 'Verified'], default: 'Incomplete' }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 documentChecklistSchema.plugin(tenantPlugin);
 
