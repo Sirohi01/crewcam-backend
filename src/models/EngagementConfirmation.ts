@@ -19,6 +19,7 @@ export interface IEngagementConfirmation extends ITenantScoped {
   confirmedDate?: Date;
   sentBy: Types.ObjectId;
   status: 'Pending' | 'Sent' | 'Confirmed';
+  engagementData?: any;
 }
 
 const engagementConfirmationSchema = new Schema<IEngagementConfirmation>({
@@ -38,7 +39,8 @@ const engagementConfirmationSchema = new Schema<IEngagementConfirmation>({
   engagementType: { type: String, enum: ['Full-time', 'Contract', 'Consultant'], default: 'Full-time' },
   confirmedDate: { type: Date },
   sentBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  status: { type: String, enum: ['Pending', 'Sent', 'Confirmed'], default: 'Pending' }
+  status: { type: String, enum: ['Pending', 'Sent', 'Confirmed'], default: 'Pending' },
+  engagementData: { type: Schema.Types.Mixed }
 }, { timestamps: true });
 
 engagementConfirmationSchema.plugin(tenantPlugin);
