@@ -9,7 +9,7 @@ export interface ICandidate extends Document {
   phone: string;
   jobRole: string;
   departmentId?: Types.ObjectId;
-  status: 'Applied' | 'Screening' | 'Interviewing' | 'Offered' | 'Hired' | 'Rejected' | 'Hold';
+  status: 'Applied' | 'Screening' | 'Interviewing' | 'Offered' | 'Hired' | 'Rejected' | 'Hold' | 'AI_SCREENING' | 'HOD_APPROVAL' | 'SHORTLISTED' | 'INTERVIEW_SCHEDULED';
   resumeUrl?: string;
   resumeUpdatedAt?: Date;
   source?: string;
@@ -30,7 +30,7 @@ const candidateSchema = new Schema<ICandidate>({
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
   status: {
     type: String,
-    enum: ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected', 'Hold'],
+    enum: ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected', 'Hold', 'AI_SCREENING', 'HOD_APPROVAL', 'SHORTLISTED', 'INTERVIEW_SCHEDULED'],
     default: 'Applied',
     index: true
   },

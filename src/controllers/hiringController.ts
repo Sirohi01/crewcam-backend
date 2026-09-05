@@ -9,7 +9,10 @@ import { advanceStep, getOrCreatePipelineState } from '../utils/hiringPipelineHe
 import { evaluateGate, STEP_RULES } from '../utils/hiringPipelineRules';
 import mongoose from 'mongoose';
 import { getJoiningDate, PROBATION_WINDOW_DAYS } from '../middleware/hiringGate';
-
+import { User } from '../models/User';
+import { notificationService } from '../services/notificationService';
+import { Tenant } from '../models/Tenant';
+import { Branch } from '../models/Branch';
 // Candidate Controllers
 export const createCandidate = async (req: AuthRequest, res: Response) => {
   try {
@@ -33,7 +36,27 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
       return res.status(409).json({ message: 'A candidate with this email or phone already exists in the system.' });
     }
 
-    const candidate = await Candidate.create({ ...req.body, tenantId, ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {}) });
+    const tenant = await Tenant.findById(tenantId);
+    const companyPrefix = tenant?.name ? tenant.name.substring(0, 3).toUpperCase() : 'APP';
+    
+    let branchPrefix = 'HQ';
+    if (manpowerRequest.locationBranchId) {
+      const branch = await Branch.findOne({ _id: manpowerRequest.locationBranchId, tenantId });
+      if (branch && branch.code) {
+        branchPrefix = branch.code.toUpperCase();
+      }
+    }
+    
+    const year = new Date().getFullYear();
+    const count = await Candidate.countDocuments({ tenantId }) + 1;
+    const candidateCode = `${companyPrefix}-${branchPrefix}-${year}-${String(count).padStart(4, '0')}`;
+
+    const candidate = await Candidate.create({ 
+      ...req.body, 
+      tenantId, 
+      candidateCode,
+      ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {}) 
+    });
 
     // Step 1 has no real prerequisite in the gating table (it precedes any candidate existing) —
     // initialize this candidate's pipeline with it already completed, referencing the manpower
@@ -131,6 +154,16 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
     const { status, page, limit, search, pipelineStep } = req.query;
     const filter: any = { tenantId };
     if (status) filter.status = status;
+
+    // Role-based filtering
+    if (req.user?._id) {
+      const currentUser = await User.findOne({ _id: req.user._id, tenantId }).populate('roleId');
+      const userRole = (currentUser?.roleId as any)?.category || (currentUser?.roleId as any)?.name;
+      const isHod = userRole?.toLowerCase() === 'hod';
+      if (isHod && currentUser?.departmentId) {
+        filter.departmentId = currentUser.departmentId;
+      }
+    }
     
     if (pipelineStep) {
       const pipelineStates = await HiringPipelineState.find({
@@ -294,6 +327,67 @@ export const updateCandidateStatus = async (req: AuthRequest, res: Response) => 
   }
 };
 
+export const deleteCandidate = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+
+    if (!id || !mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid candidate ID' });
+    }
+
+    // Check if BGV has started for this candidate
+    if (mongoose.models.BGVRequest) {
+      const bgvRequest = await mongoose.models.BGVRequest.findOne({ candidateId: id, tenantId } as any);
+      if (bgvRequest) {
+        return res.status(403).json({ message: 'Candidate cannot be deleted because Background Verification (BGV) has already started.' });
+      }
+    }
+
+    // Perform cascading deletes across all related collections
+    // const modelsToDeleteFrom = [
+    //   'AiUsageLog', 'AppointmentLetter', 'AssetAccessForm', 'BankPayrollInfo',
+    //   'BGVRequest', 'ConductAcceptance', 'CTCBreakup', 'DocumentChecklist',
+    //   'EmergencyContact', 'EngagementConfirmation', 'HiringPipelineState',
+    //   'InductionForm', 'Interview', 'InterviewEvaluation', 'JoiningConfirmation',
+    //   'JoiningForm', 'LetterOfIntent', 'NDADocument', 'Nomination', 'OfferLetter',
+    //   'PolicyAcceptance', 'ResumeScreening', 'SelectionApproval', 'TeamIntro'
+    // ];
+
+    // for (const modelName of modelsToDeleteFrom) {
+    //   try {
+    //     if (mongoose.models[modelName]) {
+    //       await mongoose.models[modelName].deleteMany({ candidateId: id, tenantId } as any);
+    //     }
+    //   } catch (err) {
+    //     console.warn(`Could not cascade delete from ${modelName} for candidate ${id}:`, err);
+    //   }
+    // }
+
+    const candidate = await Candidate.findOneAndDelete({ _id: id, tenantId } as any);
+
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
+
+    await AuditLog.create({
+      tenantId,
+      userId: req.user!._id as any,
+      action: 'DELETE_CANDIDATE',
+      module: 'ATS',
+      status: 'SUCCESS',
+      ipAddress: req.ip as string,
+      userAgent: req.headers['user-agent'] as string,
+      details: { candidateId: id }
+    } as any);
+
+    res.status(200).json({ message: 'Candidate deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting candidate:', error);
+    res.status(500).json({ message: 'Error deleting candidate' });
+  }
+};
+
 // Interview Controllers
 export const scheduleInterview = async (req: AuthRequest, res: Response) => {
   try {
@@ -303,12 +397,43 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
     const interview = await Interview.create({ ...req.body, tenantId });
 
     // Automatically move candidate to Interviewing status if not already
-    await Candidate.findOneAndUpdate(
+    const candidate = await Candidate.findOneAndUpdate(
       { _id: req.body.candidateId, tenantId } as any,
-      { status: 'Interviewing' }
+      { status: 'INTERVIEW_SCHEDULED' },
+      { new: true }
     );
 
     await advanceStep(req, String(tenantId), req.body.candidateId, 'interview', 'in_progress', (interview as any)._id);
+
+    // Send notifications
+    if (candidate) {
+      const interviewer = await User.findById(req.body.interviewerId);
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+      const interviewerName = interviewer ? `${interviewer.firstName} ${interviewer.lastName}` : 'an interviewer';
+      const scheduledDateStr = new Date(req.body.scheduledDate).toLocaleString();
+      
+      const emailBody = `Dear ${candidateName},\n\nYour interview has been scheduled on ${scheduledDateStr} with ${interviewerName}.\n\nBest regards,\nHR Team`;
+      const whatsappBody = `Hi ${candidateName}, your interview is scheduled on ${scheduledDateStr} with ${interviewerName}.`;
+
+      if (candidate.email) {
+        await notificationService.sendEmail(String(tenantId), candidate.email, 'Interview Scheduled', emailBody);
+      }
+      if (candidate.phone) {
+        await notificationService.sendWhatsApp(String(tenantId), candidate.phone, whatsappBody);
+      }
+
+      if (interviewer) {
+        const interviewerEmailBody = `Dear ${interviewerName},\n\nYou have an interview scheduled with ${candidateName} on ${scheduledDateStr}.\n\nBest regards,\nHR Team`;
+        const interviewerWhatsAppBody = `Hi ${interviewerName}, you have an interview scheduled with ${candidateName} on ${scheduledDateStr}.`;
+        
+        if (interviewer.email) {
+          await notificationService.sendEmail(String(tenantId), interviewer.email, 'Interview Scheduled', interviewerEmailBody);
+        }
+        if ((interviewer as any).phone) {
+          await notificationService.sendWhatsApp(String(tenantId), (interviewer as any).phone, interviewerWhatsAppBody);
+        }
+      }
+    }
 
     await AuditLog.create({
       tenantId,

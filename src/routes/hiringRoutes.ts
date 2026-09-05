@@ -17,6 +17,7 @@ import {
   fastTrackToCTC,
   updateCandidate,
   updateCandidateStatus,
+  deleteCandidate,
   scheduleInterview,
   getAllInterviews,
   getInterviewStats,
@@ -46,7 +47,8 @@ import {
   updateSelectionApproval,
   updateSelectionApprovalDecision,
   deleteSelectionApproval,
-  deleteManpowerRequest
+  deleteManpowerRequest,
+  mockPublishPlatform
 } from '../controllers/hiringRequisitionController';
 import {
   updateOfferLetter,
@@ -236,6 +238,7 @@ router.post('/candidates/:slug/bypass-interviews', checkPermission('ORG_WRITE'),
 router.get('/candidates/:id', checkPermission('ORG_READ'), getCandidateById);
 router.put('/candidates/:id', checkPermission('ORG_WRITE'), updateCandidate);
 router.put('/candidates/:id/status', checkPermission('ORG_WRITE'), updateCandidateStatus);
+router.delete('/candidates/:id', checkPermission('ORG_WRITE'), deleteCandidate);
 
 // Interviews
 router.post('/interviews', checkPermission('ATS_WRITE'), scheduleInterview);
@@ -253,6 +256,7 @@ router.put('/interviews/:id/questions/:index/note', checkPermission('ATS_WRITE')
 // Manpower Requests
 router.post('/manpower-request', checkPermission('ORG_WRITE'), createManpowerRequest);
 router.get('/manpower-request', checkPermission('ORG_READ'), getManpowerRequests);
+router.post('/mock-publish-platform', authenticate, mockPublishPlatform);
 router.get('/manpower-request/stats', checkPermission('ORG_READ'), getManpowerRequestStats);
 router.get('/manpower-request/:id', checkPermission('ORG_READ'), getManpowerRequestById);
 router.put('/manpower-request/:id', checkPermission('ORG_WRITE'), updateManpowerRequest);
