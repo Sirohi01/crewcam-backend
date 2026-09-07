@@ -19,8 +19,19 @@ const MODULE_MAP: Record<string, string> = {
   'mobile': 'mobile',
 };
 
-export const getTenantFeatures = async (tenantId: string): Promise<string[]> => {
-  if (tenantId === 'SUPER_ADMIN') return ['*'];
+const MODULE_TO_SECTIONS: Record<string, string[]> = {
+  'employee-mgmt': ['People', 'HR & Admin Department'],
+  'attendance-mgmt': ['Attendance Section'],
+  'leave-mgmt': ['Attendance Section'],
+  'payroll-mgmt': ['Payroll'],
+  'performance-mgmt': ['PMS System'],
+  'recruitment': ['Hiring Process'],
+  'document-mgmt': ['Communications'],
+  'helpdesk': ['Support & Operations', 'Meeting Section'],
+};
+
+export const getTenantFeatures = async (tenantId: string): Promise<{ features: string[], allowedSections: string[] }> => {
+  if (tenantId === 'SUPER_ADMIN') return { features: ['*'], allowedSections: [] };
   
   const [tenant, company] = await Promise.all([
     Tenant.findById(tenantId).populate('packageId').lean(),
@@ -28,7 +39,22 @@ export const getTenantFeatures = async (tenantId: string): Promise<string[]> => 
   ]);
   
   const pkg: any = (tenant as any)?.packageId;
-  if (!pkg || !pkg.isActive) return [];
+  let allowedSections = (tenant as any)?.allowedSections || [];
+  
+  // Also derive allowedSections from configured modules
+  const tenantModules = (tenant as any)?.modules;
+  if (tenantModules && Array.isArray(tenantModules)) {
+    const derivedSections = new Set<string>();
+    tenantModules.filter((m: any) => m.enabled).forEach((m: any) => {
+      const secs = MODULE_TO_SECTIONS[m.key];
+      if (secs) secs.forEach(s => derivedSections.add(s));
+    });
+    if (derivedSections.size > 0) {
+      allowedSections = Array.from(new Set([...allowedSections, ...Array.from(derivedSections), 'Workspace', 'Company Setup', 'Admin Section']));
+    }
+  }
+
+  if (!pkg || !pkg.isActive) return { features: [], allowedSections };
   
   let features: string[] = pkg.features || [];
   
@@ -43,13 +69,14 @@ export const getTenantFeatures = async (tenantId: string): Promise<string[]> => 
     });
   }
   
-  return features;
+  return { features, allowedSections };
 };
 
 export interface VisibilityContext {
   roleId?: string | undefined;
   effectivePermissions: string[];
   tenantFeatures: string[];
+  allowedSections?: string[];
 }
 
 export interface VisibilityGated {
@@ -69,8 +96,15 @@ export interface VisibilityGated {
 const hasFullAccess = (effectivePermissions: string[]) =>
   effectivePermissions.includes('*') || effectivePermissions.includes('SUPER_ADMIN');
 
-export const isVisible = (item: VisibilityGated & { label?: string }, ctx: VisibilityContext): boolean => {
+export const isVisible = (item: VisibilityGated & { label?: string, section?: string }, ctx: VisibilityContext): boolean => {
   const bypass = hasFullAccess(ctx.effectivePermissions);
+
+  if (ctx.allowedSections && ctx.allowedSections.length > 0) {
+    // If the tenant has specific allowed sections, filter by section
+    if (item.section && item.section !== 'Workspace' && !ctx.allowedSections.includes(item.section)) {
+      return false;
+    }
+  }
 
   if (!bypass && item.roleIds && item.roleIds.length > 0) {
     const allowedIds = item.roleIds.map((id) => id.toString());
