@@ -55,8 +55,12 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // ---- Company Setup ----
   { section: 'Company Setup', label: 'Company Profile', href: '/dashboard/settings/company', icon: 'UserCog', order: 0, requiredPermission: 'COMPANY_PROFILE_READ' },
   { section: 'Company Setup', label: 'Manage Branch', href: '/dashboard/branches', icon: 'Building2', order: 1, requiredPermission: 'ORG_READ' },
+  { section: 'Company Setup', label: 'Business Unit', href: '/dashboard/bussiness-unit', icon: 'Briefcase', order: 1.5, requiredPermission: 'ORG_READ' },
   { section: 'Company Setup', label: 'Manage Department', href: '/dashboard/departments', icon: 'ListTree', order: 2, requiredPermission: 'ORG_READ' },
   { section: 'Company Setup', label: 'Manage Designation', href: '/dashboard/divisions/designations', icon: 'Briefcase', order: 3, requiredPermission: 'ORG_READ' },
+  { section: 'Company Setup', label: 'Job Families', href: '/dashboard/job-families', icon: 'Users', order: 3.2, requiredPermission: 'ORG_READ' },
+  { section: 'Company Setup', label: 'Job Grades', href: '/dashboard/job-grades', icon: 'BarChart', order: 3.4, requiredPermission: 'ORG_READ' },
+  { section: 'Company Setup', label: 'Interview Section', href: '/dashboard/hiring/candidates/new/create/interview-process', icon: 'UserPlus', order: 3.6, requiredPermission: 'ORG_READ' },
   { section: 'Company Setup', label: 'Manage Roles', href: '/dashboard/roles', icon: 'KeyRound', order: 4, requiredPermission: 'ORG_READ' },
   ...[
     ['Job Levels', 'levels'], ['Statuses', 'statuses'], ['Policies', 'policies'],

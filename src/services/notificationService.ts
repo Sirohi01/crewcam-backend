@@ -65,6 +65,29 @@ export const notificationService = {
   },
 
   sendWhatsAppOTP: async (tenantId: string, to: string, otp: string) => {
+    const aisensyApiKey = process.env.AISENSY_API_KEY;
+    if (aisensyApiKey) {
+      console.log(`[REAL WHATSAPP OTP via AISENSY] Sending OTP to ${to}...`);
+      try {
+        const response = await axios.post(
+          'https://backend.aisensy.com/campaign/t1/api/v2',
+          {
+            apiKey: aisensyApiKey,
+            campaignName: process.env.AISENSY_OTP_CAMPAIGN_NAME || 'AISENSY_CAMPAIGN_OTP',
+            destination: to,
+            userName: "User",
+            templateParams: [otp],
+            buttonValue: otp
+          },
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+        return { success: true, simulated: false, data: response.data };
+      } catch (error: any) {
+        console.error('[AISENSY OTP ERROR]', error?.response?.data || error.message);
+        console.warn('Falling back to other providers or simulation...');
+      }
+    }
+
     if (OPUS_API_KEY) {
       console.log(`[REAL WHATSAPP OTP via OPUS] Sending OTP to ${to}...`);
       try {
@@ -76,7 +99,7 @@ export const notificationService = {
         return { success: true, simulated: false, data: response.data };
       } catch (error: any) {
         console.error('[OPUS OTP ERROR]', error?.response?.data || error.message);
-        throw new Error('Failed to send WhatsApp OTP via Opus API');
+        console.warn('Falling back to simulated OTP...');
       }
     }
 
