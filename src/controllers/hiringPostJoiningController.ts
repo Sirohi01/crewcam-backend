@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { ProbationReview } from '../models/ProbationReview';
@@ -6,6 +7,7 @@ import { IDCard } from '../models/IDCard';
 import { ReleaseQA } from '../models/ReleaseQA';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
+import { HiringPipelineState } from '../models/HiringPipelineState';
 import { generatePdfBuffer, savePdfToCloudinary } from '../utils/pdfGenerator';
 import { generateIdCardPdfBuffer } from '../utils/idCardPdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
@@ -28,11 +30,29 @@ const logAudit = async (tenantId: any, userId: any, action: string, req: AuthReq
   } as any);
 };
 
+const resolveEmployeeId = async (tenantId: any, employeeIdInput: any) => {
+  if (!employeeIdInput) return null;
+  const str = String(employeeIdInput).trim();
+  if (mongoose.Types.ObjectId.isValid(str) && /^[0-9a-fA-F]{24}$/.test(str)) {
+    return new mongoose.Types.ObjectId(str);
+  }
+  const user = await User.findOne({ tenantId, employeeCode: str });
+  if (user) return user._id;
+  const state = await HiringPipelineState.findOne({ tenantId, $or: [{ employeeId: str }, { candidateId: str }] } as any);
+  if (state?.employeeId && mongoose.Types.ObjectId.isValid(String(state.employeeId))) {
+    return state.employeeId;
+  }
+  return null;
+};
+
 // Step 22: Probation Review Form
 export const createProbationReview = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const employeeId = await resolveEmployeeId(tenantId, req.body.employeeId);
+    if (!employeeId) return res.status(400).json({ message: 'Valid employee ID required' });
 
     const ratings = req.body.ratings || [];
     const overallRating = ratings.length
@@ -41,18 +61,19 @@ export const createProbationReview = async (req: AuthRequest, res: Response) => 
 
     const review = await ProbationReview.create({
       ...req.body,
+      employeeId,
       tenantId,
       reviewerId: req.user!._id,
       overallRating,
       reviewDate: new Date()
     });
 
-    await advanceStepForEmployee(req, tenantId, req.body.employeeId, 'probationReview', 'in_progress', (review as any)._id);
+    await advanceStepForEmployee(req, tenantId, String(employeeId), 'probationReview', 'in_progress', (review as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_PROBATION_REVIEW', req, { reviewId: (review as any)._id });
     res.status(201).json(review);
   } catch (error: any) {
     console.error('Error creating probation review:', error);
-    res.status(500).json({ message: 'Error creating probation review' });
+    res.status(500).json({ message: 'Error creating probation review', error: error.message });
   }
 };
 
@@ -130,7 +151,7 @@ export const updateProbationReview = async (req: AuthRequest, res: Response) => 
     const review = await ProbationReview.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
       { $set: { ...req.body, overallRating } },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!review) return res.status(404).json({ message: 'Probation review not found' });
@@ -148,6 +169,9 @@ export const createHiringPerformanceEval = async (req: AuthRequest, res: Respons
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
+    const employeeId = await resolveEmployeeId(tenantId, req.body.employeeId);
+    if (!employeeId) return res.status(400).json({ message: 'Valid employee ID required' });
+
     const kpis = req.body.kpis || [];
     const overallScore = kpis.length
       ? kpis.reduce((sum: number, k: any) => sum + (k.score || 0), 0) / kpis.length
@@ -155,18 +179,19 @@ export const createHiringPerformanceEval = async (req: AuthRequest, res: Respons
 
     const evaluation = await HiringPerformanceEval.create({
       ...req.body,
+      employeeId,
       tenantId,
       evaluatorId: req.user!._id,
       overallScore,
       reviewDate: new Date()
     });
 
-    await advanceStepForEmployee(req, tenantId, req.body.employeeId, 'performanceEval', 'completed', (evaluation as any)._id);
+    await advanceStepForEmployee(req, tenantId, String(employeeId), 'performanceEval', 'completed', (evaluation as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_HIRING_PERFORMANCE_EVAL', req, { evalId: (evaluation as any)._id });
     res.status(201).json(evaluation);
   } catch (error: any) {
     console.error('Error creating performance evaluation:', error);
-    res.status(500).json({ message: 'Error creating performance evaluation' });
+    res.status(500).json({ message: 'Error creating performance evaluation', error: error.message });
   }
 };
 
@@ -183,7 +208,7 @@ export const updateHiringPerformanceEval = async (req: AuthRequest, res: Respons
     const evaluation = await HiringPerformanceEval.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
       { $set: { ...req.body, overallScore } },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!evaluation) return res.status(404).json({ message: 'Performance evaluation not found' });
     res.status(200).json(evaluation);
@@ -230,13 +255,16 @@ export const createIDCard = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const card = await IDCard.create({ ...req.body, tenantId, issuedBy: req.user!._id });
-    await advanceStepForEmployee(req, tenantId, req.body.employeeId, 'idCard', 'in_progress', (card as any)._id);
+    const employeeId = await resolveEmployeeId(tenantId, req.body.employeeId);
+    if (!employeeId) return res.status(400).json({ message: 'Valid employee ID required' });
+
+    const card = await IDCard.create({ ...req.body, employeeId, tenantId, issuedBy: req.user!._id });
+    await advanceStepForEmployee(req, tenantId, String(employeeId), 'idCard', 'in_progress', (card as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_ID_CARD', req, { cardId: (card as any)._id });
     res.status(201).json(card);
   } catch (error: any) {
     console.error('Error creating ID card:', error);
-    res.status(500).json({ message: 'Error creating ID card' });
+    res.status(500).json({ message: 'Error creating ID card', error: error.message });
   }
 };
 
@@ -263,7 +291,7 @@ export const updateIDCard = async (req: AuthRequest, res: Response) => {
     const card = await IDCard.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!card) return res.status(404).json({ message: 'ID card not found' });
     
@@ -421,7 +449,7 @@ export const updateReleaseQA = async (req: AuthRequest, res: Response) => {
     const qa = await ReleaseQA.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!qa) return res.status(404).json({ message: 'Release QA not found' });
     

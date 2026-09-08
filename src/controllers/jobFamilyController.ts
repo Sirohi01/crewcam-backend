@@ -78,7 +78,7 @@ export const updateJobFamily = async (req: Request, res: Response) => {
     const jobFamily = await JobFamily.findOneAndUpdate(
       { _id: id, tenantId } as any,
       updateData,
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!jobFamily) {

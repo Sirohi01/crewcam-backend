@@ -72,7 +72,7 @@ export const updateJobGrade = async (req: Request, res: Response) => {
     const jobGrade = await JobGrade.findOneAndUpdate(
       { _id: id, tenantId } as any,
       updateData,
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!jobGrade) {

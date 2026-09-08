@@ -191,7 +191,7 @@ export const createBudgetAllocation = async (req: Request, res: Response) => {
         const allocation = await BudgetAllocation.findOneAndUpdate(
             matchQuery,
             { $set: payload },
-            { new: true, upsert: true, runValidators: true }
+            { returnDocument: 'after', upsert: true, runValidators: true }
         );
 
         return res.status(200).json({ success: true, message: 'Budget allocation saved successfully', data: allocation });
@@ -244,7 +244,7 @@ export const updateBudgetAllocation = async (req: Request, res: Response) => {
         const allocation = await BudgetAllocation.findByIdAndUpdate(
             id,
             { $set: update },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         );
 
         if (!allocation) {
@@ -284,7 +284,7 @@ export const approveBudgetAllocation = async (req: Request, res: Response) => {
                     approvedOn: new Date(),
                 },
             },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         );
 
         if (!allocation) {

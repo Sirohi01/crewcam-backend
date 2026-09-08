@@ -182,7 +182,7 @@ export const updateBGVStatus = async (req: AuthRequest, res: Response) => {
     const bgv = await BGVRequest.findOneAndUpdate(
       { _id: id, tenantId } as any,
       req.body,
-      { new: true }
+      { returnDocument: 'after' }
     );
     
     if (!bgv) return res.status(404).json({ message: 'BGV Request not found' });

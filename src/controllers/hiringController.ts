@@ -227,7 +227,7 @@ export const getCandidatePipelineState = async (req: AuthRequest, res: Response)
     }
 
     const stepsWithCustomGates = await Promise.all(steps.map(async (step) => {
-      if (step.key === 'probationReview') {
+      if (step.key === 'probationReview' && PROBATION_WINDOW_DAYS > 0) {
         const joiningDate = await getJoiningDate(String(tenantId), String(candidateId));
         const elapsedDays = joiningDate ? (Date.now() - joiningDate.getTime()) / 86400000 : -Infinity;
         if (elapsedDays < PROBATION_WINDOW_DAYS) {
@@ -543,7 +543,7 @@ export const updateInterviewQuestions = async (req: AuthRequest, res: Response) 
     const interview = await Interview.findOneAndUpdate(
       { _id: id, tenantId },
       { interviewQuestions: questions },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!interview) return res.status(404).json({ message: 'Interview not found' });

@@ -362,7 +362,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       const counter = await Counter.findOneAndUpdate(
         { key: `CORP-${year}` },
         { $inc: { seq: 1 } },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
       );
       const seq = counter?.seq ?? 1;
       finalCorporateId = `CORP-${year}-${String(seq).padStart(4, '0')}`;
@@ -933,7 +933,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(isActive !== undefined && { isActive }),
         updatedBy: req.user?._id,
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!updated) return res.status(404).json({ message: 'Package not found' });
@@ -1384,7 +1384,7 @@ export const updateTenantEmployee = async (req: AuthRequest, res: Response) => {
       const user = await User.findOneAndUpdate(
           { _id: employeeId, tenantId: id }, 
           { $set: updateData },
-          { new: true }
+          { returnDocument: 'after' }
       );
       
       if (!user) {

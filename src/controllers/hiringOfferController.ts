@@ -176,7 +176,7 @@ export const updateCTCBreakup = async (req: AuthRequest, res: Response) => {
         monthlyTakeHome: monthlyGross - monthlyDeductions,
         status: req.body.status === 'Finalized' ? 'Finalized' : 'Draft'
       },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!ctcBreakup) return res.status(404).json({ message: 'CTC Breakup not found' });
@@ -235,7 +235,7 @@ export const updateLOI = async (req: AuthRequest, res: Response) => {
         designation: req.body.designation || req.body.position,
         joiningDate: req.body.joiningDate
       },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!loi) return res.status(404).json({ message: 'LOI not found' });
@@ -419,7 +419,7 @@ export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
     const offer = await OfferLetter.findOneAndUpdate(
       { _id: id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!offer) return res.status(404).json({ message: 'Offer letter not found' });
 
@@ -537,7 +537,7 @@ export const updateNDA = async (req: AuthRequest, res: Response) => {
     const nda = await NDADocument.findOneAndUpdate(
       { _id: id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!nda) return res.status(404).json({ message: 'NDA not found' });
 
@@ -643,7 +643,7 @@ export const updateAppointmentLetter = async (req: AuthRequest, res: Response) =
     const letter = await AppointmentLetter.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!letter) return res.status(404).json({ message: 'Appointment letter not found' });
 

@@ -414,7 +414,7 @@ export const updateJoiningConfirmation = async (req: AuthRequest, res: Response)
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const updated = await JoiningConfirmation.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    const updated = await JoiningConfirmation.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ message: 'Not found' });
     res.status(200).json(updated);
   } catch (error: any) {

@@ -91,7 +91,7 @@ export const updateDesignation = async (req: AuthRequest, res: Response) => {
     const updated = await Designation.findOneAndUpdate(
       { _id: req.params.id, tenantId: req.user!.tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!updated) return res.status(404).json({ message: 'Designation not found' });
     res.json(updated);

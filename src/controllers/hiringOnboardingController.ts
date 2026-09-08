@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { JoiningForm } from '../models/JoiningForm';
@@ -34,6 +35,30 @@ const logAudit = async (tenantId: any, userId: any, action: string, req: AuthReq
     userAgent: req.headers['user-agent'] as string,
     details
   } as any);
+};
+
+const sanitizePayloadEmployee = async (tenantId: any, payload: any, candidateId?: any) => {
+  if (payload.employeeId) {
+    const empIdStr = String(payload.employeeId).trim();
+    if (mongoose.Types.ObjectId.isValid(empIdStr) && /^[0-9a-fA-F]{24}$/.test(empIdStr)) {
+      payload.employeeId = new mongoose.Types.ObjectId(empIdStr);
+    } else {
+      if (!payload.uniqueId && empIdStr) payload.uniqueId = empIdStr;
+      const user = await User.findOne({ tenantId, employeeCode: empIdStr });
+      if (user) {
+        payload.employeeId = user._id;
+      } else {
+        delete payload.employeeId;
+      }
+    }
+  }
+
+  if (!payload.employeeId && candidateId) {
+    const state = await HiringPipelineState.findOne({ tenantId, candidateId } as any);
+    if (state?.employeeId && mongoose.Types.ObjectId.isValid(String(state.employeeId))) {
+      payload.employeeId = state.employeeId;
+    }
+  }
 };
 
 // Step 9: Employee Joining Form
@@ -341,13 +366,50 @@ export const createAssetAccessForm = async (req: AuthRequest, res: Response) => 
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
-    const form = await AssetAccessForm.create({ ...req.body, tenantId, issuedBy: req.user!._id, status: 'Issued' });
+    const payload = { ...req.body, tenantId, issuedBy: req.user!._id, status: 'Issued' };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
+    
+    if (payload.assetsIssued && Array.isArray(payload.assetsIssued)) {
+      payload.assetsIssued = payload.assetsIssued
+        .filter((a: any) => a && typeof a.assetType === 'string' && a.assetType.trim() !== '')
+        .map((a: any) => {
+          const item = { ...a };
+          if (!item.issuedDate) delete item.issuedDate;
+          return item;
+        });
+    } else {
+      payload.assetsIssued = [];
+    }
+    if (payload.accessGranted && Array.isArray(payload.accessGranted)) {
+      payload.accessGranted = payload.accessGranted
+        .filter((a: any) => a && typeof a.systemName === 'string' && a.systemName.trim() !== '')
+        .map((a: any) => {
+          const item = { ...a };
+          if (!item.grantedDate) delete item.grantedDate;
+          return item;
+        });
+    } else {
+      payload.accessGranted = [];
+    }
+    if (payload.stationeryIssued && Array.isArray(payload.stationeryIssued)) {
+      payload.stationeryIssued = payload.stationeryIssued
+        .filter((a: any) => a && typeof a.item === 'string' && a.item.trim() !== '')
+        .map((a: any) => {
+          const item = { ...a };
+          item.quantity = Number(item.quantity) || 1;
+          return item;
+        });
+    } else {
+      payload.stationeryIssued = [];
+    }
+
+    const form = await AssetAccessForm.create(payload);
     await advanceStep(req, tenantId, req.body.candidateId, 'assetAccessForm', 'completed', (form as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_ASSET_ACCESS_FORM', req, { formId: (form as any)._id });
     res.status(201).json(form);
   } catch (error: any) {
     console.error('Error creating asset/access form:', error);
-    res.status(500).json({ message: 'Error creating asset/access form' });
+    res.status(500).json({ message: 'Error creating asset/access form', error: error.message, stack: error.stack });
   }
 };
 
@@ -370,15 +432,15 @@ export const createEngagementConfirmation = async (req: AuthRequest, res: Respon
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
-    const confirmation = await EngagementConfirmation.create({
-      ...req.body, tenantId, sentBy: req.user!._id, status: 'Sent'
-    });
+    const payload = { ...req.body, tenantId, sentBy: req.user!._id, status: 'Sent' };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
+    const confirmation = await EngagementConfirmation.create(payload);
     await advanceStep(req, tenantId, req.body.candidateId, 'engagementConfirmation', 'completed', (confirmation as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_ENGAGEMENT_CONFIRMATION', req, { confirmationId: (confirmation as any)._id });
     res.status(201).json(confirmation);
   } catch (error: any) {
     console.error('Error creating engagement confirmation:', error);
-    res.status(500).json({ message: 'Error creating engagement confirmation' });
+    res.status(500).json({ message: 'Error creating engagement confirmation', error: error.message });
   }
 };
 
@@ -386,17 +448,19 @@ export const updateEngagementConfirmation = async (req: AuthRequest, res: Respon
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+    const payload = { ...req.body };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
 
     const confirmation = await EngagementConfirmation.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
-      { $set: req.body },
-      { new: true }
+      { $set: payload },
+      { returnDocument: 'after' }
     );
     if (!confirmation) return res.status(404).json({ message: 'Engagement confirmation not found' });
     res.status(200).json(confirmation);
   } catch (error: any) {
     console.error('Error updating engagement confirmation:', error);
-    res.status(500).json({ message: 'Error updating engagement confirmation' });
+    res.status(500).json({ message: 'Error updating engagement confirmation', error: error.message });
   }
 };
 
@@ -419,13 +483,18 @@ export const createInductionForm = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
-    const form = await InductionForm.create({ ...req.body, tenantId });
+    const payload = { ...req.body, tenantId };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
+    if (payload.modules && Array.isArray(payload.modules)) {
+      payload.modules = payload.modules.filter((m: any) => m && typeof m.moduleName === 'string' && m.moduleName.trim() !== '');
+    }
+    const form = await InductionForm.create(payload);
     await advanceStep(req, tenantId, req.body.candidateId, 'induction', 'in_progress', (form as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_INDUCTION_FORM', req, { formId: (form as any)._id });
     res.status(201).json(form);
   } catch (error: any) {
     console.error('Error creating induction form:', error);
-    res.status(500).json({ message: 'Error creating induction form' });
+    res.status(500).json({ message: 'Error creating induction form', error: error.message });
   }
 };
 
@@ -433,17 +502,22 @@ export const updateInductionForm = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+    const payload = { ...req.body };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
+    if (payload.modules && Array.isArray(payload.modules)) {
+      payload.modules = payload.modules.filter((m: any) => m && typeof m.moduleName === 'string' && m.moduleName.trim() !== '');
+    }
 
     const form = await InductionForm.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
-      { $set: req.body },
-      { new: true }
+      { $set: payload },
+      { returnDocument: 'after' }
     );
     if (!form) return res.status(404).json({ message: 'Induction form not found' });
     res.status(200).json(form);
   } catch (error: any) {
     console.error('Error updating induction form:', error);
-    res.status(500).json({ message: 'Error updating induction form' });
+    res.status(500).json({ message: 'Error updating induction form', error: error.message });
   }
 };
 
@@ -514,13 +588,18 @@ export const createTeamIntro = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
-    const intro = await TeamIntro.create({ ...req.body, tenantId, sentBy: req.user!._id, sentDate: new Date() });
+    const payload = { ...req.body, tenantId, sentBy: req.user!._id, sentDate: new Date() };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
+    if (payload.teamMembers && Array.isArray(payload.teamMembers)) {
+      payload.teamMembers = payload.teamMembers.filter((m: any) => m && typeof m.name === 'string' && m.name.trim() !== '');
+    }
+    const intro = await TeamIntro.create(payload);
     await advanceStep(req, tenantId, req.body.candidateId, 'teamIntro', 'completed', (intro as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_TEAM_INTRO', req, { introId: (intro as any)._id });
     res.status(201).json(intro);
   } catch (error: any) {
     console.error('Error creating team intro:', error);
-    res.status(500).json({ message: 'Error creating team intro' });
+    res.status(500).json({ message: 'Error creating team intro', error: error.message });
   }
 };
 
@@ -542,17 +621,22 @@ export const updateTeamIntro = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+    const payload = { ...req.body };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
+    if (payload.teamMembers && Array.isArray(payload.teamMembers)) {
+      payload.teamMembers = payload.teamMembers.filter((m: any) => m && typeof m.name === 'string' && m.name.trim() !== '');
+    }
 
     const intro = await TeamIntro.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
-      { $set: req.body },
-      { new: true }
+      { $set: payload },
+      { returnDocument: 'after' }
     );
     if (!intro) return res.status(404).json({ message: 'Team intro not found' });
     res.status(200).json(intro);
   } catch (error: any) {
     console.error('Error updating team intro:', error);
-    res.status(500).json({ message: 'Error updating team intro' });
+    res.status(500).json({ message: 'Error updating team intro', error: error.message });
   }
 };
 
@@ -564,7 +648,7 @@ export const verifyTeamIntro = async (req: AuthRequest, res: Response) => {
     const intro = await TeamIntro.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
       { status: 'Verified' },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!intro) return res.status(404).json({ message: 'Team intro not found' });
     res.status(200).json(intro);
@@ -996,16 +1080,46 @@ export const updateAssetAccessForm = async (req: AuthRequest, res: Response) => 
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
+    const payload = { ...req.body };
+    await sanitizePayloadEmployee(tenantId, payload, req.body.candidateId);
+    if (payload.assetsIssued && Array.isArray(payload.assetsIssued)) {
+      payload.assetsIssued = payload.assetsIssued
+        .filter((a: any) => a && typeof a.assetType === 'string' && a.assetType.trim() !== '')
+        .map((a: any) => {
+          const item = { ...a };
+          if (!item.issuedDate) delete item.issuedDate;
+          return item;
+        });
+    }
+    if (payload.accessGranted && Array.isArray(payload.accessGranted)) {
+      payload.accessGranted = payload.accessGranted
+        .filter((a: any) => a && typeof a.systemName === 'string' && a.systemName.trim() !== '')
+        .map((a: any) => {
+          const item = { ...a };
+          if (!item.grantedDate) delete item.grantedDate;
+          return item;
+        });
+    }
+    if (payload.stationeryIssued && Array.isArray(payload.stationeryIssued)) {
+      payload.stationeryIssued = payload.stationeryIssued
+        .filter((a: any) => a && typeof a.item === 'string' && a.item.trim() !== '')
+        .map((a: any) => {
+          const item = { ...a };
+          item.quantity = Number(item.quantity) || 1;
+          return item;
+        });
+    }
+
     const form = await AssetAccessForm.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
-      { $set: req.body },
-      { new: true }
+      { $set: payload },
+      { returnDocument: 'after' }
     );
     if (!form) return res.status(404).json({ message: 'Asset Access form not found' });
     res.status(200).json(form);
   } catch (error: any) {
     console.error('Error updating asset/access form:', error);
-    res.status(500).json({ message: 'Error updating asset/access form' });
+    res.status(500).json({ message: 'Error updating asset/access form', error: error.message, stack: error.stack });
   }
 };
 
@@ -1043,7 +1157,7 @@ export const updateNomination = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const updated = await Nomination.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    const updated = await Nomination.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ message: 'Not found' });
     res.status(200).json(updated);
   } catch (error: any) {
@@ -1055,7 +1169,7 @@ export const updateBankPayrollInfo = async (req: AuthRequest, res: Response) => 
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const updated = await BankPayrollInfo.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    const updated = await BankPayrollInfo.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ message: 'Not found' });
     res.status(200).json(updated);
   } catch (error: any) {
@@ -1067,7 +1181,7 @@ export const updateEmergencyContact = async (req: AuthRequest, res: Response) =>
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const updated = await EmergencyContact.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    const updated = await EmergencyContact.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ message: 'Not found' });
     res.status(200).json(updated);
   } catch (error: any) {
@@ -1079,7 +1193,7 @@ export const updatePolicyAcceptance = async (req: AuthRequest, res: Response) =>
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const updated = await PolicyAcceptance.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    const updated = await PolicyAcceptance.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ message: 'Not found' });
     res.status(200).json(updated);
   } catch (error: any) {
@@ -1091,7 +1205,7 @@ export const updateConductAcceptance = async (req: AuthRequest, res: Response) =
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const updated = await ConductAcceptance.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { new: true });
+    const updated = await ConductAcceptance.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ message: 'Not found' });
     res.status(200).json(updated);
   } catch (error: any) {

@@ -183,7 +183,7 @@ router.post('/candidates/:slug/bypass-interviews', checkPermission('ORG_WRITE'),
   try {
     let candidateId = req.params.slug;
     const mongoose = require('mongoose');
-    
+
     // If it's a dummy slug like 'manish-kumar-sirohi', we map it to the shared dummy ObjectId
     // so that the pipeline state saves correctly and can be fetched by the frontend
     if (!mongoose.isValidObjectId(candidateId)) {
@@ -226,7 +226,7 @@ router.post('/candidates/:slug/bypass-interviews', checkPermission('ORG_WRITE'),
     };
     await SelectionApproval.create(approvalPayload);
     await advanceStep(req, req.tenantId, candidateId, 'selectionApproval', 'approved', null as any);
-    
+
     // Even if candidate doesn't exist (e.g., frontend dummy slug), we return success to allow the demo to proceed
     res.status(200).json({ success: true, fake: !candidate });
   } catch (error: any) {

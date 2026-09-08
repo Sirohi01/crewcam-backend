@@ -127,7 +127,7 @@ export const updateCustomField = async (req: Request, res: Response): Promise<vo
     const updatedField = await CustomField.findOneAndUpdate(
       { _id: id as string, tenantId },
       { $set: req.body },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedField) {
