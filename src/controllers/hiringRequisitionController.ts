@@ -622,3 +622,25 @@ export const deleteSelectionApproval = async (req: AuthRequest, res: Response) =
     res.status(500).json({ message: 'Error deleting selection approval' });
   }
 };
+
+
+export const mockPublishPlatform = async (req: AuthRequest, res: Response) => {
+  try {
+    const { platform, jobId, requestData } = req.body;
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Simulate successful posting
+    res.status(200).json({ 
+      success: true, 
+      message: `Successfully published to ${platform}`,
+      data: {
+        platform,
+        externalId: `mock-${platform.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Date.now()}`,
+        url: `https://${platform.toLowerCase().replace(/[^a-z0-9]/g, '')}.com/jobs/view/mock`
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: `Failed to publish to ${req.body.platform}` });
+  }
+};

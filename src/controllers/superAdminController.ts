@@ -433,6 +433,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     await adminUser.save();
 
     const { subject, html } = buildCompanyWelcomeEmail({
+      companyId: tenant._id.toString(),
       companyName: name,
       adminFirstName,
       adminEmail,
@@ -1396,4 +1397,19 @@ export const updateTenantEmployee = async (req: AuthRequest, res: Response) => {
       console.error('Error updating employee:', error);
       res.status(500).json({ message: 'Internal server error while updating employee' });
     }
+};
+
+export const getSuperAdminActivityLogs = async (req: AuthRequest, res: Response) => {
+  try {
+    const logs = await AuditLog.find({ action: { $in: ['CREATE_COMPANY', 'UPDATE_COMPANY', 'DELETE_COMPANY'] } })
+      .setOptions({ bypassTenantIsolation: true })
+      .populate('userId', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    res.status(200).json(logs);
+  } catch (error) {
+    console.error('Error fetching activity logs:', error);
+    res.status(500).json({ message: 'Error fetching activity logs' });
+  }
 };

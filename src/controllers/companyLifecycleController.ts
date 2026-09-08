@@ -66,6 +66,7 @@ async function maybeProvisionAdminAccount(tenant: any, changedBy?: any): Promise
   }).save();
 
   const { subject, html } = buildCompanyWelcomeEmail({
+    companyId: tenant._id.toString(),
     companyName: tenant.name,
     adminFirstName: company.pendingAdminFirstName || '',
     adminEmail: company.pendingAdminEmail,

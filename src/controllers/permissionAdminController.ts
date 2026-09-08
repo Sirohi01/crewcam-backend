@@ -238,7 +238,7 @@ export const getMySidebar = async (req: AuthRequest, res: Response) => {
     const items = await SidebarConfig.find({ tenantId, isActive: true }).sort({ sectionOrder: 1, order: 1 });
 
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
-    const [effectivePermissions, tenantFeatures] = await Promise.all([
+    const [effectivePermissions, tenantData] = await Promise.all([
       getEffectivePermissions(req),
       getTenantFeatures(tenantId),
     ]);
@@ -246,7 +246,8 @@ export const getMySidebar = async (req: AuthRequest, res: Response) => {
     const ctx = {
       roleId: req.user.roleId ? String(req.user.roleId) : undefined,
       effectivePermissions,
-      tenantFeatures,
+      tenantFeatures: tenantData.features,
+      allowedSections: tenantData.allowedSections,
     };
     const visible = items.filter((item) => isVisible(item, ctx));
 

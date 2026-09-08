@@ -306,18 +306,18 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     if (!identifier) return res.status(400).json({ message: 'User ID is required' });
 
     // Generic response regardless of what's found, to avoid leaking which identifiers exist.
-    const genericResponse = { message: 'If the account exists, an OTP has been sent to the registered mobile number.' };
+    const genericResponse = { message: 'OTP sent successfully. Please check your Email or WhatsApp.' };
 
     const user = await findUserByIdentifier(identifier);
     if (!user || !user.isActive) {
-      return res.status(200).json(genericResponse);
+      return res.status(404).json({ message: 'User not found or inactive.' });
     }
 
     if (user.lockoutUntil && user.lockoutUntil > new Date()) {
       return res.status(403).json({ message: 'Account is locked. Please try again later.' });
     }
 
-    if (await isPortalMismatch(req.body.portal, user)) return res.status(200).json(genericResponse);
+    if (await isPortalMismatch(req.body.portal, user)) return res.status(403).json({ message: 'User does not have access to this portal.' });
     // if (await isSubdomainMismatch(req.body.subdomain, user)) return res.status(200).json(genericResponse);
     // if (await isCorporateIdMismatch(req.body.corporateId, user)) return res.status(200).json(genericResponse);
     // if (await isLoginTypeMismatch(req.body.loginType, user)) {
@@ -350,13 +350,31 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
       expiresAt: new Date(Date.now() + OTP_TTL_MS),
     });
 
-    if (user.mobileNumber) {
-      await notificationService.sendSMS(
-        String(user.tenantId),
-        user.mobileNumber,
-        `Your CrewCam HRMS login OTP is ${otp}. It expires in 5 minutes.`
-      ).catch(e => console.error("SMS failed:", e));
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+    const promises = [];
+
+    if (user.email) {
+      promises.push(
+        sendMail({
+          to: user.email,
+          subject: 'Your CrewCam Login OTP',
+          html: `<p>Your login OTP is <strong>${otp}</strong>.</p><p>It expires in 5 minutes.</p>`
+        }).catch(e => console.error("Email OTP failed:", e))
+      );
     }
+    
+    const phone = user.mobileNumber || (!isEmail ? identifier : null);
+    if (phone) {
+      promises.push(
+        notificationService.sendWhatsAppOTP(
+          String(user.tenantId),
+          phone,
+          otp
+        ).catch(e => console.error("WhatsApp OTP failed:", e))
+      );
+    }
+
+    await Promise.all(promises);
 
     // No SMS provider is wired up yet, so outside production the OTP is echoed back
     // in the response for testing instead of being delivered anywhere.

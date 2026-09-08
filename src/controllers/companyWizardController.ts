@@ -49,6 +49,7 @@ const wizardSchema = z.object({
 
   // Step 5 — Module Selection
   selectedModules: z.array(z.string()).optional().default([]),
+  allowedSections: z.array(z.string()).optional().default([]),
 
   // Step 6 — Organization Setup (planning only — nothing is created yet)
   organizationSetupPlan: z.object({
@@ -131,6 +132,7 @@ export const createCompanyDraft = async (req: AuthRequest, res: Response) => {
       userLimit,
       storageLimitGB: data.storageLimitGB,
       dbType: data.dbType,
+      allowedSections: data.allowedSections,
       createdBy: req.user?._id,
     });
     await tenant.save();

@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { ResumeScreening } from '../models/ResumeScreening';
 import { Candidate } from '../models/Candidate';
 import { AuditLog } from '../models/AuditLog';
+import { User } from '../models/User';
 import { screenResume, extractCandidateProfile, AiFeatureError } from '../services/aiService';
 
 export const triggerResumeScreening = async (req: AuthRequest, res: Response) => {
@@ -97,6 +98,16 @@ export const getResumeScreeningQueue = async (req: AuthRequest, res: Response) =
   }
   if (applicationStatus && CANDIDATE_STATUSES.includes(applicationStatus)) {
     match.status = applicationStatus;
+  }
+
+  // Role-based filtering
+  if (req.user?._id) {
+    const currentUser = await User.findOne({ _id: req.user._id, tenantId }).populate('roleId');
+    const userRole = (currentUser?.roleId as any)?.category || (currentUser?.roleId as any)?.name;
+    const isHod = userRole?.toLowerCase() === 'hod';
+    if (isHod && currentUser?.departmentId) {
+      match.departmentId = currentUser.departmentId;
+    }
   }
 
   const pipeline: any[] = [

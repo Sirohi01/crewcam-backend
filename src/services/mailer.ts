@@ -51,13 +51,14 @@ export async function sendMail({ to, subject, html }: SendMailInput): Promise<{ 
 }
 
 export function buildCompanyWelcomeEmail(params: {
+  companyId: string;
   companyName: string;
   adminFirstName: string;
   adminEmail: string;
   adminPassword: string;
   loginUrl: string;
 }): { subject: string; html: string } {
-  const { companyName, adminFirstName, adminEmail, adminPassword, loginUrl } = params;
+  const { companyId, companyName, adminFirstName, adminEmail, adminPassword, loginUrl } = params;
   return {
     subject: `Your CrewCam HR Cloud workspace for ${companyName} is ready`,
     html: `
@@ -65,7 +66,8 @@ export function buildCompanyWelcomeEmail(params: {
         <h2 style="margin-bottom: 4px;">Welcome to CrewCam HR Cloud</h2>
         <p style="color: #52525b;">Hi ${adminFirstName}, your company workspace for <strong>${companyName}</strong> has been provisioned and is ready to use.</p>
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr><td style="padding: 8px 0; color: #71717a; width: 120px;">Login URL</td><td style="padding: 8px 0;"><a href="${loginUrl}">${loginUrl}</a></td></tr>
+          <tr><td style="padding: 8px 0; color: #71717a; width: 120px;">Company ID</td><td style="padding: 8px 0; font-family: monospace;"><strong>${companyId}</strong></td></tr>
+          <tr><td style="padding: 8px 0; color: #71717a;">Login URL</td><td style="padding: 8px 0;"><a href="${loginUrl}">${loginUrl}</a></td></tr>
           <tr><td style="padding: 8px 0; color: #71717a;">Email</td><td style="padding: 8px 0;">${adminEmail}</td></tr>
           <tr><td style="padding: 8px 0; color: #71717a;">Password</td><td style="padding: 8px 0; font-family: monospace;">${adminPassword}</td></tr>
         </table>
