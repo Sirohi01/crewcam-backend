@@ -296,7 +296,11 @@ export const login2FA = async (req: Request, res: Response) => {
 const findUserByIdentifier = (identifier: string) => {
   const trimmed = identifier.trim();
   return User.findOne({
-    $or: [{ employeeCode: trimmed }, { email: trimmed.toLowerCase() }],
+    $or: [
+      { employeeCode: trimmed }, 
+      { email: trimmed.toLowerCase() },
+      { mobileNumber: trimmed }
+    ],
   }).setOptions({ bypassTenantIsolation: true });
 };
 
@@ -353,25 +357,55 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
     const promises = [];
 
-    if (user.email) {
+    if (isEmail && user.email) {
       promises.push(
         sendMail({
           to: user.email,
           subject: 'Your CrewCam Login OTP',
-          html: `<p>Your login OTP is <strong>${otp}</strong>.</p><p>It expires in 5 minutes.</p>`
+          html: `
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; background-color: #f9f9f9;">
+  <div style="background-color: var(--brand-primary, #155e75); padding: 24px 20px; text-align: center; color: white;">
+    <h1 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 0.5px; padding-bottom: 4px;">
+      <img src="https://crewcam.app/logo.png" alt="CrewCam" style="height: 24px; vertical-align: middle; margin-right: 8px; display: inline-block;" onerror="this.style.display='none'" />
+      CrewCam Portal
+    </h1>
+    <div style="font-size: 11px; font-weight: 400; letter-spacing: 0.5px;">Crew Management | HR CRM</div>
+  </div>
+  <div style="padding: 40px 30px; background-color: #ffffff;">
+    <p style="margin-top: 0;">Namaskar!</p>
+    <p>Dear User,</p>
+    <p>Thank you for using the CrewCam Portal.</p>
+    <p>To proceed with your secure login and activate your access to the <strong>CrewCam Dashboard</strong>, please verify your identity using the One-Time Password (OTP) below:</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <span style="font-size: 36px; font-weight: bold; letter-spacing: 12px; color: #d35400;">${otp}</span>
+    </div>
+    <p><strong>This OTP is valid for 5 minutes only</strong> and can be used once.</p>
+    <p>For your security, please do not share this code with anyone. CrewCam or its representatives will <strong>never ask for your OTP</strong>.</p>
+    <p>Once verified, you will be securely logged into your dashboard.</p>
+    <p style="font-style: italic; color: #777;">If you did not initiate this request, please ignore this email.</p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+    <p style="margin: 0;">Warm Regards,</p>
+    <p style="margin: 5px 0 0 0; font-weight: bold;">Team CrewCam</p>
+    <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">CrewCam Portal</p>
+  </div>
+  <div style="background-color: #f9f9f9; padding: 15px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee;">
+    &copy; ${new Date().getFullYear()} CrewCam. All Rights Reserved.
+  </div>
+</div>
+          `
         }).catch(e => console.error("Email OTP failed:", e))
       );
-    }
-    
-    const phone = user.mobileNumber || (!isEmail ? identifier : null);
-    if (phone) {
-      promises.push(
-        notificationService.sendWhatsAppOTP(
-          String(user.tenantId),
-          phone,
-          otp
-        ).catch(e => console.error("WhatsApp OTP failed:", e))
-      );
+    } else {
+      const phone = user.mobileNumber || (!isEmail ? identifier : null);
+      if (phone) {
+        promises.push(
+          notificationService.sendWhatsAppOTP(
+            String(user.tenantId),
+            phone,
+            otp
+          ).catch(e => console.error("WhatsApp OTP failed:", e))
+        );
+      }
     }
 
     await Promise.all(promises);
@@ -380,7 +414,7 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     // in the response for testing instead of being delivered anywhere.
     res.status(200).json({
       ...genericResponse,
-      otp: process.env.NODE_ENV === 'production' ? undefined : otp,
+      // otp: process.env.NODE_ENV === 'production' ? undefined : otp,
     });
   } catch (error) {
     res.status(500).json({ message: 'Error sending OTP' });

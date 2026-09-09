@@ -15,9 +15,16 @@ import { LeaveRequest } from '../models/LeaveRequest';
 import { Ticket } from '../models/Ticket';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
 import { Counter } from '../models/Counter';
+import { AuthToken } from '../models/AuthToken';
+import { hashToken } from '../utils/authTokens';
+import { notificationService } from '../services/notificationService';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, sendMail } from '../services/mailer';
+
+const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
+const hashOtp = (userId: unknown, otp: string) => hashToken(`${userId}:${otp}`);
 
 const passwordSchema = z.string()
   .min(8, 'Password must be at least 8 characters long')
@@ -696,23 +703,97 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const sendDeleteCompanyOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+    const tenantId = req.params.id;
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+    const companyName = tenant.name;
+
+    const recentOtp = await AuthToken.findOne({
+      userId: user._id,
+      type: 'delete_company_otp',
+      revokedAt: { $exists: false },
+      expiresAt: { $gt: new Date(Date.now() + 5 * 60 * 1000 - 30 * 1000) },
+    });
+    if (recentOtp) return res.status(429).json({ message: 'Please wait before requesting another OTP.' });
+
+    const otp = generateOtp();
+    await AuthToken.create({
+      userId: user._id,
+      tokenHash: hashOtp(user._id, otp),
+      type: 'delete_company_otp',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    });
+
+    const promises = [];
+    if (user.email) {
+      promises.push(
+        sendMail({
+          to: user.email,
+          subject: `Confirm Deletion of ${companyName} - HRCRM`,
+          html: `<p>You have requested to delete the company <strong>${companyName}</strong> from the HRCRM Super Admin dashboard.</p><p>Your confirmation OTP is <strong>${otp}</strong>.</p><p>This is a highly sensitive action. If you did not request this, ignore this email.</p>`
+        }).catch(e => console.error("Email OTP failed:", e))
+      );
+    }
+    
+    if (user.mobileNumber) {
+      promises.push(
+        notificationService.sendWhatsAppOTP('SUPER_ADMIN', user.mobileNumber, otp).catch(e => console.error("WA OTP failed:", e))
+      );
+    }
+
+    await Promise.allSettled(promises);
+    res.status(200).json({ message: 'OTP sent successfully to your registered email/mobile.' });
+  } catch (error) {
+    console.error('Error sending delete OTP:', error);
+    res.status(500).json({ message: 'Failed to send OTP' });
+  }
+};
+
 export const deleteTenant = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
+    const { otp, reason } = req.body;
+    const user = req.user;
+
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (!otp) return res.status(400).json({ message: 'OTP is required to delete a company' });
+
+    const tokenDoc = await AuthToken.findOne({
+      userId: user._id,
+      tokenHash: hashOtp(user._id, otp),
+      type: 'delete_company_otp',
+      revokedAt: { $exists: false },
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!tokenDoc) {
+      return res.status(400).json({ message: 'Invalid or expired OTP.' });
+    }
+
     const tenant = await Tenant.findByIdAndDelete(id);
     if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    // Revoke OTP to prevent reuse
+    tokenDoc.revokedAt = new Date();
+    await tokenDoc.save();
 
     // Delete associated data
     await Company.deleteMany({ tenantId: id });
     await User.deleteMany({ tenantId: id });
     await Role.deleteMany({ tenantId: id });
 
+    // @ts-ignore (assuming writeAuditLog is defined locally in the file)
     await writeAuditLog({
       tenantId: id,
       userId: req.user?._id,
       action: 'DELETE_COMPANY',
       status: 'SUCCESS',
-      details: { name: tenant.name },
+      details: { name: tenant.name, reason: reason || 'N/A' },
     });
 
     res.status(200).json({ message: 'Company and associated data deleted successfully' });

@@ -60,20 +60,101 @@ export function buildCompanyWelcomeEmail(params: {
 }): { subject: string; html: string } {
   const { companyId, companyName, adminFirstName, adminEmail, adminPassword, loginUrl } = params;
   return {
-    subject: `Your CrewCam HR Cloud workspace for ${companyName} is ready`,
+    // subject: `Your CrewCam HR Cloud workspace for ${companyName} is ready`,
+    // html: `
+    //   <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #18181b;">
+    //     <h2 style="margin-bottom: 4px;">Welcome to CrewCam HR Cloud</h2>
+    //     <p style="color: #52525b;">Hi ${adminFirstName}, your company workspace for <strong>${companyName}</strong> has been provisioned and is ready to use.</p>
+    //     <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+    //       <tr><td style="padding: 8px 0; color: #71717a; width: 120px;">Company ID</td><td style="padding: 8px 0; font-family: monospace;"><strong>${companyId}</strong></td></tr>
+    //       <tr><td style="padding: 8px 0; color: #71717a;">Login URL</td><td style="padding: 8px 0;"><a href="${loginUrl}">${loginUrl}</a></td></tr>
+    //       <tr><td style="padding: 8px 0; color: #71717a;">Email</td><td style="padding: 8px 0;">${adminEmail}</td></tr>
+    //       <tr><td style="padding: 8px 0; color: #71717a;">Password</td><td style="padding: 8px 0; font-family: monospace;">${adminPassword}</td></tr>
+    //     </table>
+    //     <p style="color: #71717a; font-size: 13px;">For security, please log in and change this password as soon as possible.</p>
+    //   </div>
+    // `,
+    subject: `Welcome to HRCRM – Your ${companyName} Workspace Is Ready`,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #18181b;">
-        <h2 style="margin-bottom: 4px;">Welcome to CrewCam HR Cloud</h2>
-        <p style="color: #52525b;">Hi ${adminFirstName}, your company workspace for <strong>${companyName}</strong> has been provisioned and is ready to use.</p>
-        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr><td style="padding: 8px 0; color: #71717a; width: 120px;">Company ID</td><td style="padding: 8px 0; font-family: monospace;"><strong>${companyId}</strong></td></tr>
-          <tr><td style="padding: 8px 0; color: #71717a;">Login URL</td><td style="padding: 8px 0;"><a href="${loginUrl}">${loginUrl}</a></td></tr>
-          <tr><td style="padding: 8px 0; color: #71717a;">Email</td><td style="padding: 8px 0;">${adminEmail}</td></tr>
-          <tr><td style="padding: 8px 0; color: #71717a;">Password</td><td style="padding: 8px 0; font-family: monospace;">${adminPassword}</td></tr>
-        </table>
-        <p style="color: #71717a; font-size: 13px;">For security, please log in and change this password as soon as possible.</p>
-      </div>
-    `,
+  <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #18181b; line-height: 1.6;">
+
+    <h2 style="margin-bottom: 4px; color: #166534;">
+      Welcome to HRCRM
+    </h2>
+
+    <p style="color: #52525b;">
+      Dear ${adminFirstName},
+    </p>
+
+    <p style="color: #52525b;">
+      Thank you for registering with <strong>HRCRM</strong>.
+      Your company workspace for <strong>${companyName}</strong> has been successfully created and is ready to use.
+    </p>
+
+    <p style="color: #52525b;">
+      You can access your HRCRM Portal using the login details below:
+    </p>
+
+    <table style="width: 100%; margin: 20px 0; border-collapse: collapse; background: #f0fdf4; border: 1px solid #dcfce7; border-radius: 8px;">
+      <tr>
+        <td style="padding: 10px 12px; color: #71717a; width: 120px;">Company ID</td>
+        <td style="padding: 10px 12px; font-family: monospace;">
+          <strong>${companyId}</strong>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding: 10px 12px; color: #71717a;">Login URL</td>
+        <td style="padding: 10px 12px;">
+          <a href="${loginUrl}" style="color: #166534; font-weight: 600; text-decoration: none;">
+            ${loginUrl}
+          </a>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding: 10px 12px; color: #71717a;">Email</td>
+        <td style="padding: 10px 12px;">
+          ${adminEmail}
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding: 10px 12px; color: #71717a;">Password</td>
+        <td style="padding: 10px 12px; font-family: monospace;">
+          ${adminPassword}
+        </td>
+      </tr>
+    </table>
+
+    <p style="color: #52525b;">
+      For your security, please do not share your login credentials with anyone.
+      HRCRM or its representatives will never ask you to share your password.
+    </p>
+
+    <p style="color: #52525b;">
+      Once you log in, we recommend changing your temporary password immediately
+      and completing your company profile.
+    </p>
+
+    <p style="color: #52525b;">
+      If you did not initiate this registration, please ignore this email or contact your HRCRM administrator.
+    </p>
+
+    <p style="color: #52525b; margin-top: 28px;">
+      Warm Regards,<br>
+      <strong>Team HRCRM</strong><br>
+      Health & Wellness Relationship Management
+    </p>
+
+    <p style="color: #a1a1aa; font-size: 12px; margin-top: 30px;">
+      © 2026 HRCRM. All Rights Reserved.<br>
+      Powered by Namo Gange Wellness Pvt. Ltd.
+    </p>
+
+  </div>
+`,
+
   };
 }
 

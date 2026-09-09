@@ -4,7 +4,7 @@ import {
   getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
   resendCompanyCredentials, getNextCorporateId,
-  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs
+  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
@@ -51,6 +51,7 @@ router.delete('/tenants/:id/admins/:adminId', deleteTenantAdmin);
 router.put('/tenants/:id/employees/:employeeId', updateTenantEmployee);
 router.delete('/tenants/:id/employees/:employeeId', deleteTenantEmployee);
 router.post('/tenants/:id/employees/bulk', bulkImportEmployees);
+router.post('/tenants/:id/delete-otp', sendDeleteCompanyOtp);
 router.delete('/tenants/:id', deleteTenant);
 router.post('/tenants/:id/resend-credentials', resendCredentials);
 router.post('/tenants/:id/topup-ai-credits', topUpAiCredits);
