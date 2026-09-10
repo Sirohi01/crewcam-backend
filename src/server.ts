@@ -56,7 +56,10 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 app.use(helmet());
-const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000' || 'https://panchkarmaa.in' || 'https://admin.panchkarmaa.in' )
+const serverCorsOrigins = (
+  process.env.CORS_ORIGIN ||
+  'http://localhost:3000,https://panchkarmaa.in,https://admin.panchkarmaa.in'
+)
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
@@ -67,17 +70,19 @@ const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000' ||
 //   },
 //   credentials: true,
 // }));
+
 app.use(cors({
-    // Allow requests from your frontend domains
-    origin: [
-        'http://localhost:8080',       // Local Vite dev server
-        'https://panchkarmaa.in',      // Production frontend
-        'https://www.panchkarmaa.in'
-    ],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-    credentials: true // Important if you use cookies or Authorization headers
+  origin: (origin, callback) => {
+    if (!origin || serverCorsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
 }));
+
+
 // Basic route
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', message: 'CREWCAM API is running' });
