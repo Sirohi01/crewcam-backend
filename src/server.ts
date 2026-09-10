@@ -56,7 +56,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 app.use(helmet());
-const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000' || 'https://panchkarmaa.in' || 'https://admin.panchkarmaa.in' )
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
