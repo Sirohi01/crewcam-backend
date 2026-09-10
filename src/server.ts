@@ -56,17 +56,25 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 app.use(helmet());
-const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000' || 'https://panchkarmaa.in' || 'https://admin.panchkarmaa.in' )
+const serverCorsOrigins = (
+  process.env.CORS_ORIGIN ||
+  'http://localhost:3000,https://panchkarmaa.in,https://admin.panchkarmaa.in'
+)
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+
 app.use(cors({
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || serverCorsOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+  origin: (origin, callback) => {
+    if (!origin || serverCorsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
 }));
+
 
 // Basic route
 app.get('/api/health', (req: Request, res: Response) => {
