@@ -63,6 +63,13 @@ const serverCorsOrigins = (
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+// app.use(cors({
+//   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+//     if (!origin || serverCorsOrigins.includes(origin)) return callback(null, true);
+//     callback(new Error('Not allowed by CORS'));
+//   },
+//   credentials: true,
+// }));
 
 app.use(cors({
   origin: (origin, callback) => {
