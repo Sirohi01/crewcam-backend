@@ -60,14 +60,24 @@ const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000' ||
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+// app.use(cors({
+//   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+//     if (!origin || serverCorsOrigins.includes(origin)) return callback(null, true);
+//     callback(new Error('Not allowed by CORS'));
+//   },
+//   credentials: true,
+// }));
 app.use(cors({
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || serverCorsOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
+    // Allow requests from your frontend domains
+    origin: [
+        'http://localhost:8080',       // Local Vite dev server
+        'https://panchkarmaa.in',      // Production frontend
+        'https://www.panchkarmaa.in'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true // Important if you use cookies or Authorization headers
 }));
-
 // Basic route
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', message: 'CREWCAM API is running' });
