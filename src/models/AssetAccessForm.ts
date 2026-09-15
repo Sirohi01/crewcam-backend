@@ -47,6 +47,8 @@ export interface IAssetAccessForm extends ITenantScoped {
   department?: string;
   designation?: string;
   uniqueId?: string;
+  employeeCode?: string;
+  candidateCode?: string;
   personalEmail?: string;
   officialEmail?: string;
   mobileNumber?: string;
@@ -108,6 +110,8 @@ const assetAccessFormSchema = new Schema<IAssetAccessForm>({
   department: { type: String },
   designation: { type: String },
   uniqueId: { type: String },
+  employeeCode: { type: String },
+  candidateCode: { type: String },
   personalEmail: { type: String },
   officialEmail: { type: String },
   mobileNumber: { type: String },

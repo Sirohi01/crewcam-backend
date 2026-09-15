@@ -28,9 +28,9 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
     }
 
     // Duplicate Check
-    const existing = await Candidate.findOne({ 
-      tenantId, 
-      $or: [{ email: req.body.email }, { phone: req.body.phone }] 
+    const existing = await Candidate.findOne({
+      tenantId,
+      $or: [{ email: req.body.email }, { phone: req.body.phone }]
     } as any);
     if (existing) {
       return res.status(409).json({ message: 'A candidate with this email or phone already exists in the system.' });
@@ -38,7 +38,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
 
     const tenant = await Tenant.findById(tenantId);
     const companyPrefix = tenant?.name ? tenant.name.substring(0, 3).toUpperCase() : 'APP';
-    
+
     let branchPrefix = 'HQ';
     if (manpowerRequest.locationBranchId) {
       const branch = await Branch.findOne({ _id: manpowerRequest.locationBranchId, tenantId });
@@ -46,16 +46,16 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
         branchPrefix = branch.code.toUpperCase();
       }
     }
-    
+
     const year = new Date().getFullYear();
     const count = await Candidate.countDocuments({ tenantId }) + 1;
     const candidateCode = `${companyPrefix}-${branchPrefix}-${year}-${String(count).padStart(4, '0')}`;
 
-    const candidate = await Candidate.create({ 
-      ...req.body, 
-      tenantId, 
+    const candidate = await Candidate.create({
+      ...req.body,
+      tenantId,
       candidateCode,
-      ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {}) 
+      ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {})
     });
 
     // Step 1 has no real prerequisite in the gating table (it precedes any candidate existing) —
@@ -121,9 +121,9 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
 
     const candidate = await Candidate.findOneAndUpdate(
       { _id: id, tenantId } as any,
-      { 
+      {
         ...req.body,
-        ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {}) 
+        ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {})
       },
       { returnDocument: 'after', runValidators: true }
     );
@@ -164,7 +164,7 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
         filter.departmentId = currentUser.departmentId;
       }
     }
-    
+
     if (pipelineStep) {
       const pipelineStates = await HiringPipelineState.find({
         tenantId,
@@ -211,7 +211,7 @@ export const getCandidateById = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     let { id } = req.params;
-    
+
     if (id && !mongoose.isValidObjectId(id)) {
       id = '000000000000000000000000';
     }
@@ -289,7 +289,7 @@ export const updateCandidateStatus = async (req: AuthRequest, res: Response) => 
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     let { id } = req.params;
-    
+
     if (id && !mongoose.isValidObjectId(id)) {
       id = '000000000000000000000000';
     }
@@ -411,7 +411,7 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       const candidateName = `${candidate.firstName} ${candidate.lastName}`;
       const interviewerName = interviewer ? `${interviewer.firstName} ${interviewer.lastName}` : 'an interviewer';
       const scheduledDateStr = new Date(req.body.scheduledDate).toLocaleString();
-      
+
       const emailBody = `Dear ${candidateName},\n\nYour interview has been scheduled on ${scheduledDateStr} with ${interviewerName}.\n\nBest regards,\nHR Team`;
       const whatsappBody = `Hi ${candidateName}, your interview is scheduled on ${scheduledDateStr} with ${interviewerName}.`;
 
@@ -425,7 +425,7 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       if (interviewer) {
         const interviewerEmailBody = `Dear ${interviewerName},\n\nYou have an interview scheduled with ${candidateName} on ${scheduledDateStr}.\n\nBest regards,\nHR Team`;
         const interviewerWhatsAppBody = `Hi ${interviewerName}, you have an interview scheduled with ${candidateName} on ${scheduledDateStr}.`;
-        
+
         if (interviewer.email) {
           await notificationService.sendEmail(String(tenantId), interviewer.email, 'Interview Scheduled', interviewerEmailBody);
         }

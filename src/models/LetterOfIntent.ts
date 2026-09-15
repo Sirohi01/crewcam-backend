@@ -10,6 +10,9 @@ export interface ILetterOfIntent extends ITenantScoped {
   reportingTo?: string;
 
   candidateId: Types.ObjectId;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
   designation: string;
   departmentId?: Types.ObjectId;
   proposedCTC?: number;
@@ -32,6 +35,9 @@ const letterOfIntentSchema = new Schema<ILetterOfIntent>({
   reportingTo: { type: String },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
   designation: { type: String, required: true },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
   proposedCTC: { type: Number },

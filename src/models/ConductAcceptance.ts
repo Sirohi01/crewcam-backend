@@ -4,6 +4,9 @@ import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 export interface IConductAcceptance extends ITenantScoped {
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
   version?: string;
   conductTitle?: string;
   // Content snapshot (frozen at time of signing)
@@ -27,6 +30,9 @@ export interface IConductAcceptance extends ITenantScoped {
 const conductAcceptanceSchema = new Schema<IConductAcceptance>({
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
   version: { type: String },
   conductTitle: { type: String },
   conductContentSnapshot: { type: String },

@@ -14,6 +14,7 @@ import { savePdfToCloudinary } from '../utils/pdfGenerator';
 import { generateCandidateHiringPdfBuffer } from '../utils/candidatePdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
+import { generateCandidateUniqueId } from '../utils/candidateIdGenerator';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -330,16 +331,10 @@ export const updateLOIStatus = async (req: AuthRequest, res: Response) => {
     if (status === 'Sent' || status === 'Accepted') {
       await advanceStep(req, tenantId, String(loi.candidateId), 'loi', 'completed', loi._id as any);
       if (status === 'Accepted') {
-        const candidate = await Candidate.findById(loi.candidateId);
-        if (candidate && !candidate.candidateCode) {
-          const tenant = await Tenant.findById(tenantId).select('name');
-          const companyName = tenant?.name?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'COMP';
-          const branchName = 'HQ';
-          const year = new Date().getFullYear();
-          const count = await Candidate.countDocuments({ candidateCode: { $exists: true }, tenantId });
-          const seq = String(count + 1).padStart(3, '0');
-          candidate.candidateCode = `${companyName}-${branchName}-${year}-${seq}`;
-          await candidate.save();
+        try {
+          await generateCandidateUniqueId(tenantId, loi.candidateId, loi.reportingLocation);
+        } catch (genErr) {
+          console.error('Failed to generate candidate unique ID on LOI acceptance:', genErr);
         }
       }
     }
@@ -400,7 +395,18 @@ export const createOfferLetter = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const offer = await OfferLetter.create({ ...req.body, tenantId, issuedBy: req.user!._id });
+    let empCode = req.body.employeeCode || req.body.uniqueId || req.body.candidateCode;
+    if (!empCode && req.body.candidateId) {
+      const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId }).select('employeeCode uniqueId candidateCode').lean();
+      empCode = (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    }
+
+    const offer = await OfferLetter.create({
+      ...req.body,
+      tenantId,
+      issuedBy: req.user!._id,
+      ...(empCode ? { employeeCode: empCode, uniqueId: empCode, candidateCode: empCode } : {})
+    });
     await advanceStep(req, tenantId, req.body.candidateId, 'offerLetter', 'in_progress', (offer as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_OFFER_LETTER', req, { offerId: (offer as any)._id });
     res.status(201).json(offer);
@@ -431,7 +437,6 @@ export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
   }
 };
 
-
 export const getOfferLetters = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -439,8 +444,21 @@ export const getOfferLetters = async (req: AuthRequest, res: Response) => {
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const offers = await OfferLetter.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(offers);
+    const offers = await OfferLetter.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
+      .sort({ createdAt: -1 })
+      .lean();
+    const mapped = offers.map((o: any) => {
+      const empCode = o.employeeCode || o.uniqueId || o.candidateCode || (o.candidateId as any)?.employeeCode || (o.candidateId as any)?.uniqueId || (o.candidateId as any)?.candidateCode || '-';
+      return {
+        ...o,
+        _id: o._id,
+        employeeCode: empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
+      };
+    });
+    res.status(200).json(mapped);
   } catch (error: any) {
     console.error('Error fetching offer letters:', error);
     res.status(500).json({ message: 'Error fetching offer letters' });
@@ -518,7 +536,18 @@ export const createNDA = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const nda = await NDADocument.create({ ...req.body, tenantId, issuedBy: req.user!._id });
+    let empCode = req.body.employeeCode || req.body.uniqueId || req.body.candidateCode;
+    if (!empCode && req.body.candidateId) {
+      const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId }).select('employeeCode uniqueId candidateCode').lean();
+      empCode = (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    }
+
+    const nda = await NDADocument.create({
+      ...req.body,
+      tenantId,
+      issuedBy: req.user!._id,
+      ...(empCode ? { employeeCode: empCode, uniqueId: empCode, candidateCode: empCode } : {})
+    });
     await advanceStep(req, tenantId, req.body.candidateId, 'nda', 'in_progress', (nda as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_NDA', req, { ndaId: (nda as any)._id });
     res.status(201).json(nda);
@@ -556,8 +585,21 @@ export const getNDAs = async (req: AuthRequest, res: Response) => {
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const ndas = await NDADocument.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(ndas);
+    const ndas = await NDADocument.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
+      .sort({ createdAt: -1 })
+      .lean();
+    const mapped = ndas.map((n: any) => {
+      const empCode = n.employeeCode || n.uniqueId || n.candidateCode || (n.candidateId as any)?.employeeCode || (n.candidateId as any)?.uniqueId || (n.candidateId as any)?.candidateCode || '-';
+      return {
+        ...n,
+        _id: n._id,
+        employeeCode: empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
+      };
+    });
+    res.status(200).json(mapped);
   } catch (error: any) {
     console.error('Error fetching NDAs:', error);
     res.status(500).json({ message: 'Error fetching NDAs' });
@@ -625,7 +667,18 @@ export const createAppointmentLetter = async (req: AuthRequest, res: Response) =
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const letter = await AppointmentLetter.create({ ...req.body, tenantId, issuedBy: req.user!._id });
+    let empCode = req.body.employeeCode || req.body.uniqueId || req.body.candidateCode;
+    if (!empCode && req.body.candidateId) {
+      const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId }).select('employeeCode uniqueId candidateCode').lean();
+      empCode = (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    }
+
+    const letter = await AppointmentLetter.create({
+      ...req.body,
+      tenantId,
+      issuedBy: req.user!._id,
+      ...(empCode ? { employeeCode: empCode, uniqueId: empCode, candidateCode: empCode } : {})
+    });
     await advanceStep(req, tenantId, req.body.candidateId, 'appointmentLetter', 'in_progress', (letter as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_APPOINTMENT_LETTER', req, { letterId: (letter as any)._id });
     res.status(201).json(letter);
@@ -677,20 +730,26 @@ export const getAppointmentLetters = async (req: AuthRequest, res: Response) => 
     if (candidateId) filter.candidateId = candidateId;
 
     const letters = await AppointmentLetter.find(filter)
-      .populate('candidateId', 'firstName lastName jobRole')
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
       .sort({ createdAt: -1 })
       .lean();
 
-    const mapped = letters.map((l: any) => ({
-      ...l,
-      _id: l._id,
-      candidateId: l.candidateId?._id || l.candidateId,
-      candidateName: l.candidateId ? `${(l.candidateId as any).firstName || ''} ${(l.candidateId as any).lastName || ''}`.trim() : 'Unknown',
-      position: (l.candidateId as any)?.jobRole || 'N/A',
-      joiningDate: l.joiningDate || null,
-      status: l.status || 'Draft',
-      updatedAt: l.updatedAt
-    }));
+    const mapped = letters.map((l: any) => {
+      const empCode = l.employeeCode || l.uniqueId || l.candidateCode || (l.candidateId as any)?.employeeCode || (l.candidateId as any)?.uniqueId || (l.candidateId as any)?.candidateCode || '-';
+      return {
+        ...l,
+        _id: l._id,
+        employeeCode: empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
+        candidateId: l.candidateId?._id || l.candidateId,
+        candidateName: l.candidateId ? `${(l.candidateId as any).firstName || ''} ${(l.candidateId as any).lastName || ''}`.trim() : 'Unknown',
+        position: (l.candidateId as any)?.jobRole || 'N/A',
+        joiningDate: l.joiningDate || null,
+        status: l.status || 'Draft',
+        updatedAt: l.updatedAt
+      };
+    });
 
     // Fetch Completed Joining Confirmations to synthesize Pending Appointment Letters
     const confirmationFilter: any = { tenantId, status: { $in: ['Finalized', 'Confirmed'] } };
@@ -704,16 +763,20 @@ export const getAppointmentLetters = async (req: AuthRequest, res: Response) => 
       .filter((c: any) => !existingLetterCandidateIds.has(String(c.candidateId)))
       .map(c => c.candidateId);
       
-    const syntheticCandidates = await Candidate.find({ _id: { $in: syntheticCandidateIds } }).select('firstName lastName jobRole').lean();
+    const syntheticCandidates = await Candidate.find({ _id: { $in: syntheticCandidateIds } }).select('firstName lastName jobRole candidateCode uniqueId employeeCode').lean();
     const candidateMap = new Map(syntheticCandidates.map((c: any) => [String(c._id), c]));
 
     const syntheticLetters = completedConfirmations
       .filter((c: any) => !existingLetterCandidateIds.has(String(c.candidateId)))
       .map((c: any) => {
         const cand = candidateMap.get(String(c.candidateId));
+        const empCode = (cand as any)?.employeeCode || (cand as any)?.uniqueId || (cand as any)?.candidateCode || c.candidateCode || c.uniqueId || '-';
         return {
           _id: null,
           candidateId: cand || c.candidateId,
+          employeeCode: empCode,
+          uniqueId: empCode,
+          candidateCode: empCode,
           candidateName: c.candidateName || (cand ? `${cand.firstName || ''} ${cand.lastName || ''}`.trim() : 'Unknown'),
           position: c.designation || cand?.jobRole || 'N/A',
           joiningDate: c.confirmedJoiningDate || c.joiningDate || null,

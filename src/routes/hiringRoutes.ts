@@ -436,6 +436,13 @@ router.put('/id-card/:id', checkPermission('ORG_WRITE'), updateIDCard);
 router.delete('/id-card/:id', checkPermission('ORG_WRITE'), deleteIDCard);
 router.post('/id-card/:id/generate-pdf', checkPermission('ORG_WRITE'), generateIDCardPdf);
 router.put('/id-card/:id/issue', checkPermission('ORG_WRITE'), markIDCardIssued);
+// /idcard route aliases
+router.post('/idcard', checkPermission('ORG_WRITE'), requireStepUnlocked('idCard', { candidateField: 'employeeId' }), createIDCard);
+router.get('/idcard', checkPermission('ORG_READ'), getIDCards);
+router.put('/idcard/:id', checkPermission('ORG_WRITE'), updateIDCard);
+router.delete('/idcard/:id', checkPermission('ORG_WRITE'), deleteIDCard);
+router.post('/idcard/:id/generate-pdf', checkPermission('ORG_WRITE'), generateIDCardPdf);
+router.put('/idcard/:id/issue', checkPermission('ORG_WRITE'), markIDCardIssued);
 
 // Step 25: Release QA Checks
 router.post('/release-qa', checkPermission('ORG_WRITE'), requireStepUnlocked('releaseQA', { candidateField: 'employeeId' }), createReleaseQA);

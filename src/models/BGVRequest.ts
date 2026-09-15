@@ -26,6 +26,9 @@ export interface IBGVRequest extends ITenantScoped {
   reportDOJ?: string;
   reportEmpCode?: string;
   reportDepartment?: string;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
 
   candidateId?: Types.ObjectId;
   employeeId?: Types.ObjectId;
@@ -65,6 +68,9 @@ const bgvRequestSchema = new Schema<IBGVRequest>({
   reportDOJ: { type: String },
   reportEmpCode: { type: String },
   reportDepartment: { type: String },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate' },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },

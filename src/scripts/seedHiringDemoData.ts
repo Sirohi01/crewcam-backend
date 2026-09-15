@@ -332,7 +332,7 @@ async function seedCandidate(candidate: any, actor: any, employee: any) {
 
   await runStep('Step 24 - ID Card', async () => {
     const idCard = await IDCard.create({
-      tenantId, employeeId, cardType: 'ID Card', employeeCode: `EMP-${employeeId.slice(-5).toUpperCase()}`,
+      tenantId, employeeId, cardType: 'ID Card', employeeCode: candidate.candidateCode || candidate.uniqueId || candidate.employeeCode || employee.employeeCode,
       designation: candidate.jobRole, bloodGroup: 'O+', validFrom: days(21), validTo: days(21 + 365),
       status: 'Issued', issuedDate: days(22), issuedBy: actor._id,
     });
@@ -381,7 +381,7 @@ async function main() {
         passwordHash: await bcrypt.hash('SeedHiring@123', 10),
         profilePictureUrl: candidate.profileImageUrl,
         mobileNumber: candidate.phone,
-        employeeCode: `SEED-${String(candidate._id).slice(-6).toUpperCase()}`,
+        employeeCode: candidate.candidateCode || candidate.uniqueId || candidate.employeeCode,
         employmentStatus: 'active',
         isActive: true,
         createdBy: actor._id,

@@ -139,6 +139,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // sections just duplicated the mental model for no reason; per explicit user request) ----
   // Actual operating sequence: requisition -> candidate intake -> resume screening ->
   // interviews -> evaluation (Step 2) -> the remaining offer/onboarding steps.
+  { section: 'Hiring Process', label: 'Career', href: '/dashboard/career', icon: 'Briefcase', order: -2, requiredPermission: 'ATS_READ' },
   { section: 'Hiring Process', label: 'Recruiter Dashboard', href: '/dashboard/hr-dashboard', icon: 'LayoutDashboard', order: -1, requiredPermission: 'ATS_READ' },
   { section: 'Hiring Process', label: 'Job Requisition', href: '/dashboard/hiring/manpower', icon: 'ClipboardList', order: 0, requiredPermission: 'ATS_READ' },
   { section: 'Hiring Process', label: 'Post New Job', href: '/dashboard/hiring/jobs/new', icon: 'Briefcase', order: 0.5, requiredPermission: 'ATS_WRITE' },

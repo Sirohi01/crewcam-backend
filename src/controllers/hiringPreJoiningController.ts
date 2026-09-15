@@ -10,6 +10,7 @@ import { HiringPipelineState } from '../models/HiringPipelineState';
 import { AuditLog } from '../models/AuditLog';
 import { notificationService } from '../services/notificationService';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
+import { generateCandidateUniqueId } from '../utils/candidateIdGenerator';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -46,10 +47,20 @@ export const createJoiningConfirmation = async (req: AuthRequest, res: Response)
         .lean() : Promise.resolve(null),
     ]);
 
+    // Step 6: Generate Candidate Unique ID when candidate reaches Step 6
+    let candidateCode: string | undefined;
+    try {
+      candidateCode = await generateCandidateUniqueId(tenantId, candidateId, req.body.reportingLocation || manpower?.workLocation);
+    } catch (genErr) {
+      console.error('Error generating candidate unique ID at Step 6:', genErr);
+    }
+
     const confirmation = await JoiningConfirmation.create({
       ...req.body,
       tenantId,
       candidateId,
+      candidateCode: candidateCode || (candidate as any)?.candidateCode,
+      uniqueId: candidateCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode,
       confirmedJoiningDate: req.body.confirmedJoiningDate || req.body.joiningDate || loi?.joiningDate || manpower?.requiredJoiningDate,
       reportingManagerId: req.body.reportingManagerId || (manpower?.reportingTo as any)?._id || manpower?.reportingTo,
       reportingManagerName: req.body.reportingManagerName || `${(manpower?.reportingTo as any)?.firstName || ''} ${(manpower?.reportingTo as any)?.lastName || ''}`.trim() || undefined,
@@ -93,21 +104,38 @@ export const getJoiningConfirmations = async (req: AuthRequest, res: Response) =
     if (candidateId) filter.candidateId = candidateId;
 
     const confirmations = await JoiningConfirmation.find(filter)
-      .populate('candidateId', 'firstName lastName jobRole')
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
       .populate('sentBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .lean();
 
-    const mapped = confirmations.map((c: any) => ({
-      ...c,
-      _id: c._id,
-      candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : 'Unknown',
-      position: (c.candidateId as any)?.jobRole || 'N/A',
-      joiningDate: c.confirmedJoiningDate || null,
-      reportingTime: c.reportingTime || 'N/A',
-      status: c.status || 'Pending',
-      createdBy: c.sentBy,
-      updatedAt: c.updatedAt
+    const mapped = await Promise.all(confirmations.map(async (c: any) => {
+      let candCode = (c.candidateId as any)?.candidateCode || c.candidateCode;
+      let candUniqueId = (c.candidateId as any)?.uniqueId || c.uniqueId || candCode;
+
+      if (!candCode && c.candidateId?._id) {
+        try {
+          candCode = await generateCandidateUniqueId(tenantId, c.candidateId._id, c.reportingLocation);
+          candUniqueId = candCode;
+        } catch (e) {
+          // Ignore lazy generation error
+        }
+      }
+
+      return {
+        ...c,
+        _id: c._id,
+        candidateCode: candCode,
+        uniqueId: candUniqueId,
+        employeeCode: candUniqueId || candCode,
+        candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : 'Unknown',
+        position: (c.candidateId as any)?.jobRole || 'N/A',
+        joiningDate: c.confirmedJoiningDate || null,
+        reportingTime: c.reportingTime || 'N/A',
+        status: c.status || 'Pending',
+        createdBy: c.sentBy,
+        updatedAt: c.updatedAt
+      };
     }));
 
     res.status(200).json({ data: mapped });
@@ -129,6 +157,17 @@ export const confirmJoiningByCandidate = async (req: AuthRequest, res: Response)
     );
     if (!confirmation) return res.status(404).json({ message: 'Joining confirmation not found' });
 
+    try {
+      const code = await generateCandidateUniqueId(tenantId, confirmation.candidateId, confirmation.reportingLocation);
+      if (!confirmation.candidateCode) {
+        confirmation.candidateCode = code;
+        confirmation.uniqueId = code;
+        await confirmation.save();
+      }
+    } catch (genErr) {
+      console.error('Error ensuring candidate unique ID on confirmation:', genErr);
+    }
+
     await advanceStep(req, tenantId, String(confirmation.candidateId), 'joiningConfirmation', 'completed', confirmation._id as any);
 
     await logAudit(tenantId, req.user!._id, 'CANDIDATE_CONFIRM_JOINING', req, { confirmationId: id });
@@ -147,10 +186,15 @@ export const createDocumentChecklist = async (req: AuthRequest, res: Response) =
 
     const candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for document checklist' });
+    let candidate: any = null;
     if (candidateId !== '000000000000000000000000') {
-      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id firstName lastName jobRole candidateCode uniqueId employeeCode').lean();
       if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
     }
+
+    const employeeCode = req.body.employeeCode || (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    const uniqueId = req.body.uniqueId || (candidate as any)?.uniqueId || employeeCode;
+    const candidateCode = req.body.candidateCode || (candidate as any)?.candidateCode || employeeCode;
 
     const items = Array.isArray(req.body.items) && req.body.items.length
       ? req.body.items.map((item: any) => ({
@@ -166,9 +210,33 @@ export const createDocumentChecklist = async (req: AuthRequest, res: Response) =
           ...(req.body.eduStatus ? [{ documentName: 'Educational Certificates', status: req.body.eduStatus }] : []),
         ];
 
-    let overallStatus = 'Incomplete'; if (req.body.overallStatus !== undefined) { overallStatus = req.body.overallStatus; } else { const allVerified = items.every((i: { status: string }) => i.status === 'Verified'); const allSubmitted = items.every((i: { status: string }) => i.status === 'Submitted' || i.status === 'Verified'); overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete'; }
+    let overallStatus = 'Incomplete';
+    if (req.body.overallStatus !== undefined) {
+      overallStatus = req.body.overallStatus;
+    } else {
+      const allVerified = items.every((i: { status: string }) => i.status === 'Verified');
+      const allSubmitted = items.every((i: { status: string }) => i.status === 'Submitted' || i.status === 'Verified');
+      overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete';
+    }
 
-const checklist = await DocumentChecklist.create({ tenantId, candidateId, ...(items.length > 0 ? { items } : {}), overallStatus: overallStatus as 'Incomplete' | 'Verified' | 'Complete' });
+    const checklist = await DocumentChecklist.create({
+      tenantId,
+      candidateId,
+      employeeName: req.body.employeeName || (candidate ? `${candidate.firstName} ${candidate.lastName}`.trim() : undefined),
+      employeeCode,
+      uniqueId,
+      candidateCode,
+      designation: req.body.designation || (candidate as any)?.jobRole,
+      department: req.body.department,
+      dateOfJoining: req.body.dateOfJoining,
+      workLocation: req.body.workLocation,
+      employeeSignatureDate: req.body.employeeSignatureDate,
+      hrName: req.body.hrName,
+      hrRemarks: req.body.hrRemarks,
+      hrSignatureDate: req.body.hrSignatureDate,
+      ...(items.length > 0 ? { items } : {}),
+      overallStatus: overallStatus as 'Incomplete' | 'Verified' | 'Complete'
+    });
 
     if (candidateId) {
       await advanceStep(req, tenantId, candidateId, 'documentChecklist', 'in_progress', (checklist as any)._id);
@@ -205,12 +273,20 @@ export const updateDocumentChecklist = async (req: AuthRequest, res: Response) =
     if (req.body.dateOfJoining !== undefined) (checklist as any).dateOfJoining = req.body.dateOfJoining;
     if (req.body.workLocation !== undefined) (checklist as any).workLocation = req.body.workLocation;
     if (req.body.employeeCode !== undefined) (checklist as any).employeeCode = req.body.employeeCode;
+    if (req.body.uniqueId !== undefined) (checklist as any).uniqueId = req.body.uniqueId;
+    if (req.body.candidateCode !== undefined) (checklist as any).candidateCode = req.body.candidateCode;
     if (req.body.employeeSignatureDate !== undefined) (checklist as any).employeeSignatureDate = req.body.employeeSignatureDate;
     if (req.body.hrName !== undefined) (checklist as any).hrName = req.body.hrName;
     if (req.body.hrRemarks !== undefined) (checklist as any).hrRemarks = req.body.hrRemarks;
     if (req.body.hrSignatureDate !== undefined) (checklist as any).hrSignatureDate = req.body.hrSignatureDate;
 
-    if (req.body.overallStatus !== undefined) { checklist.overallStatus = req.body.overallStatus; } else { const allVerified = checklist.items.every(i => i.status === 'Verified'); const allSubmitted = checklist.items.every(i => i.status === 'Submitted' || i.status === 'Verified'); checklist.overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete'; }
+    if (req.body.overallStatus !== undefined) {
+      checklist.overallStatus = req.body.overallStatus;
+    } else {
+      const allVerified = checklist.items.every(i => i.status === 'Verified');
+      const allSubmitted = checklist.items.every(i => i.status === 'Submitted' || i.status === 'Verified');
+      checklist.overallStatus = allVerified ? 'Verified' : allSubmitted ? 'Complete' : 'Incomplete';
+    }
 
     await checklist.save();
 
@@ -234,21 +310,25 @@ export const getDocumentChecklists = async (req: AuthRequest, res: Response) => 
     if (candidateId) filter.candidateId = candidateId;
 
     const checklists = await DocumentChecklist.find(filter)
-      .populate('candidateId', 'firstName lastName jobRole')
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
       .sort({ createdAt: -1 })
       .lean();
 
     const mapped = checklists.map((c: any) => {
       const items = c.items || [];
       const submittedCount = items.filter((i: any) => i.status === 'Submitted' || i.status === 'Verified').length;
+      const empCode = c.employeeCode || c.uniqueId || c.candidateCode || (c.candidateId as any)?.employeeCode || (c.candidateId as any)?.uniqueId || (c.candidateId as any)?.candidateCode || '-';
       
       return {
         ...c,
         _id: c._id,
+        employeeCode: empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
         candidateName: c.candidateId ? `${(c.candidateId as any).firstName} ${(c.candidateId as any).lastName}`.trim() : c.employeeName || 'Unknown',
         position: (c.candidateId as any)?.jobRole || c.designation || '-',
         docsSubmitted: `${submittedCount}/${items.length || 3}`,
-        bgvStatus: 'Pending', // BGV is a separate schema, so we keep pending or pull if needed
+        bgvStatus: 'Pending',
         status: c.overallStatus || 'Pending',
         createdBy: null,
         updatedAt: c.updatedAt
@@ -304,7 +384,18 @@ export const createBGVRequest = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const bgv = await BGVRequest.create({ ...req.body, tenantId, requestedBy: req.user!._id });
+    let empCode = req.body.employeeCode || req.body.empCode || req.body.uniqueId || req.body.candidateCode || req.body.reportEmpCode;
+    if (!empCode && req.body.candidateId) {
+      const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId }).select('employeeCode uniqueId candidateCode').lean();
+      empCode = (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    }
+
+    const bgv = await BGVRequest.create({
+      ...req.body,
+      tenantId,
+      requestedBy: req.user!._id,
+      ...(empCode ? { employeeCode: empCode, empCode, uniqueId: empCode, candidateCode: empCode, reportEmpCode: req.body.reportEmpCode || empCode } : {})
+    });
 
     if ((bgv as any).overallResult === 'Discrepancy') {
       await advanceStep(req, tenantId, req.body.candidateId, 'bgvRequest', 'rejected', (bgv as any)._id);
@@ -331,21 +422,28 @@ export const getBGVRequests = async (req: AuthRequest, res: Response) => {
     if (candidateId) filter.candidateId = candidateId;
 
     const requests = await BGVRequest.find(filter)
-      .populate('candidateId', 'firstName lastName jobRole')
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
       .populate('requestedBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .lean();
-    const mapped = requests.map((r: any) => ({
-      ...r,
-      _id: r._id,
-      candidateName: r.candidateId ? `${(r.candidateId as any).firstName} ${(r.candidateId as any).lastName}`.trim() : r.fullName || r.reportCandidateName || 'Unknown',
-      position: r.positionFor || (r.candidateId && (r.candidateId as any).jobRole) || '-',
-      phoneNumber: r.mobileNo || r.homeNo || '-',
-      email: r.emailId || '-',
-      department: r.department || r.reportDepartment || '-',
-      status: r.status || 'Pending',
-      updatedAt: r.updatedAt
-    }));
+    const mapped = requests.map((r: any) => {
+      const empCode = r.employeeCode || r.empCode || r.uniqueId || r.candidateCode || r.reportEmpCode || (r.candidateId as any)?.employeeCode || (r.candidateId as any)?.uniqueId || (r.candidateId as any)?.candidateCode || '-';
+      return {
+        ...r,
+        _id: r._id,
+        employeeCode: empCode,
+        empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
+        candidateName: r.candidateId ? `${(r.candidateId as any).firstName} ${(r.candidateId as any).lastName}`.trim() : r.fullName || r.reportCandidateName || 'Unknown',
+        position: r.positionFor || (r.candidateId && (r.candidateId as any).jobRole) || '-',
+        phoneNumber: r.mobileNo || r.homeNo || '-',
+        email: r.emailId || '-',
+        department: r.department || r.reportDepartment || '-',
+        status: r.status || 'Pending',
+        updatedAt: r.updatedAt
+      };
+    });
     res.status(200).json({ data: mapped });
   } catch (error: any) {
     console.error('Error fetching BGV requests:', error);
@@ -414,7 +512,21 @@ export const updateJoiningConfirmation = async (req: AuthRequest, res: Response)
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const updated = await JoiningConfirmation.findOneAndUpdate({ _id: id, tenantId }, { $set: req.body }, { returnDocument: 'after' });
+
+    let candidateCode = req.body.candidateCode || req.body.uniqueId;
+    if (!candidateCode && req.body.candidateId) {
+      try {
+        candidateCode = await generateCandidateUniqueId(tenantId, req.body.candidateId, req.body.reportingLocation);
+      } catch (genErr) {
+        console.error('Error generating candidate unique ID on update:', genErr);
+      }
+    }
+
+    const updated = await JoiningConfirmation.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: { ...req.body, ...(candidateCode ? { candidateCode, uniqueId: candidateCode } : {}) } },
+      { returnDocument: 'after' }
+    );
     if (!updated) return res.status(404).json({ message: 'Not found' });
     res.status(200).json(updated);
   } catch (error: any) {
