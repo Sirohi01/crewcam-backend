@@ -34,8 +34,11 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const candidateId = req.body.candidateId;
+    let candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for CTC breakup' });
+    if (!/^[0-9a-fA-F]{24}$/.test(candidateId)) {
+      candidateId = '000000000000000000000000';
+    }
     if (candidateId !== '000000000000000000000000') {
       const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
       if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
@@ -195,8 +198,11 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const candidateId = req.body.candidateId;
+    let candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for LOI' });
+    if (!/^[0-9a-fA-F]{24}$/.test(candidateId)) {
+      candidateId = '000000000000000000000000';
+    }
     if (candidateId !== '000000000000000000000000') {
       const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
       if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
@@ -251,9 +257,14 @@ export const updateLOI = async (req: AuthRequest, res: Response) => {
 export const getLOIs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { candidateId } = req.query;
+    let { candidateId } = req.query;
     const filter: any = { tenantId };
-    if (candidateId) filter.candidateId = candidateId;
+    if (candidateId) {
+      if (!/^[0-9a-fA-F]{24}$/.test(candidateId as string)) {
+        candidateId = '000000000000000000000000';
+      }
+      filter.candidateId = candidateId;
+    }
 
     const lois = await LetterOfIntent.find(filter)
       .populate('candidateId', 'firstName lastName')

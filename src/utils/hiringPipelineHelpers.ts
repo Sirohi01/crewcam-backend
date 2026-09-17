@@ -4,6 +4,10 @@ import { HiringPipelineState } from '../models/HiringPipelineState';
 import { AuditLog } from '../models/AuditLog';
 import { STEP_RULES, StepRule } from './hiringPipelineRules';
 import { StepStatus } from '../models/HiringPipelineState';
+import { Candidate } from '../models/Candidate';
+import { Tenant } from '../models/Tenant';
+import { Branch } from '../models/Branch';
+import { ManpowerRequest } from '../models/ManpowerRequest';
 
 const APPROVAL_REQUIRED_STEP_KEYS = new Set(
   STEP_RULES.flatMap((rule) => rule.requires.filter((req) => req.status === 'approved').map((req) => req.key))
@@ -101,6 +105,34 @@ export const advanceStep = async (
     state.currentStep
   );
   state.currentStep = maxAdvanced;
+
+  // Auto-generate Candidate ID if passing selection approval
+  if (stepKey === 'selectionApproval' && newStatus === 'approved' && tenantId && candidateId) {
+    const candidate = await Candidate.findOne({ _id: candidateId, tenantId } as any);
+    if (candidate && !candidate.candidateCode) {
+      const tenant = await Tenant.findById(tenantId);
+      const companyPrefix = tenant?.name ? tenant.name.substring(0, 3).toUpperCase() : 'APP';
+      
+      let branchPrefix = 'HQ';
+      const mrStep = state.steps.find(s => s.key === 'manpowerRequest');
+      if (mrStep && mrStep.refId) {
+        const manpowerRequest = await ManpowerRequest.findOne({ _id: mrStep.refId, tenantId } as any);
+        if (manpowerRequest && manpowerRequest.locationBranchId) {
+          const branch = await Branch.findOne({ _id: manpowerRequest.locationBranchId, tenantId } as any);
+          if (branch && branch.code) {
+            branchPrefix = branch.code.toUpperCase();
+          }
+        }
+      }
+      
+      const year = new Date().getFullYear();
+      const count = await Candidate.countDocuments({ tenantId, candidateCode: { $exists: true, $ne: null } }) + 1;
+      const candidateCode = `${companyPrefix}-${branchPrefix}-${year}-${String(count).padStart(4, '0')}`;
+      
+      candidate.candidateCode = candidateCode;
+      await candidate.save();
+    }
+  }
 
   await state.save();
 
