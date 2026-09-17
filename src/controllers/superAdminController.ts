@@ -440,7 +440,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     await adminUser.save();
 
     const { subject, html } = buildCompanyWelcomeEmail({
-      companyId: tenant._id.toString(),
+      companyId: finalCorporateId,
       companyName: name,
       adminFirstName,
       adminEmail,

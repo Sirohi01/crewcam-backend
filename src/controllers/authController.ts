@@ -362,33 +362,25 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
         sendMail({
           to: user.email,
           subject: 'Your CrewCam Login OTP',
+          text: `Namaskar,\n\nTo proceed with your secure login to the CrewCam Dashboard, please use the following One-Time Password (OTP): ${otp}\n\nThis OTP is valid for 5 minutes only.\n\nWarm Regards,\nTeam CrewCam`,
           html: `
-<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; background-color: #f9f9f9;">
-  <div style="background-color: var(--brand-primary, #155e75); padding: 24px 20px; text-align: center; color: white;">
-    <h1 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 0.5px; padding-bottom: 4px;">
-      <img src="https://crewcam.app/logo.png" alt="CrewCam" style="height: 24px; vertical-align: middle; margin-right: 8px; display: inline-block;" onerror="this.style.display='none'" />
-      CrewCam Portal
-    </h1>
-    <div style="font-size: 11px; font-weight: 400; letter-spacing: 0.5px;">Crew Management | HR CRM</div>
+<div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
+  <div style="background-color: #155e75; padding: 20px; text-align: center; color: white;">
+    <img src="https://res.cloudinary.com/dr8mld4i0/image/upload/v1789638742/crewcam_assets/aqfnuqg5vu8mrq67pfba.png" alt="CrewCam" style="height: 28px; vertical-align: middle;" />
   </div>
-  <div style="padding: 40px 30px; background-color: #ffffff;">
-    <p style="margin-top: 0;">Namaskar!</p>
-    <p>Dear User,</p>
-    <p>Thank you for using the CrewCam Portal.</p>
-    <p>To proceed with your secure login and activate your access to the <strong>CrewCam Dashboard</strong>, please verify your identity using the One-Time Password (OTP) below:</p>
+  <div style="padding: 30px; background-color: #ffffff;">
+    <p style="margin-top: 0;">Namaskar,</p>
+    <p>To proceed with your secure login to the <strong>CrewCam Dashboard</strong>, please verify your identity using the One-Time Password (OTP) below:</p>
     <div style="text-align: center; margin: 30px 0;">
-      <span style="font-size: 36px; font-weight: bold; letter-spacing: 12px; color: #d35400;">${otp}</span>
+      <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #155e75; background: #f8fafc; padding: 12px 24px; border-radius: 6px; border: 1px solid #e2e8f0;">${otp}</span>
     </div>
-    <p><strong>This OTP is valid for 5 minutes only</strong> and can be used once.</p>
-    <p>For your security, please do not share this code with anyone. CrewCam or its representatives will <strong>never ask for your OTP</strong>.</p>
-    <p>Once verified, you will be securely logged into your dashboard.</p>
-    <p style="font-style: italic; color: #777;">If you did not initiate this request, please ignore this email.</p>
-    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-    <p style="margin: 0;">Warm Regards,</p>
-    <p style="margin: 5px 0 0 0; font-weight: bold;">Team CrewCam</p>
-    <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">CrewCam Portal</p>
+    <p style="font-size: 14px; color: #475569;"><strong>This OTP is valid for 5 minutes only</strong> and can be used once.</p>
+    <p style="font-size: 13px; color: #64748b;">For your security, please do not share this code with anyone. CrewCam will never ask for your OTP.</p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;" />
+    <p style="margin: 0; font-size: 14px;">Warm Regards,</p>
+    <p style="margin: 4px 0 0 0; font-weight: bold; font-size: 14px;">Team CrewCam</p>
   </div>
-  <div style="background-color: #f9f9f9; padding: 15px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee;">
+  <div style="background-color: #f8fafc; padding: 15px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
     &copy; ${new Date().getFullYear()} CrewCam. All Rights Reserved.
   </div>
 </div>

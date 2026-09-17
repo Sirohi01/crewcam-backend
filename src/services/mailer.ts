@@ -28,9 +28,10 @@ export interface SendMailInput {
   to: string;
   subject: string;
   html: string;
+  text?: string;
 }
 
-export async function sendMail({ to, subject, html }: SendMailInput): Promise<{ sent: boolean; error?: string }> {
+export async function sendMail({ to, subject, html, text }: SendMailInput): Promise<{ sent: boolean; error?: string }> {
   const client = getTransporter();
   if (!client) {
     return { sent: false, error: 'SMTP is not configured on the server.' };
@@ -42,6 +43,7 @@ export async function sendMail({ to, subject, html }: SendMailInput): Promise<{ 
       to,
       subject,
       html,
+      text,
     });
     return { sent: true };
   } catch (error: any) {
