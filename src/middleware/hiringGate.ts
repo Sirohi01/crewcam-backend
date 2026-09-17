@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
 import { HiringPipelineState } from '../models/HiringPipelineState';
+import { User } from '../models/User';
 import { AppointmentLetter } from '../models/AppointmentLetter';
 import { OfferLetter } from '../models/OfferLetter';
 import { evaluateGate, STEP_RULES } from '../utils/hiringPipelineRules';
@@ -39,8 +40,23 @@ export const requireStepUnlocked = (stepKey: string, opts: { candidateField?: 'c
       let value = req.body[field];
       if (!value) return res.status(400).json({ message: `${field} is required` });
       if (typeof value === 'string' && !/^[0-9a-fA-F]{24}$/.test(value)) {
-        value = '000000000000000000000000';
-        req.body[field] = value;
+        if (field === 'employeeId') {
+          const user = await User.findOne({ tenantId, employeeCode: value });
+          if (user) {
+            value = String(user._id);
+            req.body[field] = value;
+          } else {
+            const st = await HiringPipelineState.findOne({ tenantId, $or: [{ employeeId: value }, { candidateId: value }] } as any);
+            if (st?.employeeId) {
+              value = String(st.employeeId);
+              req.body[field] = value;
+            }
+          }
+        }
+        if (!/^[0-9a-fA-F]{24}$/.test(value)) {
+          value = '000000000000000000000000';
+          req.body[field] = value;
+        }
       }
 
       const query = field === 'employeeId' ? { tenantId, employeeId: value } : { tenantId, candidateId: value };
@@ -53,7 +69,7 @@ export const requireStepUnlocked = (stepKey: string, opts: { candidateField?: 'c
       //   return res.status(403).json({ error: 'STEP_LOCKED', blockedBy: result.blockedBy });
       // }
 
-      if (stepKey === 'probationReview') {
+      if (stepKey === 'probationReview' && PROBATION_WINDOW_DAYS > 0) {
         const candidateId = state?.candidateId ? String(state.candidateId) : null;
         const joiningDate = candidateId ? await getJoiningDate(tenantId, candidateId) : null;
         const elapsedDays = joiningDate ? (Date.now() - joiningDate.getTime()) / 86400000 : -Infinity;

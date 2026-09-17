@@ -119,7 +119,7 @@ export const updateKpi = async (req: Request, res: Response): Promise<void> => {
     const kpi = await DepartmentKpi.findOneAndUpdate(
       { _id: id as string, companyId: tenantId },
       kpiData,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!kpi) {

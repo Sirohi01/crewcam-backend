@@ -18,6 +18,8 @@ export interface IDocumentChecklist extends ITenantScoped {
   dateOfJoining?: string;
   workLocation?: string;
   employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
   employeeSignatureDate?: string;
   hrName?: string;
   hrSignatureDate?: string;
@@ -35,6 +37,8 @@ const documentChecklistSchema = new Schema<IDocumentChecklist>({
   dateOfJoining: { type: String },
   workLocation: { type: String },
   employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
   employeeSignatureDate: { type: String },
   hrName: { type: String },
   hrSignatureDate: { type: String },

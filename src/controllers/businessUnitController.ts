@@ -126,7 +126,7 @@ export const updateBusinessUnit = async (req: AuthRequest, res: Response) => {
     const updatedBusinessUnit = await BusinessUnit.findByIdAndUpdate(
       id,
       { $set: req.body },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedBusinessUnit) {

@@ -133,7 +133,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
     const meeting = await Meeting.findOneAndUpdate(
       { _id: id, tenantId, organizerId: req.user!._id as any } as any,
       updateData,
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!meeting) {

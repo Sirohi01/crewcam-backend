@@ -178,7 +178,7 @@ export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) =
     const item = await SidebarConfig.findOneAndUpdate(
       { _id: id, tenantId } as any,
       { $set: updateData },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!item) return res.status(404).json({ message: 'Sidebar item not found' });
 

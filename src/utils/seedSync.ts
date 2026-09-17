@@ -71,7 +71,7 @@ export const syncSidebarDefaults = async (tenantId: string) => {
   );
   const graduations = DEFAULT_SIDEBAR_ITEMS.filter((item) => {
     const current = existingByKey.get(`${item.section}::${item.label}`);
-    return current && current.href && current.href !== item.href && current.href.includes('/coming-soon') && !item.href.includes('/coming-soon');
+    return current && current.href !== item.href && current.href?.includes('/coming-soon') && !item.href?.includes('/coming-soon');
   });
   await Promise.all(
     graduations.map((item) =>
@@ -81,10 +81,10 @@ export const syncSidebarDefaults = async (tenantId: string) => {
 
   const flatRouteUpdates = DEFAULT_SIDEBAR_ITEMS.filter((item) => {
     const current = existingByKey.get(`${item.section}::${item.label}`);
-    return current && current.href && current.href !== item.href && (
-      current.href.includes('/attendance/') ||
-      current.href.includes('/leaves/') ||
-      current.href.includes('/communication/')
+    return current && current.href !== item.href && (
+      current.href?.includes('/attendance/') ||
+      current.href?.includes('/leaves/') ||
+      current.href?.includes('/communication/')
     );
   });
   await Promise.all(
@@ -125,7 +125,7 @@ export const syncSidebarDefaults = async (tenantId: string) => {
     const current = existingByKey.get(`${item.section}::${item.label}`);
     const isLegacyDefault = current && current.href && (
       current.href === '/dashboard/hiring' ||
-      current.href.includes('/coming-soon') ||
+      current.href?.includes('/coming-soon') ||
       current.href === item.href
     );
     return isLegacyDefault && current.order !== item.order

@@ -4,6 +4,8 @@ import { tenantPlugin, ITenantScoped } from './plugins/tenantPlugin';
 export interface IEngagementConfirmation extends ITenantScoped {
   employeeName?: string;
   uniqueId?: string;
+  employeeCode?: string;
+  candidateCode?: string;
   department?: string;
   designation?: string;
   joiningDate?: string;
@@ -25,6 +27,8 @@ export interface IEngagementConfirmation extends ITenantScoped {
 const engagementConfirmationSchema = new Schema<IEngagementConfirmation>({
   employeeName: { type: String },
   uniqueId: { type: String },
+  employeeCode: { type: String },
+  candidateCode: { type: String },
   department: { type: String },
   designation: { type: String },
   joiningDate: { type: String },

@@ -15,6 +15,9 @@ export interface INDADocument extends ITenantScoped {
   witness2Name?: string;
   witness2Address?: string;
   witness2Date?: string;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
 
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
@@ -40,6 +43,9 @@ const ndaDocumentSchema = new Schema<INDADocument>({
   witness2Name: { type: String },
   witness2Address: { type: String },
   witness2Date: { type: String },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },

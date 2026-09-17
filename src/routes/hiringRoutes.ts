@@ -185,7 +185,7 @@ router.post('/candidates/:slug/bypass-interviews', checkPermission('ORG_WRITE'),
   try {
     let candidateId = req.params.slug;
     const mongoose = require('mongoose');
-    
+
     // If it's a dummy slug like 'manish-kumar-sirohi', we map it to the shared dummy ObjectId
     // so that the pipeline state saves correctly and can be fetched by the frontend
     if (!mongoose.isValidObjectId(candidateId)) {
@@ -228,7 +228,7 @@ router.post('/candidates/:slug/bypass-interviews', checkPermission('ORG_WRITE'),
     };
     await SelectionApproval.create(approvalPayload);
     await advanceStep(req, req.tenantId, candidateId, 'selectionApproval', 'approved', null as any);
-    
+
     // Even if candidate doesn't exist (e.g., frontend dummy slug), we return success to allow the demo to proceed
     res.status(200).json({ success: true, fake: !candidate });
   } catch (error: any) {
@@ -436,6 +436,13 @@ router.put('/id-card/:id', checkPermission('ORG_WRITE'), updateIDCard);
 router.delete('/id-card/:id', checkPermission('ORG_WRITE'), deleteIDCard);
 router.post('/id-card/:id/generate-pdf', checkPermission('ORG_WRITE'), generateIDCardPdf);
 router.put('/id-card/:id/issue', checkPermission('ORG_WRITE'), markIDCardIssued);
+// /idcard route aliases
+router.post('/idcard', checkPermission('ORG_WRITE'), requireStepUnlocked('idCard', { candidateField: 'employeeId' }), createIDCard);
+router.get('/idcard', checkPermission('ORG_READ'), getIDCards);
+router.put('/idcard/:id', checkPermission('ORG_WRITE'), updateIDCard);
+router.delete('/idcard/:id', checkPermission('ORG_WRITE'), deleteIDCard);
+router.post('/idcard/:id/generate-pdf', checkPermission('ORG_WRITE'), generateIDCardPdf);
+router.put('/idcard/:id/issue', checkPermission('ORG_WRITE'), markIDCardIssued);
 
 // Step 25: Release QA Checks
 router.post('/release-qa', checkPermission('ORG_WRITE'), requireStepUnlocked('releaseQA', { candidateField: 'employeeId' }), createReleaseQA);

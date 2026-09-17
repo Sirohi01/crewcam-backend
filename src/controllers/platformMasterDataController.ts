@@ -28,7 +28,7 @@ export const updateIndustry = async (req: AuthRequest, res: Response) => {
     const data = await Industry.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedBy: req.user?._id },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!data) return res.status(404).json({ message: 'Industry not found' });
     res.status(200).json({ data });
@@ -71,7 +71,7 @@ export const updateCompanySize = async (req: AuthRequest, res: Response) => {
     const data = await CompanySize.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedBy: req.user?._id },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!data) return res.status(404).json({ message: 'Company size not found' });
     res.status(200).json({ data });
@@ -114,7 +114,7 @@ export const updateTimeZone = async (req: AuthRequest, res: Response) => {
     const data = await TimeZone.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedBy: req.user?._id },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!data) return res.status(404).json({ message: 'Time zone not found' });
     res.status(200).json({ data });
