@@ -344,11 +344,7 @@ async function seedCandidate(candidate: any, actor: any, employee: any) {
   console.log(`Finished ${label} -> employeeId ${employeeId}`);
 }
 
-async function main() {
-  const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error('MONGODB_URI not set');
-  await mongoose.connect(uri);
-
+export const seedHiringDemoData = async () => {
   const candidates = (await Candidate.find({}).setOptions({ bypassTenantIsolation: true }).sort({ createdAt: 1 }))
     .filter((c) => !!c.tenantId)
     .slice(0, 1);
@@ -392,10 +388,4 @@ async function main() {
   }
 
   console.log('\nAll done.');
-  await mongoose.disconnect();
-}
-
-main().catch((err) => {
-  console.error('Seed failed:', err);
-  process.exit(1);
-});
+};

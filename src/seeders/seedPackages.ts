@@ -1,11 +1,4 @@
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 import { Package } from '../models/Package';
-
-dotenv.config();
-
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/namoCrewcam';
-
 const defaultPackages = [
     {
         name: 'Starter',
@@ -145,24 +138,16 @@ const defaultPackages = [
     }
 ];
 
-const seed = async () => {
+export const seedPackages = async () => {
     try {
-        console.log('Connecting to MongoDB...', MONGO_URI);
-        await mongoose.connect(MONGO_URI);
-        console.log('Connected.');
-        
-        console.log('Clearing existing packages...');
         await Package.deleteMany({});
         
         console.log('Inserting default packages...');
         await Package.insertMany(defaultPackages);
         
-        console.log('Seeding completed successfully!');
-        process.exit(0);
+        console.log('Package seeding completed successfully!');
     } catch (error) {
-        console.error('Seeding failed:', error);
-        process.exit(1);
+        console.error('Package seeding failed:', error);
+        throw error;
     }
 };
-
-seed();
