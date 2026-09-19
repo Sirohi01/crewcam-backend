@@ -22,7 +22,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, sendMail } from '../services/mailer';
-
+import { Otp } from '../models/Otp';
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 const hashOtp = (userId: unknown, otp: string) => hashToken(`${userId}:${otp}`);
 
@@ -1492,5 +1492,63 @@ export const getSuperAdminActivityLogs = async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('Error fetching activity logs:', error);
     res.status(500).json({ message: 'Error fetching activity logs' });
+  }
+};
+
+export const sendWizardOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const { identifier, channel } = req.body;
+    if (!identifier || !channel) {
+      return res.status(400).json({ message: 'Identifier and channel are required' });
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store OTP in database with 5 min expiration
+    await Otp.findOneAndUpdate(
+      { phone: identifier },
+      { phone: identifier, otp: otpCode, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+      { upsert: true, new: true }
+    );
+
+    if (channel === 'email') {
+      await sendMail({
+        to: identifier,
+        subject: 'HRCRM Verification Code',
+        html: `<div style="font-family: sans-serif;"><h2>Your Verification Code</h2><p>Please use the following 6-digit code to verify your email address:</p><h1 style="background: #f4f4f5; padding: 10px; display: inline-block; letter-spacing: 2px;">${otpCode}</h1><p>This code will expire in 5 minutes.</p></div>`
+      });
+    } else if (channel === 'whatsapp') {
+      // Pass null for tenantId since super-admin doesn't have a specific tenant
+      await notificationService.sendWhatsAppOTP(null as any, identifier, otpCode);
+    } else if (channel === 'sms') {
+      await notificationService.sendSMS(null as any, identifier, `Your HRCRM verification code is: ${otpCode}. It expires in 5 minutes.`);
+    } else {
+      return res.status(400).json({ message: 'Invalid channel' });
+    }
+
+    res.status(200).json({ message: 'OTP sent successfully' });
+  } catch (error: any) {
+    console.error('Failed to send wizard OTP:', error);
+    res.status(500).json({ message: 'Failed to send OTP', error: error.message });
+  }
+};
+
+export const verifyWizardOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const { identifier, otp } = req.body;
+    if (!identifier || !otp) {
+      return res.status(400).json({ message: 'Identifier and OTP are required' });
+    }
+
+    const validOtp = await Otp.findOne({ phone: identifier, otp });
+    if (!validOtp) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    await Otp.deleteOne({ _id: validOtp._id });
+    res.status(200).json({ message: 'OTP verified successfully' });
+  } catch (error: any) {
+    console.error('Failed to verify wizard OTP:', error);
+    res.status(500).json({ message: 'Failed to verify OTP', error: error.message });
   }
 };

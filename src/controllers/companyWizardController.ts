@@ -104,6 +104,19 @@ export const createCompanyDraft = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'A user with this admin email already exists' });
     }
 
+    if (data.panNumber) {
+      const existingPan = await Company.findOne({ panNumber: data.panNumber }).setOptions({ bypassTenantIsolation: true });
+      if (existingPan) return res.status(400).json({ message: `A company with PAN ${data.panNumber} already exists` });
+    }
+    if (data.cin) {
+      const existingCin = await Company.findOne({ cin: data.cin }).setOptions({ bypassTenantIsolation: true });
+      if (existingCin) return res.status(400).json({ message: `A company with CIN ${data.cin} already exists` });
+    }
+    if (data.gstin) {
+      const existingGst = await Company.findOne({ gstin: data.gstin }).setOptions({ bypassTenantIsolation: true });
+      if (existingGst) return res.status(400).json({ message: `A company with GSTIN ${data.gstin} already exists` });
+    }
+
     const pkg = await Package.findById(data.packageId);
     if (!pkg || !pkg.isActive) {
       return res.status(400).json({ message: 'Selected plan does not exist or is inactive' });

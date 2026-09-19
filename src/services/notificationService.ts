@@ -23,6 +23,34 @@ export const notificationService = {
   },
 
   sendSMS: async (tenantId: string, to: string, message: string) => {
+    if (OPUS_API_KEY) {
+      console.log(`[REAL SMS/OTP via OPUS] Sending to ${to}...`);
+      try {
+        const apiKey = OPUS_API_KEY.trim();
+        const formattedMobile = to.replace(/\D/g, '');
+        const destination = formattedMobile.length === 10 ? `91${formattedMobile}` : formattedMobile;
+        const url = `https://api.opustechnology.in/wapp/v2/api/send?apikey=${apiKey}&mobile=${destination}&msg=${encodeURIComponent(message)}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[OPUS API ERROR] Status: ${response.status}`, errorText);
+            throw new Error(`OPUS API responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+        return { success: true, simulated: false, data };
+      } catch (error: any) {
+        console.error('[OPUS ERROR]', error.message);
+        console.warn('Falling back to other providers or simulation...');
+      }
+    }
+
     const integration = await Integration.findOne({ tenantId, type: 'SMS', isActive: true });
     
     if (!integration) {
