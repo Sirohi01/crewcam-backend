@@ -1,20 +1,39 @@
+import { ClientSecretCredential } from '@azure/identity';
+import { Client } from '@microsoft/microsoft-graph-client';
+import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
 import nodemailer, { Transporter } from 'nodemailer';
 
-let transporter: Transporter | null = null;
-let configWarningLogged = false;
+// --- MICROSOFT GRAPH SETUP ---
+let graphClient: Client | null = null;
+function getGraphClient(): Client {
+    if (graphClient) return graphClient;
+    const tenantId = process.env.MS_TENANT_ID;
+    const clientId = process.env.MS_CLIENT_ID;
+    const clientSecret = process.env.MS_CLIENT_SECRET;
+    if (!tenantId || !clientId || !clientSecret) {
+        throw new Error('Microsoft Graph credentials not configured.');
+    }
+    const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+    const authProvider = new TokenCredentialAuthenticationProvider(credential, { scopes: ['https://graph.microsoft.com/.default'] });
+    graphClient = Client.initWithMiddleware({ authProvider });
+    return graphClient;
+}
 
+function toGraphAttachments(attachments: any[] = []) {
+    return attachments.map(att => {
+        const contentBytes = Buffer.isBuffer(att.content) ? att.content.toString('base64') : Buffer.from(att.content || '', att.encoding || 'utf8').toString('base64');
+        const attachment: any = { '@odata.type': '#microsoft.graph.fileAttachment', name: att.filename, contentType: att.contentType || 'application/octet-stream', contentBytes };
+        if (att.cid) { attachment.contentId = att.cid; attachment.isInline = true; }
+        return attachment;
+    });
+}
+
+// --- NODEMAILER SETUP ---
+let transporter: Transporter | null = null;
 function getTransporter(): Transporter | null {
   if (transporter) return transporter;
-
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
-    if (!configWarningLogged) {
-      console.warn('[mailer] SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS not fully configured — emails will not be sent.');
-      configWarningLogged = true;
-    }
-    return null;
-  }
-
+  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) return null;
   transporter = nodemailer.createTransport({
     host: SMTP_HOST,
     port: Number(SMTP_PORT),
@@ -25,32 +44,59 @@ function getTransporter(): Transporter | null {
 }
 
 export interface SendMailInput {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   text?: string;
+  attachments?: any[];
 }
 
-export async function sendMail({ to, subject, html, text }: SendMailInput): Promise<{ sent: boolean; error?: string }> {
-  const client = getTransporter();
-  if (!client) {
-    return { sent: false, error: 'SMTP is not configured on the server.' };
-  }
+export async function sendMail(input: SendMailInput): Promise<{ sent: boolean; error?: string }> {
+  // Toggle: If USE_MS_GRAPH=true in .env, use Microsoft Graph. Otherwise use Nodemailer.
+  const useGraph = process.env.USE_MS_GRAPH === 'true';
 
-  try {
-    await client.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to,
-      subject,
-      html,
-      text,
-    });
-    return { sent: true };
-  } catch (error: any) {
-    console.error('[mailer] Failed to send email:', error?.message || error);
-    return { sent: false, error: error?.message || 'Unknown email delivery error' };
+  if (useGraph) {
+    try {
+      const senderEmail = process.env.MS_SENDER_EMAIL;
+      if (!senderEmail) return { sent: false, error: 'MS_SENDER_EMAIL is not configured.' };
+      const client = getGraphClient();
+      const recipients = Array.isArray(input.to)
+          ? input.to.map(email => ({ emailAddress: { address: email.trim() } }))
+          : input.to.split(',').map(email => ({ emailAddress: { address: email.trim() } }));
+      const message = {
+          subject: input.subject,
+          body: { contentType: 'HTML', content: input.html || input.text || '' },
+          toRecipients: recipients,
+          attachments: toGraphAttachments(input.attachments),
+      };
+      await client.api(`/users/${encodeURIComponent(senderEmail)}/sendMail`).post({ message, saveToSentItems: true });
+      return { sent: true };
+    } catch (error: any) {
+      console.error('[mailer] Exception sending email via MS Graph:', error?.message || error);
+      return { sent: false, error: error?.message || 'MS Graph Error' };
+    }
+  } else {
+    // Fallback to Nodemailer
+    const client = getTransporter();
+    if (!client) return { sent: false, error: 'SMTP is not configured on the server.' };
+    try {
+      const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+      await client.sendMail({
+        from: fromEmail,
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+        attachments: input.attachments
+      });
+      return { sent: true };
+    } catch (error: any) {
+      console.error('[mailer] Exception sending email via Nodemailer:', error?.message || error);
+      return { sent: false, error: error?.message || 'Nodemailer Error' };
+    }
   }
 }
+
 
 export function buildCompanyWelcomeEmail(params: {
   companyId: string;
