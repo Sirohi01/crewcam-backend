@@ -154,14 +154,14 @@ router.param('employeeId', validateObjectIdParam);
 router.get('/pdf-view', checkPermission('ORG_READ'), streamHiringPdf);
 
 // ATS Candidate Pipeline
-router.post('/candidates', checkPermission('ORG_WRITE'), createCandidate);
-router.get('/candidates', checkPermission('ORG_READ'), getCandidates);
-router.get('/candidates/:candidateId/hiring-profile', checkPermission('ORG_READ'), getCandidateHiringProfile);
-router.get('/employees/:employeeId/candidate', checkPermission('ORG_READ'), getCandidateForEmployee);
-router.get('/candidates/:candidateId/pipeline', checkPermission('ORG_READ'), getCandidatePipelineState);
-router.get('/candidates/:id', checkPermission('ORG_READ'), getCandidateById);
-router.put('/candidates/:id', checkPermission('ORG_WRITE'), updateCandidate);
-router.put('/candidates/:id/status', checkPermission('ORG_WRITE'), updateCandidateStatus);
+router.post('/candidates', checkPermission('ATS_WRITE'), createCandidate);
+router.get('/candidates', checkPermission('ATS_READ'), getCandidates);
+router.get('/candidates/:candidateId/hiring-profile', checkPermission('ATS_READ'), getCandidateHiringProfile);
+router.get('/employees/:employeeId/candidate', checkPermission('ATS_READ'), getCandidateForEmployee);
+router.get('/candidates/:candidateId/pipeline', checkPermission('ATS_READ'), getCandidatePipelineState);
+router.get('/candidates/:id', checkPermission('ATS_READ'), getCandidateById);
+router.put('/candidates/:id', checkPermission('ATS_WRITE'), updateCandidate);
+router.put('/candidates/:id/status', checkPermission('ATS_WRITE'), updateCandidateStatus);
 
 // Interviews
 router.post('/interviews', checkPermission('ATS_WRITE'), scheduleInterview);
