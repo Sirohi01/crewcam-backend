@@ -1,5 +1,5 @@
 {
-  "message": "BGVRequest validation failed: requestDate: Cast to date failed for value \"17-08-2026\" (type string) at path \"requestDate\"",
+  "message": "BGVRequest validation failed: status: `active` is not a valid enum value for path `status`.",
   "errors": {},
   "_message": "BGVRequest validation failed"
 }

@@ -48,6 +48,7 @@ export interface ITenant extends Document, IAuditable {
   dbType: 'SHARED' | 'DEDICATED';
 
   modules?: { key: string; enabled: boolean }[];
+  allowedSections?: string[];
   preferences?: { key: string; enabled: boolean }[];
   payrollSetup?: {
     form?: any;
@@ -96,6 +97,7 @@ const TenantSchema = new Schema<ITenant>({
     key: { type: String },
     enabled: { type: Boolean }
   }],
+  allowedSections: [{ type: String }],
   preferences: [{
     key: { type: String },
     enabled: { type: Boolean }

@@ -169,7 +169,7 @@ export const getHistory = async (
                     (subDepartment as any).department || (subDepartment as any).departmentId,
 
                 parentDepartment:
-                    (subDepartment as any).parentDepartment || subDepartment.parentDepartmentId,
+                    (subDepartment as any).parentDepartment || (subDepartment as any).parentDepartmentId,
 
                 createdBy:
                     (subDepartment as any).createdBy,

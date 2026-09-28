@@ -18,6 +18,9 @@ export interface IAppointmentLetter extends ITenantScoped {
 
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
 
   // Role & placement
   designation: string;
@@ -73,6 +76,9 @@ const appointmentLetterSchema = new Schema<IAppointmentLetter>({
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
 
   designation: { type: String, required: true },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },

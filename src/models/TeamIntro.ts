@@ -11,6 +11,9 @@ export interface ITeamIntro extends ITenantScoped {
 
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
   teamMembers: {
     userId?: Types.ObjectId;
     name: string;
@@ -32,6 +35,9 @@ const teamIntroSchema = new Schema<ITeamIntro>({
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
   teamMembers: [{
     userId: { type: Schema.Types.ObjectId, ref: 'User' },
     name: { type: String, required: true },

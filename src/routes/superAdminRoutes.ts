@@ -4,7 +4,7 @@ import {
   getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
   resendCompanyCredentials, getNextCorporateId,
-  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees
+  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
@@ -32,6 +32,7 @@ router.use(checkPermission('SUPER_ADMIN'));
 
 router.get('/dashboard-stats', getPlatformDashboardStats);
 router.get('/audit-logs', getPlatformAuditLogs);
+router.get('/activity-logs', getSuperAdminActivityLogs);
 router.get('/tickets', getPlatformTickets);
 router.get('/reports/summary', getReportsSummary);
 
@@ -50,6 +51,7 @@ router.delete('/tenants/:id/admins/:adminId', deleteTenantAdmin);
 router.put('/tenants/:id/employees/:employeeId', updateTenantEmployee);
 router.delete('/tenants/:id/employees/:employeeId', deleteTenantEmployee);
 router.post('/tenants/:id/employees/bulk', bulkImportEmployees);
+router.post('/tenants/:id/delete-otp', sendDeleteCompanyOtp);
 router.delete('/tenants/:id', deleteTenant);
 router.post('/tenants/:id/resend-credentials', resendCredentials);
 router.post('/tenants/:id/topup-ai-credits', topUpAiCredits);
@@ -66,6 +68,8 @@ router.get('/tenants/:id/invoices', listInvoicesForTenant);
 router.post('/tenants/:id/invoices', generateInvoice);
 
 router.post('/companies/wizard', createCompanyDraft);
+router.post('/wizard-otp/send', sendWizardOtp);
+router.post('/wizard-otp/verify', verifyWizardOtp);
 
 router.get('/packages', getAllPackages);
 router.post('/packages', createPackage);

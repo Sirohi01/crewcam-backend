@@ -22,6 +22,12 @@ export interface ISelectionApproval extends ITenantScoped {
   deptHeadName?: string;
   managementName?: string;
   managementDecision?: string;
+  candidateName?: string;
+  department?: string;
+  position?: string;
+  workLocation?: string;
+  reportingTo?: string;
+  joiningDate?: Date;
 
   candidateId: Types.ObjectId;
   jobRole: string;
@@ -51,6 +57,12 @@ const selectionApprovalSchema = new Schema<ISelectionApproval>({
   deptHeadName: { type: String },
   managementName: { type: String },
   managementDecision: { type: String },
+  candidateName: { type: String },
+  department: { type: String },
+  position: { type: String },
+  workLocation: { type: String },
+  reportingTo: { type: String },
+  joiningDate: { type: Date },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   jobRole: { type: String, required: true },

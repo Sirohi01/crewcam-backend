@@ -5,12 +5,16 @@ import { LetterOfIntent } from '../models/LetterOfIntent';
 import { OfferLetter } from '../models/OfferLetter';
 import { NDADocument } from '../models/NDADocument';
 import { AppointmentLetter } from '../models/AppointmentLetter';
+import { JoiningConfirmation } from '../models/JoiningConfirmation';
 import { Candidate } from '../models/Candidate';
+import { SelectionApproval } from '../models/SelectionApproval';
+import { Tenant } from '../models/Tenant';
 import { AuditLog } from '../models/AuditLog';
 import { savePdfToCloudinary } from '../utils/pdfGenerator';
 import { generateCandidateHiringPdfBuffer } from '../utils/candidatePdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
+import { generateCandidateUniqueId } from '../utils/candidateIdGenerator';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -31,10 +35,15 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const candidateId = req.body.candidateId;
+    let candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for CTC breakup' });
-    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    if (!/^[0-9a-fA-F]{24}$/.test(candidateId)) {
+      candidateId = '000000000000000000000000';
+    }
+    if (candidateId !== '000000000000000000000000') {
+      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    }
 
     const annualCTC = parseFloat(String(req.body.annualCTC || '0').replace(/,/g, '')) || 0;
     const monthlyGross = annualCTC / 12;
@@ -68,32 +77,84 @@ export const createCTCBreakup = async (req: AuthRequest, res: Response) => {
 export const getCTCBreakups = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { candidateId } = req.query;
+    let candidateId = req.query.candidateId as string;
     const filter: any = { tenantId };
-    if (candidateId) filter.candidateId = candidateId;
+    if (candidateId) {
+      if (!/^[0-9a-fA-F]{24}$/.test(candidateId)) {
+        candidateId = '000000000000000000000000';
+      }
+      filter.candidateId = candidateId;
+    }
 
     const breakups = await CTCBreakup.find(filter)
-      .populate('candidateId', 'firstName lastName jobRole')
-      .populate('preparedBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .lean();
 
-    const mapped = breakups.map((b: any) => ({
-      ...b,
-      _id: b._id,
-      candidateName: b.candidateId ? `${(b.candidateId as any).firstName} ${(b.candidateId as any).lastName}`.trim() : 'Unknown',
-      department: (b.candidateId as any)?.jobRole || 'N/A',
-      annualCTC: b.annualCTC?.toLocaleString() || '0',
-      monthlyGross: b.monthlyGross?.toLocaleString() || '0',
-      status: b.approvalStatus || 'Pending',
-      createdBy: b.preparedBy,
-      updatedAt: b.updatedAt
-    }));
+    // Also fetch Approved SelectionApprovals
+    const approvalFilter: any = { tenantId, finalStatus: 'Approved' };
+    if (candidateId) {
+      approvalFilter.candidateId = candidateId;
+    }
+    const approvedSelections = await SelectionApproval.find(approvalFilter).lean();
 
-    res.status(200).json({ data: mapped });
+    const candidateIds = [
+      ...breakups.map(b => b.candidateId).filter(Boolean),
+      ...approvedSelections.map(a => a.candidateId).filter(Boolean)
+    ];
+    
+    const preparerIds = breakups.map(b => b.preparedBy).filter(Boolean);
+
+    const candidates = await Candidate.find({ _id: { $in: candidateIds } }).select('firstName lastName jobRole').lean();
+    const preparers = await require('../models/User').User.find({ _id: { $in: preparerIds } }).select('firstName lastName email').lean();
+
+    const candidateMap = new Map(candidates.map((c: any) => [String(c._id), c]));
+    const preparerMap = new Map(preparers.map((p: any) => [String(p._id), p]));
+
+    const mapped = breakups.map((b: any) => {
+      const cand = candidateMap.get(String(b.candidateId));
+      const prep = preparerMap.get(String(b.preparedBy));
+
+      return {
+        ...b,
+        _id: b._id,
+        rawCandidateId: b.candidateId,
+        candidateId: cand || b.candidateId,
+        candidateName: b.candidateName || (cand ? `${cand.firstName} ${cand.lastName}`.trim() : 'Unknown'),
+        department: b.department || (cand?.jobRole || 'N/A'),
+        annualCTC: b.annualCTC?.toLocaleString() || '0',
+        monthlyGross: b.monthlyGross?.toLocaleString() || '0',
+        status: b.approvalStatus || 'Pending',
+        createdBy: prep || b.preparedBy,
+        updatedAt: b.updatedAt
+      };
+    });
+
+    const existingCTCBreakupCandidateIds = new Set(breakups.map(b => String(b.candidateId)));
+    
+    const pendingSyntheticRecords = approvedSelections
+      .filter((approval: any) => !existingCTCBreakupCandidateIds.has(String(approval.candidateId)))
+      .map((approval: any) => {
+        let cand = candidateMap.get(String(approval.candidateId));
+        return {
+          _id: null,
+          rawCandidateId: approval.candidateId,
+          candidateId: cand || approval.candidateId,
+          candidateName: approval.candidateName || (cand ? `${cand.firstName} ${cand.lastName}`.trim() : 'Unknown'),
+          department: approval.department || (cand?.jobRole || 'N/A'),
+          annualCTC: approval.proposedAnnualCTC || '0',
+          monthlyGross: approval.proposedMonthlyCTC || '0',
+          status: 'Pending',
+          createdBy: null,
+          updatedAt: approval.updatedAt || approval.approvalDate || approval.createdAt || new Date()
+        };
+      });
+
+    const finalMapped = [...mapped, ...pendingSyntheticRecords];
+
+    res.status(200).json({ data: finalMapped });
   } catch (error: any) {
     console.error('Error fetching CTC breakups:', error);
-    res.status(500).json({ message: 'Error fetching CTC breakups' });
+    res.status(500).json({ message: 'Error fetching CTC breakups', error: error.message, stack: error.stack });
   }
 };
 
@@ -107,17 +168,19 @@ export const updateCTCBreakup = async (req: AuthRequest, res: Response) => {
     const breakup = Object.fromEntries(Object.entries(req.body.breakup || {}).map(([key, value]) => [key, Number(value) || 0]));
     const monthlyDeductions = ((breakup.pfEmployee || 0) + (breakup.otherDeductions || 0)) / 12;
 
+    const { _id, candidateId, tenantId: bodyTenantId, ...updateData } = req.body;
+
     const ctcBreakup = await CTCBreakup.findOneAndUpdate(
       { _id: id, tenantId } as any,
       {
-        ...req.body,
+        ...updateData,
         annualCTC,
         breakup,
         monthlyGross,
         monthlyTakeHome: monthlyGross - monthlyDeductions,
         status: req.body.status === 'Finalized' ? 'Finalized' : 'Draft'
       },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!ctcBreakup) return res.status(404).json({ message: 'CTC Breakup not found' });
@@ -126,7 +189,7 @@ export const updateCTCBreakup = async (req: AuthRequest, res: Response) => {
     res.json(ctcBreakup);
   } catch (error: any) {
     console.error('Error updating CTC breakup:', error);
-    res.status(500).json({ message: 'Error updating CTC breakup' });
+    res.status(500).json({ message: 'Error updating CTC breakup', error: error.message, stack: error.stack });
   }
 };
 
@@ -136,10 +199,15 @@ export const createLOI = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const candidateId = req.body.candidateId;
+    let candidateId = req.body.candidateId;
     if (!candidateId) return res.status(400).json({ message: 'Candidate is required for LOI' });
-    const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    if (!/^[0-9a-fA-F]{24}$/.test(candidateId)) {
+      candidateId = '000000000000000000000000';
+    }
+    if (candidateId !== '000000000000000000000000') {
+      const candidate = await Candidate.findOne({ _id: candidateId, tenantId }).select('_id').lean();
+      if (!candidate) return res.status(404).json({ message: 'Candidate not found for this organisation' });
+    }
 
     const loi = await LetterOfIntent.create({
       ...req.body,
@@ -174,7 +242,7 @@ export const updateLOI = async (req: AuthRequest, res: Response) => {
         designation: req.body.designation || req.body.position,
         joiningDate: req.body.joiningDate
       },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!loi) return res.status(404).json({ message: 'LOI not found' });
@@ -190,9 +258,14 @@ export const updateLOI = async (req: AuthRequest, res: Response) => {
 export const getLOIs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const { candidateId } = req.query;
+    let { candidateId } = req.query;
     const filter: any = { tenantId };
-    if (candidateId) filter.candidateId = candidateId;
+    if (candidateId) {
+      if (!/^[0-9a-fA-F]{24}$/.test(candidateId as string)) {
+        candidateId = '000000000000000000000000';
+      }
+      filter.candidateId = candidateId;
+    }
 
     const lois = await LetterOfIntent.find(filter)
       .populate('candidateId', 'firstName lastName')
@@ -202,16 +275,49 @@ export const getLOIs = async (req: AuthRequest, res: Response) => {
     const mapped = lois.map((l: any) => ({
       ...l,
       _id: l._id,
-      candidateName: l.candidateId ? `${(l.candidateId as any).firstName} ${(l.candidateId as any).lastName}`.trim() : 'Unknown',
+      candidateId: l.candidateId?._id || l.candidateId,
+      candidateName: l.candidateId ? `${(l.candidateId as any).firstName || ''} ${(l.candidateId as any).lastName || ''}`.trim() : 'Unknown',
       department: 'N/A', // or from candidate if needed
       position: l.designation || 'N/A',
       joiningDate: l.joiningDate || null,
-      status: l.status || 'Pending',
+      status: l.status || 'Draft',
       createdBy: l.issuedBy,
       updatedAt: l.updatedAt
     }));
 
-    res.status(200).json({ data: mapped });
+    // Fetch Finalized CTC Breakups to synthesize Pending LOIs
+    const ctcFilter: any = { tenantId, status: 'Finalized' };
+    if (candidateId) ctcFilter.candidateId = candidateId;
+    const completedCTCs = await CTCBreakup.find(ctcFilter).lean();
+
+    const existingLOICandidateIds = new Set(lois.map(l => String(l.candidateId?._id || l.candidateId)));
+    
+    // Fetch candidates for synthetic records
+    const syntheticCandidateIds = completedCTCs
+      .filter((ctc: any) => !existingLOICandidateIds.has(String(ctc.candidateId)))
+      .map(ctc => ctc.candidateId);
+      
+    const syntheticCandidates = await Candidate.find({ _id: { $in: syntheticCandidateIds } }).select('firstName lastName jobRole departmentId').lean();
+    const candidateMap = new Map(syntheticCandidates.map((c: any) => [String(c._id), c]));
+
+    const syntheticLOIs = completedCTCs
+      .filter((ctc: any) => !existingLOICandidateIds.has(String(ctc.candidateId)))
+      .map((ctc: any) => {
+        const cand = candidateMap.get(String(ctc.candidateId));
+        return {
+          _id: null,
+          candidateId: cand || ctc.candidateId,
+          candidateName: ctc.candidateName || (cand ? `${cand.firstName || ''} ${cand.lastName || ''}`.trim() : 'Unknown'),
+          department: ctc.department || 'N/A',
+          position: ctc.position || cand?.jobRole || 'N/A',
+          joiningDate: null,
+          status: 'Pending',
+          createdBy: null,
+          updatedAt: ctc.updatedAt || ctc.createdAt
+        };
+      });
+
+    res.status(200).json({ data: [...mapped, ...syntheticLOIs] });
   } catch (error: any) {
     console.error('Error fetching LOIs:', error);
     res.status(500).json({ message: 'Error fetching LOIs' });
@@ -233,7 +339,16 @@ export const updateLOIStatus = async (req: AuthRequest, res: Response) => {
     );
     if (!loi) return res.status(404).json({ message: 'LOI not found' });
 
-    if (status === 'Sent' || status === 'Accepted') await advanceStep(req, tenantId, String(loi.candidateId), 'loi', 'completed', loi._id as any);
+    if (status === 'Sent' || status === 'Accepted') {
+      await advanceStep(req, tenantId, String(loi.candidateId), 'loi', 'completed', loi._id as any);
+      if (status === 'Accepted') {
+        try {
+          await generateCandidateUniqueId(tenantId, loi.candidateId, loi.reportingLocation);
+        } catch (genErr) {
+          console.error('Failed to generate candidate unique ID on LOI acceptance:', genErr);
+        }
+      }
+    }
     if (status === 'Declined' || status === 'Expired') await advanceStep(req, tenantId, String(loi.candidateId), 'loi', 'rejected', loi._id as any);
     await logAudit(tenantId, req.user!._id, 'UPDATE_LOI_STATUS', req, { loiId: id, status });
     res.json(loi);
@@ -291,7 +406,18 @@ export const createOfferLetter = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const offer = await OfferLetter.create({ ...req.body, tenantId, issuedBy: req.user!._id });
+    let empCode = req.body.employeeCode || req.body.uniqueId || req.body.candidateCode;
+    if (!empCode && req.body.candidateId) {
+      const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId }).select('employeeCode uniqueId candidateCode').lean();
+      empCode = (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    }
+
+    const offer = await OfferLetter.create({
+      ...req.body,
+      tenantId,
+      issuedBy: req.user!._id,
+      ...(empCode ? { employeeCode: empCode, uniqueId: empCode, candidateCode: empCode } : {})
+    });
     await advanceStep(req, tenantId, req.body.candidateId, 'offerLetter', 'in_progress', (offer as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_OFFER_LETTER', req, { offerId: (offer as any)._id });
     res.status(201).json(offer);
@@ -310,7 +436,7 @@ export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
     const offer = await OfferLetter.findOneAndUpdate(
       { _id: id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!offer) return res.status(404).json({ message: 'Offer letter not found' });
 
@@ -322,7 +448,6 @@ export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
   }
 };
 
-
 export const getOfferLetters = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -330,8 +455,21 @@ export const getOfferLetters = async (req: AuthRequest, res: Response) => {
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const offers = await OfferLetter.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(offers);
+    const offers = await OfferLetter.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
+      .sort({ createdAt: -1 })
+      .lean();
+    const mapped = offers.map((o: any) => {
+      const empCode = o.employeeCode || o.uniqueId || o.candidateCode || (o.candidateId as any)?.employeeCode || (o.candidateId as any)?.uniqueId || (o.candidateId as any)?.candidateCode || '-';
+      return {
+        ...o,
+        _id: o._id,
+        employeeCode: empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
+      };
+    });
+    res.status(200).json(mapped);
   } catch (error: any) {
     console.error('Error fetching offer letters:', error);
     res.status(500).json({ message: 'Error fetching offer letters' });
@@ -409,7 +547,18 @@ export const createNDA = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const nda = await NDADocument.create({ ...req.body, tenantId, issuedBy: req.user!._id });
+    let empCode = req.body.employeeCode || req.body.uniqueId || req.body.candidateCode;
+    if (!empCode && req.body.candidateId) {
+      const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId }).select('employeeCode uniqueId candidateCode').lean();
+      empCode = (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    }
+
+    const nda = await NDADocument.create({
+      ...req.body,
+      tenantId,
+      issuedBy: req.user!._id,
+      ...(empCode ? { employeeCode: empCode, uniqueId: empCode, candidateCode: empCode } : {})
+    });
     await advanceStep(req, tenantId, req.body.candidateId, 'nda', 'in_progress', (nda as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_NDA', req, { ndaId: (nda as any)._id });
     res.status(201).json(nda);
@@ -428,7 +577,7 @@ export const updateNDA = async (req: AuthRequest, res: Response) => {
     const nda = await NDADocument.findOneAndUpdate(
       { _id: id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!nda) return res.status(404).json({ message: 'NDA not found' });
 
@@ -447,8 +596,21 @@ export const getNDAs = async (req: AuthRequest, res: Response) => {
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const ndas = await NDADocument.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(ndas);
+    const ndas = await NDADocument.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
+      .sort({ createdAt: -1 })
+      .lean();
+    const mapped = ndas.map((n: any) => {
+      const empCode = n.employeeCode || n.uniqueId || n.candidateCode || (n.candidateId as any)?.employeeCode || (n.candidateId as any)?.uniqueId || (n.candidateId as any)?.candidateCode || '-';
+      return {
+        ...n,
+        _id: n._id,
+        employeeCode: empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
+      };
+    });
+    res.status(200).json(mapped);
   } catch (error: any) {
     console.error('Error fetching NDAs:', error);
     res.status(500).json({ message: 'Error fetching NDAs' });
@@ -516,7 +678,18 @@ export const createAppointmentLetter = async (req: AuthRequest, res: Response) =
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const letter = await AppointmentLetter.create({ ...req.body, tenantId, issuedBy: req.user!._id });
+    let empCode = req.body.employeeCode || req.body.uniqueId || req.body.candidateCode;
+    if (!empCode && req.body.candidateId) {
+      const candidate = await Candidate.findOne({ _id: req.body.candidateId, tenantId }).select('employeeCode uniqueId candidateCode').lean();
+      empCode = (candidate as any)?.employeeCode || (candidate as any)?.uniqueId || (candidate as any)?.candidateCode;
+    }
+
+    const letter = await AppointmentLetter.create({
+      ...req.body,
+      tenantId,
+      issuedBy: req.user!._id,
+      ...(empCode ? { employeeCode: empCode, uniqueId: empCode, candidateCode: empCode } : {})
+    });
     await advanceStep(req, tenantId, req.body.candidateId, 'appointmentLetter', 'in_progress', (letter as any)._id);
     await logAudit(tenantId, req.user!._id, 'CREATE_APPOINTMENT_LETTER', req, { letterId: (letter as any)._id });
     res.status(201).json(letter);
@@ -534,7 +707,7 @@ export const updateAppointmentLetter = async (req: AuthRequest, res: Response) =
     const letter = await AppointmentLetter.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!letter) return res.status(404).json({ message: 'Appointment letter not found' });
 
@@ -567,8 +740,63 @@ export const getAppointmentLetters = async (req: AuthRequest, res: Response) => 
     const filter: any = { tenantId };
     if (candidateId) filter.candidateId = candidateId;
 
-    const letters = await AppointmentLetter.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(letters);
+    const letters = await AppointmentLetter.find(filter)
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const mapped = letters.map((l: any) => {
+      const empCode = l.employeeCode || l.uniqueId || l.candidateCode || (l.candidateId as any)?.employeeCode || (l.candidateId as any)?.uniqueId || (l.candidateId as any)?.candidateCode || '-';
+      return {
+        ...l,
+        _id: l._id,
+        employeeCode: empCode,
+        uniqueId: empCode,
+        candidateCode: empCode,
+        candidateId: l.candidateId?._id || l.candidateId,
+        candidateName: l.candidateId ? `${(l.candidateId as any).firstName || ''} ${(l.candidateId as any).lastName || ''}`.trim() : 'Unknown',
+        position: (l.candidateId as any)?.jobRole || 'N/A',
+        joiningDate: l.joiningDate || null,
+        status: l.status || 'Draft',
+        updatedAt: l.updatedAt
+      };
+    });
+
+    // Fetch Completed Joining Confirmations to synthesize Pending Appointment Letters
+    const confirmationFilter: any = { tenantId, status: { $in: ['Finalized', 'Confirmed'] } };
+    if (candidateId) confirmationFilter.candidateId = candidateId;
+    const completedConfirmations = await JoiningConfirmation.find(confirmationFilter).lean();
+
+    const existingLetterCandidateIds = new Set(letters.map(l => String(l.candidateId?._id || l.candidateId)));
+    
+    // Fetch candidates for synthetic records
+    const syntheticCandidateIds = completedConfirmations
+      .filter((c: any) => !existingLetterCandidateIds.has(String(c.candidateId)))
+      .map(c => c.candidateId);
+      
+    const syntheticCandidates = await Candidate.find({ _id: { $in: syntheticCandidateIds } }).select('firstName lastName jobRole candidateCode uniqueId employeeCode').lean();
+    const candidateMap = new Map(syntheticCandidates.map((c: any) => [String(c._id), c]));
+
+    const syntheticLetters = completedConfirmations
+      .filter((c: any) => !existingLetterCandidateIds.has(String(c.candidateId)))
+      .map((c: any) => {
+        const cand = candidateMap.get(String(c.candidateId));
+        const empCode = (cand as any)?.employeeCode || (cand as any)?.uniqueId || (cand as any)?.candidateCode || c.candidateCode || c.uniqueId || '-';
+        return {
+          _id: null,
+          candidateId: cand || c.candidateId,
+          employeeCode: empCode,
+          uniqueId: empCode,
+          candidateCode: empCode,
+          candidateName: c.candidateName || (cand ? `${cand.firstName || ''} ${cand.lastName || ''}`.trim() : 'Unknown'),
+          position: c.designation || cand?.jobRole || 'N/A',
+          joiningDate: c.confirmedJoiningDate || c.joiningDate || null,
+          status: 'Pending',
+          updatedAt: c.updatedAt || c.createdAt
+        };
+      });
+
+    res.status(200).json( [...mapped, ...syntheticLetters] );
   } catch (error: any) {
     console.error('Error fetching appointment letters:', error);
     res.status(500).json({ message: 'Error fetching appointment letters' });

@@ -6,6 +6,8 @@ export interface IInductionForm extends ITenantScoped {
   employeeId?: Types.ObjectId;
   employeeName?: string;
   uniqueId?: string;
+  employeeCode?: string;
+  candidateCode?: string;
   designation?: string;
   department?: string;
   joiningDate?: string;
@@ -25,6 +27,8 @@ const inductionFormSchema = new Schema<IInductionForm>({
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
   employeeName: { type: String },
   uniqueId: { type: String },
+  employeeCode: { type: String },
+  candidateCode: { type: String },
   designation: { type: String },
   department: { type: String },
   joiningDate: { type: String },

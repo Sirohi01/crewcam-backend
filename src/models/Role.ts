@@ -34,7 +34,7 @@ export interface IRole extends ITenantScoped, IAuditable {
 }
 
 const RoleSchema = new Schema<IRole>({
-  name: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
   description: { type: String },
   permissions: [{ type: String }],
   scope: { type: String, enum: ROLE_SCOPES, default: 'self' },
@@ -44,6 +44,8 @@ const RoleSchema = new Schema<IRole>({
 
 RoleSchema.plugin(tenantPlugin);
 RoleSchema.plugin(auditPlugin);
+
+RoleSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 
 export const Role = mongoose.model<IRole>('Role', RoleSchema);
 

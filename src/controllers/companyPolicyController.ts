@@ -89,7 +89,7 @@ export const updateCompanyPolicy = async (req: Request, res: Response) => {
     const updated = await CompanyPolicy.findOneAndUpdate(
       { _id: id, tenantId },
       { ...req.body, updatedBy: user._id },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!updated) {

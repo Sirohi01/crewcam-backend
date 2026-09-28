@@ -20,12 +20,35 @@ export interface IAssetAccessForm extends ITenantScoped {
     item: string;
     quantity: number;
   }[];
+  access_email?: string[];
+  access_system?: string[];
+  access_device?: string[];
+  accessLevel?: string;
+  usePersonalDevice?: boolean;
+  assets?: {
+    name?: string;
+    desc?: string;
+    qty?: string;
+    cond?: string;
+    remarks?: string;
+  }[];
+  itemsIssued?: {
+    laptopNo?: string;
+    mobileDevice?: string;
+    socialMediaAccount?: string;
+    charger?: boolean;
+    softwareInstalledIT?: boolean;
+    emailAccountCreated?: boolean;
+    wifiCredentials?: boolean;
+  };
   issuedBy: Types.ObjectId;
   status: 'Pending' | 'Issued' | 'Returned';
   candidateName?: string;
   department?: string;
   designation?: string;
   uniqueId?: string;
+  employeeCode?: string;
+  candidateCode?: string;
   personalEmail?: string;
   officialEmail?: string;
   mobileNumber?: string;
@@ -60,12 +83,35 @@ const assetAccessFormSchema = new Schema<IAssetAccessForm>({
     item: { type: String, required: true },
     quantity: { type: Number, default: 1 }
   }],
+  access_email: [{ type: String }],
+  access_system: [{ type: String }],
+  access_device: [{ type: String }],
+  accessLevel: { type: String },
+  usePersonalDevice: { type: Boolean },
+  assets: [{
+    name: { type: String },
+    desc: { type: String },
+    qty: { type: String },
+    cond: { type: String },
+    remarks: { type: String }
+  }],
+  itemsIssued: {
+    laptopNo: { type: String },
+    mobileDevice: { type: String },
+    socialMediaAccount: { type: String },
+    charger: { type: Boolean },
+    softwareInstalledIT: { type: Boolean },
+    emailAccountCreated: { type: Boolean },
+    wifiCredentials: { type: Boolean }
+  },
   issuedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   status: { type: String, enum: ['Pending', 'Issued', 'Returned'], default: 'Pending' },
   candidateName: { type: String },
   department: { type: String },
   designation: { type: String },
   uniqueId: { type: String },
+  employeeCode: { type: String },
+  candidateCode: { type: String },
   personalEmail: { type: String },
   officialEmail: { type: String },
   mobileNumber: { type: String },

@@ -26,20 +26,14 @@ const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: num
 export const clockIn = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const tenantId = (req.tenantId || req.user.tenantId) as any;
-    const userId = req.user._id as any;
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
+    
+    const userId = req.user._id;
+    if (!userId) return res.status(401).json({ message: 'User context missing' });
 
     const today = moment().startOf('day').toDate();
     
-    let attendance = await Attendance.findOne({
-      tenantId,
-      userId,
-      date: { $gte: today }
-    });
-
-    if (attendance) {
-      return res.status(400).json({ message: 'Already clocked in today' });
-    }
 
     const { lat, lng } = req.body;
     if (lat === undefined || lng === undefined) {
@@ -59,27 +53,45 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: `You must be within 50 meters of the branch location. You are currently ${Math.round(distance)} meters away.` });
     }
 
-    attendance = await Attendance.create({
-      tenantId,
-      userId,
-      date: today,
-      clockInTime: new Date(),
-      status: 'Present',
-      locationIp: req.ip || '',
-      clockInLocation: { lat, lng }
-    } as any);
+    const clockInTime = new Date();
+    
+    let existingAttendance = await Attendance.findOneAndUpdate(
+      { tenantId, userId, date: { $gte: today } },
+      {
+        $setOnInsert: {
+          tenantId,
+          userId,
+          date: today,
+          clockInTime,
+          status: 'Present',
+          locationIp: req.ip || '',
+          clockInLocation: { lat, lng }
+        }
+      },
+      { upsert: true, new: false }
+    );
+
+    if (existingAttendance) {
+      return res.status(400).json({ message: 'Already clocked in today' });
+    }
+
+    const attendance = await Attendance.findOne({ tenantId, userId, date: today });
 
     res.status(201).json({ message: 'Clocked in successfully', attendance });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error clocking in', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Clock in error:', error);
+    res.status(500).json({ message: 'Error clocking in' });
   }
 };
 
 export const clockOut = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const tenantId = (req.tenantId || req.user.tenantId) as any;
-    const userId = req.user._id as any;
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
+    
+    const userId = req.user._id;
+    if (!userId) return res.status(401).json({ message: 'User context missing' });
 
     const today = moment().startOf('day').toDate();
     
@@ -124,15 +136,19 @@ export const clockOut = async (req: AuthRequest, res: Response) => {
 
     res.status(200).json({ message: 'Clocked out successfully', attendance });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error clocking out', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Clock out error:', error);
+    res.status(500).json({ message: 'Error clocking out' });
   }
 };
 
 export const getMyAttendance = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const tenantId = (req.tenantId || req.user.tenantId) as any;
-    const userId = req.user._id as any;
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
+    
+    const userId = req.user._id;
+    if (!userId) return res.status(401).json({ message: 'User context missing' });
 
     const { month, year } = req.query;
     
@@ -147,19 +163,22 @@ export const getMyAttendance = async (req: AuthRequest, res: Response) => {
     const attendanceRecords = await Attendance.find(query).sort({ date: -1 });
     res.status(200).json(attendanceRecords);
   } catch (error: any) {
-    res.status(500).json({ message: 'Error fetching attendance', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Get attendance error:', error);
+    res.status(500).json({ message: 'Error fetching attendance' });
   }
 };
 
 export const getTenantAttendance = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const tenantId = (req.tenantId || req.user.tenantId) as any;
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
 
     const attendanceRecords = await Attendance.find({ tenantId }).populate('userId', 'firstName lastName email').sort({ date: -1 });
     res.status(200).json(attendanceRecords);
   } catch (error: any) {
-    res.status(500).json({ message: 'Error fetching tenant attendance', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Get tenant attendance error:', error);
+    res.status(500).json({ message: 'Error fetching tenant attendance' });
   }
 };
 
@@ -170,7 +189,9 @@ export const getTenantAttendance = async (req: AuthRequest, res: Response) => {
 export const recordOutIn = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const tenantId = (req.tenantId || req.user.tenantId) as any;
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
+    
     const { type, reason } = req.body;
 
     if (!['Out', 'In'].includes(type) || !reason) {
@@ -187,20 +208,23 @@ export const recordOutIn = async (req: AuthRequest, res: Response) => {
 
     res.status(201).json({ message: 'Out-In record saved', record });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error recording out-in', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Record out-in error:', error);
+    res.status(500).json({ message: 'Error recording out-in' });
   }
 };
 
 export const getMyOutIn = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const tenantId = (req.tenantId || req.user.tenantId) as any;
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
     const today = moment().startOf('day').toDate();
 
     const records = await OutInRecord.find({ tenantId, userId: req.user._id, timestamp: { $gte: today } } as any).sort({ timestamp: -1 });
     res.status(200).json(records);
   } catch (error: any) {
-    res.status(500).json({ message: 'Error fetching out-in records', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Get my out-in error:', error);
+    res.status(500).json({ message: 'Error fetching out-in records' });
   }
 };
 
@@ -211,7 +235,10 @@ export const getMyOutIn = async (req: AuthRequest, res: Response) => {
 export const getTodayAttendance = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const role: any = await Role.findOne({ _id: req.user.roleId, tenantId: req.tenantId || req.user.tenantId } as any);
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
+    
+    const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
     const scope = resolveRoleScope(role);
     const scopeFilter = await getUserScopeFilter(req, scope);
 
@@ -222,7 +249,8 @@ export const getTodayAttendance = async (req: AuthRequest, res: Response) => {
 
     res.status(200).json(records);
   } catch (error: any) {
-    res.status(500).json({ message: 'Error fetching today attendance', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Get today attendance error:', error);
+    res.status(500).json({ message: 'Error fetching today attendance' });
   }
 };
 
@@ -234,7 +262,8 @@ export const getTodayAttendance = async (req: AuthRequest, res: Response) => {
 export const getIndividualAttendance = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const tenantId = (req.tenantId || req.user.tenantId) as any;
+    const tenantId = req.tenantId || req.user.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
     const userId = req.params.userId as string;
 
     const role: any = await Role.findOne({ _id: req.user.roleId, tenantId } as any);
@@ -246,13 +275,15 @@ export const getIndividualAttendance = async (req: AuthRequest, res: Response) =
     const records = await Attendance.find({ tenantId, userId } as any).sort({ date: -1 });
     res.status(200).json(records);
   } catch (error: any) {
-    res.status(500).json({ message: 'Error fetching individual attendance', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('Get individual attendance error:', error);
+    res.status(500).json({ message: 'Error fetching individual attendance' });
   }
 };
 
 export const hrOverrideAttendance = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = (req.tenantId || req.user?.tenantId) as any;
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ message: 'Tenant context missing' });
     const { id } = req.params; // If PUT, has id
     const { userId, date, clockInTime, clockOutTime, status, reason } = req.body;
 
@@ -295,6 +326,7 @@ export const hrOverrideAttendance = async (req: AuthRequest, res: Response) => {
       return res.status(201).json({ message: 'Attendance created successfully', attendance });
     }
   } catch (error: any) {
-    res.status(500).json({ message: 'Error overriding attendance', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+    console.error('HR override attendance error:', error);
+    res.status(500).json({ message: 'Error overriding attendance' });
   }
 };

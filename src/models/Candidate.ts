@@ -2,13 +2,16 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface ICandidate extends Document {
   tenantId: Types.ObjectId;
+  candidateCode?: string;
+  uniqueId?: string;
+  employeeCode?: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
   jobRole: string;
   departmentId?: Types.ObjectId;
-  status: 'Applied' | 'Screening' | 'Interviewing' | 'Offered' | 'Hired' | 'Rejected' | 'Hold';
+  status: 'Applied' | 'Screening' | 'Interviewing' | 'Offered' | 'Hired' | 'Rejected' | 'Hold' | 'AI_SCREENING' | 'HOD_APPROVAL' | 'SHORTLISTED' | 'INTERVIEW_SCHEDULED';
   resumeUrl?: string;
   resumeUpdatedAt?: Date;
   source?: string;
@@ -20,6 +23,9 @@ export interface ICandidate extends Document {
 
 const candidateSchema = new Schema<ICandidate>({
   tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
+  candidateCode: { type: String, index: true },
+  uniqueId: { type: String, index: true },
+  employeeCode: { type: String, index: true },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   email: { type: String, required: true },
@@ -28,7 +34,7 @@ const candidateSchema = new Schema<ICandidate>({
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
   status: {
     type: String,
-    enum: ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected', 'Hold'],
+    enum: ['Applied', 'Screening', 'Interviewing', 'Offered', 'Hired', 'Rejected', 'Hold', 'AI_SCREENING', 'HOD_APPROVAL', 'SHORTLISTED', 'INTERVIEW_SCHEDULED'],
     default: 'Applied',
     index: true
   },

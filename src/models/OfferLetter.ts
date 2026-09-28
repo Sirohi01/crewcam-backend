@@ -13,6 +13,9 @@ export interface IOfferLetter extends ITenantScoped {
   annualCTC?: string;
   workScheduleDays?: string;
   workScheduleTimeStart?: string;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
 
   candidateId: Types.ObjectId;
   ctcBreakupId?: Types.ObjectId;
@@ -40,6 +43,9 @@ const offerLetterSchema = new Schema<IOfferLetter>({
   annualCTC: { type: String },
   workScheduleDays: { type: String },
   workScheduleTimeStart: { type: String },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   ctcBreakupId: { type: Schema.Types.ObjectId, ref: 'CTCBreakup' },

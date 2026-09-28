@@ -439,7 +439,7 @@ export const updateTeamMember = async (req: Request, res: Response) => {
         subDepartment: buildSubDepartmentMatch(subDepartment),
       },
       { $set: update },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!member) {
