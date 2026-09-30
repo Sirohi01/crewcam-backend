@@ -1,5 +1,5 @@
 ﻿import mongoose, { Schema, Model } from 'mongoose';
-import { auditPlugin, IAuditable } from './plugins/auditPlugin';
+import { auditPlugin, IAuditable } from '../plugins/auditPlugin';
 
 export interface ICompanySize extends IAuditable {
   name: string;
@@ -11,7 +11,7 @@ export interface ICompanySize extends IAuditable {
 }
 
 const companySizeSchema = new Schema<ICompanySize>({
-  name: { type: String, required: true, trim: true },
+  name: { type: String, required: true, trim: true, unique: true },
   rangeFrom: { type: Number, required: true },
   rangeTo: { type: Number, required: true },
   code: { type: String, trim: true },

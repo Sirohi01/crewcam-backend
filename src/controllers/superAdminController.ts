@@ -600,9 +600,8 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     if (subscriptionStatus !== undefined) billingUpdate.subscriptionStatus = subscriptionStatus;
     if (estimatedEmployees !== undefined) billingUpdate.estimatedEmployees = estimatedEmployees;
 
-    const tenant = await Tenant.findByIdAndUpdate(
-      id,
-      {
+    const tenantUpdateObj = Object.fromEntries(
+      Object.entries({
         name,
         packageId,
         isActive,
@@ -612,8 +611,13 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
         ...(preferences !== undefined && { preferences }),
         ...(payrollSetup !== undefined && { payrollSetup }),
         ...billingUpdate,
-      },
-      { returnDocument: 'after' }
+      }).filter(([_, v]) => v !== undefined)
+    );
+
+    const tenant = await Tenant.findByIdAndUpdate(
+      id,
+      tenantUpdateObj,
+      { new: true }
     );
 
     if (!tenant) return res.status(404).json({ message: 'Company not found' });
@@ -629,7 +633,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const updatePayload: any = {
+    const rawUpdatePayload: any = {
       legalName: name, country, tradeName, industry, companyType, website, email, phone,
       addressLine1, addressLine2, city, state, postalCode,
       timezone, baseCurrency, financialYearStartMonth,
@@ -640,12 +644,15 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       selectedModules, addonModules, documents, notificationPreferences,
       weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
     };
+    const updatePayload: any = Object.fromEntries(Object.entries(rawUpdatePayload).filter(([_, v]) => v !== undefined));
     if (logoUrl) updatePayload.logoUrl = logoUrl;
     if (isActive !== undefined) {
       updatePayload.isActive = isActive;
     }
 
-    await Company.updateMany({ tenantId: id as string }, { $set: updatePayload });
+    if (Object.keys(updatePayload).length > 0) {
+      await Company.updateMany({ tenantId: id as string }, { $set: updatePayload });
+    }
     const adminRole = await Role.findOne({ tenantId: id as string, name: 'Company Admin' }).lean();
     let adminUser = null;
     if (adminRole) {
@@ -676,7 +683,9 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       if (isActive !== undefined) {
         adminUser.isActive = isActive;
       }
-      await adminUser.save();
+      if (adminUser.isModified()) {
+        await adminUser.save();
+      }
     }
 
     // Also update all other users' isActive status
@@ -697,9 +706,9 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     });
 
     res.status(200).json(tenant);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating tenant:', error);
-    res.status(500).json({ message: 'Internal server error while updating tenant' });
+    res.status(500).json({ message: 'Internal server error while updating tenant', error: error.message, stack: error.stack });
   }
 };
 
