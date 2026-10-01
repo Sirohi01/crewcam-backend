@@ -9,7 +9,7 @@ import { InterviewEvaluation } from '../models/InterviewEvaluation';
 import { SelectionApproval } from '../models/SelectionApproval';
 import { advanceStep } from '../utils/hiringPipelineHelpers';
 import { getCandidateHiringProfile, getCandidateForEmployee } from '../controllers/hiringProfileController';
-import {
+import { 
   createCandidate,
   getCandidates,
   getCandidateById,
@@ -29,7 +29,7 @@ import {
   saveInterviewQuestionNote,
   updateInterviewQuestions,
   submitInterviewFeedback
-} from '../controllers/hiringController';
+, getHiringDashboardStats } from '../controllers/hiringController';
 import {
   createManpowerRequest,
   getManpowerRequests,
@@ -176,6 +176,7 @@ router.get('/pdf-view', checkPermission('ORG_READ'), streamHiringPdf);
 
 // ATS Candidate Pipeline
 router.post('/candidates', checkPermission('ATS_WRITE'), createCandidate);
+router.get('/dashboard-stats', authenticate, tenantResolver, getHiringDashboardStats);
 router.get('/candidates', checkPermission('ATS_READ'), getCandidates);
 router.post('/candidates/:candidateId/fast-track-ctc', checkPermission('ATS_WRITE'), fastTrackToCTC);
 router.get('/candidates/:candidateId/hiring-profile', checkPermission('ATS_READ'), getCandidateHiringProfile);

@@ -805,3 +805,51 @@ export const updateManpowerRequestStatus = async (req: AuthRequest, res: Respons
     res.status(500).json({ message: 'Error updating manpower request status' });
   }
 };
+
+
+export const getHiringDashboardStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    
+    const openPositions = await ManpowerRequest.countDocuments({ tenantId, status: { $in: ['approved', 'pending'] } });
+    const activeCandidates = await Candidate.countDocuments({ tenantId, status: { $nin: ['Hired', 'Rejected', 'Hold'] } });
+    
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const interviewsScheduled = await Interview.countDocuments({ tenantId, interviewDate: { $gte: today } });
+    const offersReleased = await Candidate.countDocuments({ tenantId, status: 'Offered' });
+    const positionsFilled = await Candidate.countDocuments({ tenantId, status: 'Hired' });
+    
+    const applications = await Candidate.countDocuments({ tenantId, status: 'Applied' });
+    const shortlisted = await Candidate.countDocuments({ tenantId, status: 'SHORTLISTED' });
+    const screening = await Candidate.countDocuments({ tenantId, status: 'Screening' });
+    const interviewing = await Candidate.countDocuments({ tenantId, status: 'Interviewing' });
+    
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23,59,59,999);
+    
+    const todaysInterviews = await Interview.find({ 
+      tenantId, 
+      interviewDate: { $gte: today, $lte: endOfToday } 
+    }).populate('candidateId', 'firstName lastName').populate('interviewerId', 'firstName lastName');
+
+    const hotCandidates = await Candidate.find({ tenantId, status: { $in: ['Offered', 'Interviewing', 'Final Round'] } }).sort({ updatedAt: -1 }).limit(5);
+    const activeJobOpenings = await ManpowerRequest.find({ tenantId, status: 'approved' }).populate('departmentId', 'name').limit(5);
+    const upcomingJoining = await Candidate.find({ tenantId, status: 'Hired' }).sort({ updatedAt: -1 }).limit(5);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        kpis: { openPositions, activeCandidates, interviewsScheduled, offersReleased, positionsFilled },
+        pipeline: { applications, shortlisted, screening, interviewing, offered: offersReleased, joined: positionsFilled },
+        todaysInterviews,
+        hotCandidates,
+        activeJobOpenings,
+        upcomingJoining
+      }
+    });
+  } catch (error) {
+    console.error('Dashboard Stats Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch dashboard stats' });
+  }
+};
