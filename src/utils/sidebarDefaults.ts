@@ -52,16 +52,21 @@ const ORGANIZATION_ITEMS = new Set(['Add Branch', 'Add Department', 'Add Designa
 export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   { section: 'Workspace', label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', order: 0 },
 
-  // ---- Company Setup ----
-  { section: 'Company Setup', label: 'Company Profile', href: '/dashboard/settings/company', icon: 'UserCog', order: 0, requiredPermission: 'COMPANY_PROFILE_READ' },
-  { section: 'Company Setup', label: 'Manage Branch', href: '/dashboard/branches', icon: 'Building2', order: 1, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Business Unit', href: '/dashboard/bussiness-unit', icon: 'Briefcase', order: 1.5, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Manage Department', href: '/dashboard/departments', icon: 'ListTree', order: 2, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Manage Designation', href: '/dashboard/divisions/designations', icon: 'Briefcase', order: 3, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Job Families', href: '/dashboard/job-families', icon: 'Users', order: 3.2, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Job Grades', href: '/dashboard/job-grades', icon: 'BarChart', order: 3.4, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Interview Section', href: '/dashboard/hiring/candidates/new/create/interview-process', icon: 'UserPlus', order: 3.6, requiredPermission: 'ORG_READ' },
-  { section: 'Company Setup', label: 'Manage Roles', href: '/dashboard/roles', icon: 'KeyRound', order: 4, requiredPermission: 'ORG_READ' },
+  // ---- Organization Setup ----
+  { section: 'Organization Setup', label: 'Company Profile', href: '/dashboard/settings/company', icon: 'UserCog', order: 0, requiredPermission: 'COMPANY_PROFILE_READ' },
+  { section: 'Organization Setup', label: 'Departments', href: '/dashboard/departments', icon: 'ListTree', order: 1, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Sub Departments', href: '/dashboard/departments/sub-department-management', icon: 'ListTree', order: 2, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Business Units', href: '/dashboard/bussiness-unit', icon: 'Briefcase', order: 3, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Divisions', href: '/dashboard/divisions', icon: 'Briefcase', order: 4, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Cost Centers', href: '/dashboard/cost-centers', icon: 'Briefcase', order: 5, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Designations', href: '/dashboard/divisions/designations', icon: 'Briefcase', order: 6, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Job Grades', href: '/dashboard/job-grades', icon: 'BarChart', order: 7, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Job Families', href: '/dashboard/job-families', icon: 'Users', order: 8, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Manage Branch', href: '/dashboard/branches', icon: 'Building2', order: 9, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Locations', href: comingSoon('Locations', 'Organization Setup'), icon: 'MapPin', order: 10, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Reporting Structure', href: comingSoon('Reporting Structure', 'Organization Setup'), icon: 'ListTree', order: 11, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Interview Section', href: '/dashboard/hiring/candidates/new/create/interview-process', icon: 'UserPlus', order: 12, requiredPermission: 'ORG_READ' },
+  { section: 'Organization Setup', label: 'Manage Roles', href: '/dashboard/roles', icon: 'KeyRound', order: 13, requiredPermission: 'ORG_READ' },
   ...[
     ['Job Levels', 'levels'], ['Statuses', 'statuses'], ['Policies', 'policies'],
     ['Leave Types', 'leave-types'], ['Leave Natures', 'leave-natures'], ['Attendance Rules', 'attendance-rules'],
@@ -73,18 +78,18 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
     ['Question Papers', 'question-papers'], ['Option Questions', 'option-questions'],
     ['Shift Timings', 'shift-timings'], ['JD Library', 'jd-library'], ['KPA Library', 'kpa-library']
   ].map(([label, endpointKey], i) => ({
-    section: 'Company Setup',
+    section: 'Organization Setup',
     label: label as string,
     href: `/dashboard/master/${endpointKey}`,
     icon: 'Circle',
-    order: i + 5,
+    order: i + 14,
     parent: 'Master Data',
     requiredPermission: 'MASTER_READ',
   })),
   // Company Assets lives on its own page (with allocation tracking) rather than the
   // generic master-data CRUD list, so it can't join the .map() above — same Master Data
   // grouping and href as the existing Support & Operations > Asset Management entry.
-  { section: 'Company Setup', label: 'Company Assets', href: '/dashboard/support/assets', icon: 'Briefcase', order: 29, parent: 'Master Data', requiredPermission: 'SUPPORT_READ' },
+  { section: 'Organization Setup', label: 'Company Assets', href: '/dashboard/support/assets', icon: 'Briefcase', order: 40, parent: 'Master Data', requiredPermission: 'SUPPORT_READ' },
 
   // ---- People ----
   { section: 'People', label: 'Employees', href: '/dashboard/employees', icon: 'Users', order: 0, requiredPermission: 'EMPLOYEE_READ' },
@@ -148,14 +153,6 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   { section: 'Hiring Process', label: 'Candidate Pipeline', href: '/dashboard/hiring/pipeline', icon: 'UserPlus', order: 2, requiredPermission: 'ATS_READ' },
   { section: 'Hiring Process', label: 'AI Resume Screening', href: '/dashboard/hiring/ai-resume-screening', icon: 'Sparkles', order: 3, requiredPermission: 'ATS_READ', requiredFeature: 'ai-hiring' },
   { section: 'Hiring Process', label: 'Interviews', href: '/dashboard/hiring/interviews/list', icon: 'UserPlus', order: 4, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'Interview Process', href: '/dashboard/hiring/candidates/new/create/interview-process', icon: 'UserPlus', order: 4.4, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'Interview Round - 3', href: '/dashboard/hiring/candidates/new/create/interview', icon: 'UserPlus', order: 4.5, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'Interview Round - 4', href: '/dashboard/hiring/candidates/new/create/assessment', icon: 'UserPlus', order: 4.6, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'HOD Evaluation', href: '/dashboard/hiring/evaluation', icon: 'ClipboardCheck', order: 5, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'Level 1-Walk-In Round', href: '/dashboard/hiring/interviews/walk-in', icon: 'UserPlus', order: 6, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'Level 1-Telephonic Round', href: '/dashboard/hiring/interviews/telephonic', icon: 'UserPlus', order: 7, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'Level 2-HR and HOD Round', href: '/dashboard/hiring/interviews/hr-hod', icon: 'UserPlus', order: 8, requiredPermission: 'ATS_READ' },
-  { section: 'Hiring Process', label: 'Level 3-HR Final Round', href: '/dashboard/hiring/interviews/final', icon: 'UserPlus', order: 9, requiredPermission: 'ATS_READ' },
   { section: 'Hiring Process', label: 'Interview Statistics', href: '/dashboard/hiring/interviews/statistics', icon: 'TrendingUp', order: 10, requiredPermission: 'ATS_READ' },
   ...HIRING_STEPS.map(([label, stepId], i) => ({
     section: 'Hiring Process',
