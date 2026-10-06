@@ -41,9 +41,16 @@ export const resolveTenantAiProvider = async (tenantId: string): Promise<Resolve
   const tenant = await Tenant.findById(tenantId).select('preferredAiProvider');
   const preferred = tenant?.preferredAiProvider;
 
-  const doc = preferred
+  let doc = preferred
     ? await PlatformAiProvider.findOne({ tenantId, provider: preferred, isActive: true })
     : await PlatformAiProvider.findOne({ tenantId, isActive: true }).sort({ provider: 1 });
+
+  // Fallback to SUPER_ADMIN configuration
+  if (!doc) {
+    doc = preferred
+      ? await PlatformAiProvider.findOne({ tenantId: 'SUPER_ADMIN', provider: preferred, isActive: true })
+      : await PlatformAiProvider.findOne({ tenantId: 'SUPER_ADMIN', isActive: true }).sort({ provider: 1 });
+  }
 
   if (!doc) return null;
   const apiKey = doc.getDecryptedApiKey();

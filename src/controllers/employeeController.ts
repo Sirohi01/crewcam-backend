@@ -140,6 +140,24 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getMinimalEmployees = async (req: AuthRequest, res: Response) => {
+  try {
+    const filter: any = { tenantId: requireTenantId(req), $or: [{ employmentStatus: 'active' }, { employmentStatus: { $exists: false } }] };
+    
+    if (req.query.branchId) {
+      filter.branchId = req.query.branchId;
+    }
+
+    const employees = await User.find(filter)
+      .select('firstName lastName isActive employeeCode tenantId branchId')
+      .populate('branchId', 'name companyId tenantId')
+      .lean();
+    res.status(200).json({ data: employees });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching minimal employees', error: (error as any).message });
+  }
+};
+
 export const getEmployeeById = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);

@@ -811,7 +811,7 @@ export const getHiringDashboardStats = async (req: AuthRequest, res: Response) =
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     
-    const openPositions = await ManpowerRequest.countDocuments({ tenantId, status: { $in: ['approved', 'pending'] } });
+    const openPositions = await ManpowerRequest.countDocuments({ tenantId, status: { $in: ['Approved', 'Pending'] } });
     const activeCandidates = await Candidate.countDocuments({ tenantId, status: { $nin: ['Hired', 'Rejected', 'Hold'] } });
     
     const today = new Date();
@@ -833,8 +833,8 @@ export const getHiringDashboardStats = async (req: AuthRequest, res: Response) =
       interviewDate: { $gte: today, $lte: endOfToday } 
     }).populate('candidateId', 'firstName lastName').populate('interviewerId', 'firstName lastName');
 
-    const hotCandidates = await Candidate.find({ tenantId, status: { $in: ['Offered', 'Interviewing', 'Final Round'] } }).sort({ updatedAt: -1 }).limit(5);
-    const activeJobOpenings = await ManpowerRequest.find({ tenantId, status: 'approved' }).populate('departmentId', 'name').limit(5);
+    const hotCandidates = await Candidate.find({ tenantId, status: { $in: ['Offered', 'Interviewing'] } }).sort({ updatedAt: -1 }).limit(5);
+    const activeJobOpenings = await ManpowerRequest.find({ tenantId, status: 'Approved' }).populate('departmentId', 'name').limit(5);
     const upcomingJoining = await Candidate.find({ tenantId, status: 'Hired' }).sort({ updatedAt: -1 }).limit(5);
 
     return res.status(200).json({
