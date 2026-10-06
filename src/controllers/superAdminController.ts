@@ -1260,8 +1260,8 @@ export const getTenantAdmins = async (req: AuthRequest, res: Response) => {
 
 export const inviteTenantAdmin = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.params.id;
-    const { firstName, lastName, email, designation, phone, roleId, sendEmail, customMessage } = req.body;
+    const tenantId = req.params.id as string;
+    const { firstName, lastName, email, designation, phone, roleId, sendEmail, sendWhatsapp, sendSms, customMessage } = req.body;
 
     if (!firstName || !email || !roleId) {
       return res.status(400).json({ message: 'First name, email, and role are required' });
@@ -1297,6 +1297,18 @@ export const inviteTenantAdmin = async (req: AuthRequest, res: Response) => {
 
     await user.save();
 
+    const companyNameForMsg = company?.legalName || 'our company';
+    const defaultMsg = `Hi ${firstName},\nYou have been invited to join ${companyNameForMsg} as a ${role.name} on Crewcam HRMS.\nPlease use the invitation link to activate your account.`;
+    const finalMessage = customMessage || defaultMsg;
+
+    if (sendWhatsapp && phone) {
+      await notificationService.sendWhatsApp(tenantId, phone, finalMessage);
+    }
+
+    if (sendSms && phone) {
+      await notificationService.sendSMS(tenantId, phone, finalMessage);
+    }
+
     if (sendEmail) {
       const companyName = company?.legalName || 'our company';
       const defaultMessage = `Hi ${firstName},\nYou have been invited to join ${companyName} as a ${role.name} on Crewcam HRMS.\nPlease use the invitation link to activate your account.`;
@@ -1315,10 +1327,13 @@ export const inviteTenantAdmin = async (req: AuthRequest, res: Response) => {
         </div>
       `;
 
+      const textBody = `Welcome to ${companyName}\n\n${customMessage || defaultMessage}\n\nYour temporary login credentials are provided below:\nEmail: ${email}\nPassword: ${tempPassword}\n\nFor your security, we recommend changing your password after you log in for the first time.\n\nAccess Your Account: ${process.env.FRONTEND_URL || 'https://panchkarmaa.in/login'}/login\n\nIf you were not expecting this invitation, you can safely ignore this email.`;
+
       await sendMail({
         to: email,
         subject: `Invitation to join ${companyName}`,
         html: htmlBody,
+        text: textBody,
       });
     }
 
@@ -1333,7 +1348,7 @@ export const updateTenantAdmin = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const adminId = req.params.adminId as string;
-    const { firstName, lastName, email, designation, phone, roleId } = req.body;
+    const { firstName, lastName, email, designation, phone, roleId, sendEmail, sendWhatsapp, sendSms, customMessage } = req.body;
 
     const user = await User.findOne({ _id: adminId, tenantId: id });
     if (!user) {
@@ -1355,6 +1370,40 @@ export const updateTenantAdmin = async (req: AuthRequest, res: Response) => {
     if (roleId) user.roleId = roleId as any;
 
     await user.save();
+    const company = await Company.findOne({ tenantId: id } as any).lean();
+    const companyNameForMsg = company?.legalName || 'our company';
+    const role = await Role.findOne({ _id: user.roleId, tenantId: id } as any);
+
+    const defaultMsg = `Hi ${user.firstName},\nYour profile at ${companyNameForMsg} as a ${role?.name || 'admin'} has been updated on Crewcam HRMS.\nPlease log in to see the changes.`;
+    const finalMessage = customMessage || defaultMsg;
+
+    const userPhone = user.mobileNumber;
+    const userEmail = user.email;
+
+    if (sendWhatsapp && userPhone) {
+      await notificationService.sendWhatsApp(id, userPhone, finalMessage);
+    }
+
+    if (sendSms && userPhone) {
+      await notificationService.sendSMS(id, userPhone, finalMessage);
+    }
+
+    if (sendEmail) {
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <h2 style="color: #0b1638;">Update from ${companyNameForMsg}</h2>
+          <p style="white-space: pre-wrap;">${customMessage || defaultMsg}</p>
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" style="display: inline-block; padding: 10px 20px; background-color: #0b1638; color: #fff; text-decoration: none; border-radius: 5px; margin-top: 15px;">Login Now</a>
+        </div>
+      `;
+
+      await sendMail({
+        to: userEmail,
+        subject: `Profile Update from ${companyNameForMsg}`,
+        html: htmlBody,
+      });
+    }
+
     res.status(200).json({ message: 'Admin updated successfully', user });
   } catch (error) {
     console.error('Error updating admin:', error);
