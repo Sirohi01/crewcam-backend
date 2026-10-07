@@ -15,9 +15,16 @@ import { LeaveRequest } from '../models/LeaveRequest';
 import { Ticket } from '../models/Ticket';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
 import { Counter } from '../models/Counter';
+import { AuthToken } from '../models/AuthToken';
+import { hashToken } from '../utils/authTokens';
+import { notificationService } from '../services/notificationService';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, sendMail } from '../services/mailer';
+import { Otp } from '../models/Otp';
+const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
+const hashOtp = (userId: unknown, otp: string) => hashToken(`${userId}:${otp}`);
 
 const passwordSchema = z.string()
   .min(8, 'Password must be at least 8 characters long')
@@ -433,7 +440,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     await adminUser.save();
 
     const { subject, html } = buildCompanyWelcomeEmail({
-      companyId: tenant._id.toString(),
+      companyId: finalCorporateId,
       companyName: name,
       adminFirstName,
       adminEmail,
@@ -593,9 +600,8 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     if (subscriptionStatus !== undefined) billingUpdate.subscriptionStatus = subscriptionStatus;
     if (estimatedEmployees !== undefined) billingUpdate.estimatedEmployees = estimatedEmployees;
 
-    const tenant = await Tenant.findByIdAndUpdate(
-      id,
-      {
+    const tenantUpdateObj = Object.fromEntries(
+      Object.entries({
         name,
         packageId,
         isActive,
@@ -605,8 +611,13 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
         ...(preferences !== undefined && { preferences }),
         ...(payrollSetup !== undefined && { payrollSetup }),
         ...billingUpdate,
-      },
-      { returnDocument: 'after' }
+      }).filter(([_, v]) => v !== undefined)
+    );
+
+    const tenant = await Tenant.findByIdAndUpdate(
+      id,
+      tenantUpdateObj,
+      { new: true }
     );
 
     if (!tenant) return res.status(404).json({ message: 'Company not found' });
@@ -622,7 +633,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const updatePayload: any = {
+    const rawUpdatePayload: any = {
       legalName: name, country, tradeName, industry, companyType, website, email, phone,
       addressLine1, addressLine2, city, state, postalCode,
       timezone, baseCurrency, financialYearStartMonth,
@@ -633,12 +644,15 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       selectedModules, addonModules, documents, notificationPreferences,
       weekStartsOn, dateFormat, timeFormat, numberFormat, leaveYearStartMonth,
     };
+    const updatePayload: any = Object.fromEntries(Object.entries(rawUpdatePayload).filter(([_, v]) => v !== undefined));
     if (logoUrl) updatePayload.logoUrl = logoUrl;
     if (isActive !== undefined) {
       updatePayload.isActive = isActive;
     }
 
-    await Company.updateMany({ tenantId: id as string }, { $set: updatePayload });
+    if (Object.keys(updatePayload).length > 0) {
+      await Company.updateMany({ tenantId: id as string }, { $set: updatePayload });
+    }
     const adminRole = await Role.findOne({ tenantId: id as string, name: 'Company Admin' }).lean();
     let adminUser = null;
     if (adminRole) {
@@ -669,7 +683,9 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       if (isActive !== undefined) {
         adminUser.isActive = isActive;
       }
-      await adminUser.save();
+      if (adminUser.isModified()) {
+        await adminUser.save();
+      }
     }
 
     // Also update all other users' isActive status
@@ -690,29 +706,103 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     });
 
     res.status(200).json(tenant);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating tenant:', error);
-    res.status(500).json({ message: 'Internal server error while updating tenant' });
+    res.status(500).json({ message: 'Internal server error while updating tenant', error: error.message, stack: error.stack });
+  }
+};
+
+export const sendDeleteCompanyOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+    const tenantId = req.params.id;
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+    const companyName = tenant.name;
+
+    const recentOtp = await AuthToken.findOne({
+      userId: user._id,
+      type: 'delete_company_otp',
+      revokedAt: { $exists: false },
+      expiresAt: { $gt: new Date(Date.now() + 5 * 60 * 1000 - 30 * 1000) },
+    });
+    if (recentOtp) return res.status(429).json({ message: 'Please wait before requesting another OTP.' });
+
+    const otp = generateOtp();
+    await AuthToken.create({
+      userId: user._id,
+      tokenHash: hashOtp(user._id, otp),
+      type: 'delete_company_otp',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    });
+
+    const promises = [];
+    if (user.email) {
+      promises.push(
+        sendMail({
+          to: user.email,
+          subject: `Confirm Deletion of ${companyName} - HRCRM`,
+          html: `<p>You have requested to delete the company <strong>${companyName}</strong> from the HRCRM Super Admin dashboard.</p><p>Your confirmation OTP is <strong>${otp}</strong>.</p><p>This is a highly sensitive action. If you did not request this, ignore this email.</p>`
+        }).catch(e => console.error("Email OTP failed:", e))
+      );
+    }
+    
+    if (user.mobileNumber) {
+      promises.push(
+        notificationService.sendWhatsAppOTP('SUPER_ADMIN', user.mobileNumber, otp).catch(e => console.error("WA OTP failed:", e))
+      );
+    }
+
+    await Promise.allSettled(promises);
+    res.status(200).json({ message: 'OTP sent successfully to your registered email/mobile.' });
+  } catch (error) {
+    console.error('Error sending delete OTP:', error);
+    res.status(500).json({ message: 'Failed to send OTP' });
   }
 };
 
 export const deleteTenant = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
+    const { otp, reason } = req.body;
+    const user = req.user;
+
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (!otp) return res.status(400).json({ message: 'OTP is required to delete a company' });
+
+    const tokenDoc = await AuthToken.findOne({
+      userId: user._id,
+      tokenHash: hashOtp(user._id, otp),
+      type: 'delete_company_otp',
+      revokedAt: { $exists: false },
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!tokenDoc) {
+      return res.status(400).json({ message: 'Invalid or expired OTP.' });
+    }
+
     const tenant = await Tenant.findByIdAndDelete(id);
     if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    // Revoke OTP to prevent reuse
+    tokenDoc.revokedAt = new Date();
+    await tokenDoc.save();
 
     // Delete associated data
     await Company.deleteMany({ tenantId: id });
     await User.deleteMany({ tenantId: id });
     await Role.deleteMany({ tenantId: id });
 
+    // @ts-ignore (assuming writeAuditLog is defined locally in the file)
     await writeAuditLog({
       tenantId: id,
       userId: req.user?._id,
       action: 'DELETE_COMPANY',
       status: 'SUCCESS',
-      details: { name: tenant.name },
+      details: { name: tenant.name, reason: reason || 'N/A' },
     });
 
     res.status(200).json({ message: 'Company and associated data deleted successfully' });
@@ -854,7 +944,7 @@ export const getAllPackages = async (req: AuthRequest, res: Response) => {
 export const createPackage = async (req: AuthRequest, res: Response) => {
   try {
     const {
-      name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features,
+      name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
       planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD,
@@ -869,6 +959,7 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
       maxDesignations,
       maxUsers,
       features,
+      addOnModules,
       planCode,
       planBadge,
       displayOrder,
@@ -898,7 +989,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features,
+      name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
       planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD, isActive,
@@ -916,6 +1007,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(maxDesignations !== undefined && { maxDesignations }),
         ...(maxUsers !== undefined && { maxUsers }),
         ...(features !== undefined && { features }),
+        ...(addOnModules !== undefined && { addOnModules }),
         ...(planCode !== undefined && { planCode }),
         ...(planBadge !== undefined && { planBadge }),
         ...(displayOrder !== undefined && { displayOrder }),
@@ -1168,8 +1260,8 @@ export const getTenantAdmins = async (req: AuthRequest, res: Response) => {
 
 export const inviteTenantAdmin = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.params.id;
-    const { firstName, lastName, email, designation, phone, roleId, sendEmail, customMessage } = req.body;
+    const tenantId = req.params.id as string;
+    const { firstName, lastName, email, designation, phone, roleId, sendEmail, sendWhatsapp, sendSms, customMessage } = req.body;
 
     if (!firstName || !email || !roleId) {
       return res.status(400).json({ message: 'First name, email, and role are required' });
@@ -1205,6 +1297,18 @@ export const inviteTenantAdmin = async (req: AuthRequest, res: Response) => {
 
     await user.save();
 
+    const companyNameForMsg = company?.legalName || 'our company';
+    const defaultMsg = `Hi ${firstName},\nYou have been invited to join ${companyNameForMsg} as a ${role.name} on Crewcam HRMS.\nPlease use the invitation link to activate your account.`;
+    const finalMessage = customMessage || defaultMsg;
+
+    if (sendWhatsapp && phone) {
+      await notificationService.sendWhatsApp(tenantId, phone, finalMessage);
+    }
+
+    if (sendSms && phone) {
+      await notificationService.sendSMS(tenantId, phone, finalMessage);
+    }
+
     if (sendEmail) {
       const companyName = company?.legalName || 'our company';
       const defaultMessage = `Hi ${firstName},\nYou have been invited to join ${companyName} as a ${role.name} on Crewcam HRMS.\nPlease use the invitation link to activate your account.`;
@@ -1223,10 +1327,13 @@ export const inviteTenantAdmin = async (req: AuthRequest, res: Response) => {
         </div>
       `;
 
+      const textBody = `Welcome to ${companyName}\n\n${customMessage || defaultMessage}\n\nYour temporary login credentials are provided below:\nEmail: ${email}\nPassword: ${tempPassword}\n\nFor your security, we recommend changing your password after you log in for the first time.\n\nAccess Your Account: ${process.env.FRONTEND_URL || 'https://panchkarmaa.in/login'}/login\n\nIf you were not expecting this invitation, you can safely ignore this email.`;
+
       await sendMail({
         to: email,
         subject: `Invitation to join ${companyName}`,
         html: htmlBody,
+        text: textBody,
       });
     }
 
@@ -1241,7 +1348,7 @@ export const updateTenantAdmin = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const adminId = req.params.adminId as string;
-    const { firstName, lastName, email, designation, phone, roleId } = req.body;
+    const { firstName, lastName, email, designation, phone, roleId, sendEmail, sendWhatsapp, sendSms, customMessage } = req.body;
 
     const user = await User.findOne({ _id: adminId, tenantId: id });
     if (!user) {
@@ -1263,6 +1370,40 @@ export const updateTenantAdmin = async (req: AuthRequest, res: Response) => {
     if (roleId) user.roleId = roleId as any;
 
     await user.save();
+    const company = await Company.findOne({ tenantId: id } as any).lean();
+    const companyNameForMsg = company?.legalName || 'our company';
+    const role = await Role.findOne({ _id: user.roleId, tenantId: id } as any);
+
+    const defaultMsg = `Hi ${user.firstName},\nYour profile at ${companyNameForMsg} as a ${role?.name || 'admin'} has been updated on Crewcam HRMS.\nPlease log in to see the changes.`;
+    const finalMessage = customMessage || defaultMsg;
+
+    const userPhone = user.mobileNumber;
+    const userEmail = user.email;
+
+    if (sendWhatsapp && userPhone) {
+      await notificationService.sendWhatsApp(id, userPhone, finalMessage);
+    }
+
+    if (sendSms && userPhone) {
+      await notificationService.sendSMS(id, userPhone, finalMessage);
+    }
+
+    if (sendEmail) {
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <h2 style="color: #0b1638;">Update from ${companyNameForMsg}</h2>
+          <p style="white-space: pre-wrap;">${customMessage || defaultMsg}</p>
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" style="display: inline-block; padding: 10px 20px; background-color: #0b1638; color: #fff; text-decoration: none; border-radius: 5px; margin-top: 15px;">Login Now</a>
+        </div>
+      `;
+
+      await sendMail({
+        to: userEmail,
+        subject: `Profile Update from ${companyNameForMsg}`,
+        html: htmlBody,
+      });
+    }
+
     res.status(200).json({ message: 'Admin updated successfully', user });
   } catch (error) {
     console.error('Error updating admin:', error);
@@ -1411,5 +1552,63 @@ export const getSuperAdminActivityLogs = async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('Error fetching activity logs:', error);
     res.status(500).json({ message: 'Error fetching activity logs' });
+  }
+};
+
+export const sendWizardOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const { identifier, channel } = req.body;
+    if (!identifier || !channel) {
+      return res.status(400).json({ message: 'Identifier and channel are required' });
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store OTP in database with 5 min expiration
+    await Otp.findOneAndUpdate(
+      { phone: identifier },
+      { phone: identifier, otp: otpCode, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+      { upsert: true, new: true }
+    );
+
+    if (channel === 'email') {
+      await sendMail({
+        to: identifier,
+        subject: 'HRCRM Verification Code',
+        html: `<div style="font-family: sans-serif;"><h2>Your Verification Code</h2><p>Please use the following 6-digit code to verify your email address:</p><h1 style="background: #f4f4f5; padding: 10px; display: inline-block; letter-spacing: 2px;">${otpCode}</h1><p>This code will expire in 5 minutes.</p></div>`
+      });
+    } else if (channel === 'whatsapp') {
+      // Pass null for tenantId since super-admin doesn't have a specific tenant
+      await notificationService.sendWhatsAppOTP(null as any, identifier, otpCode);
+    } else if (channel === 'sms') {
+      await notificationService.sendSMS(null as any, identifier, `Your HRCRM verification code is: ${otpCode}. It expires in 5 minutes.`);
+    } else {
+      return res.status(400).json({ message: 'Invalid channel' });
+    }
+
+    res.status(200).json({ message: 'OTP sent successfully' });
+  } catch (error: any) {
+    console.error('Failed to send wizard OTP:', error);
+    res.status(500).json({ message: 'Failed to send OTP', error: error.message });
+  }
+};
+
+export const verifyWizardOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const { identifier, otp } = req.body;
+    if (!identifier || !otp) {
+      return res.status(400).json({ message: 'Identifier and OTP are required' });
+    }
+
+    const validOtp = await Otp.findOne({ phone: identifier, otp });
+    if (!validOtp) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    await Otp.deleteOne({ _id: validOtp._id });
+    res.status(200).json({ message: 'OTP verified successfully' });
+  } catch (error: any) {
+    console.error('Failed to verify wizard OTP:', error);
+    res.status(500).json({ message: 'Failed to verify OTP', error: error.message });
   }
 };

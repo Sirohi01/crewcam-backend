@@ -1,5 +1,5 @@
 ﻿import mongoose, { Schema, Model } from 'mongoose';
-import { auditPlugin, IAuditable } from './plugins/auditPlugin';
+import { auditPlugin, IAuditable } from '../plugins/auditPlugin';
 
 export interface IIndustry extends IAuditable {
   name: string;
@@ -9,7 +9,7 @@ export interface IIndustry extends IAuditable {
 }
 
 const industrySchema = new Schema<IIndustry>({
-  name: { type: String, required: true, trim: true },
+  name: { type: String, required: true, trim: true, unique: true },
   code: { type: String, trim: true },
   description: { type: String },
   isActive: { type: Boolean, default: true },

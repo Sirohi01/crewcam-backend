@@ -123,7 +123,7 @@ export const syncSidebarDefaults = async (tenantId: string) => {
   const hiringDefaults = DEFAULT_SIDEBAR_ITEMS.filter((item) => item.section === 'Hiring Process');
   await Promise.all(hiringDefaults.map((item) => {
     const current = existingByKey.get(`${item.section}::${item.label}`);
-    const isLegacyDefault = current && (
+    const isLegacyDefault = current && current.href && (
       current.href === '/dashboard/hiring' ||
       current.href?.includes('/coming-soon') ||
       current.href === item.href
@@ -147,8 +147,19 @@ export const syncSidebarDefaults = async (tenantId: string) => {
     { section: 'Admin Section', label: 'Add JD' }, // replaced by Company Setup > Master Data > JD Library
     { section: 'Admin Section', label: 'Add KRA' }, // replaced by Company Setup > Master Data > KPA Library
     { section: 'Hiring Process', label: 'Add New Interview' }, // merged into single "Interviews" page (add + list combined)
+    { section: 'Hiring Process', label: 'Interview Process' },
+    { section: 'Hiring Process', label: 'Interview Round - 1' },
+    { section: 'Hiring Process', label: 'Interview Round - 2' },
+    { section: 'Hiring Process', label: 'Interview Round - 3' },
+    { section: 'Hiring Process', label: 'Interview Round - 4' },
+    { section: 'Hiring Process', label: 'Interview Round - 5' },
+    { section: 'Hiring Process', label: 'Review and Edit' },
+    { section: 'Hiring Process', label: 'Submit Application' },
+    { section: 'Hiring Process', label: 'AI Screening Evaluation' },
+    { section: 'Hiring Process', label: 'HOD Evaluation' },
+    { section: 'Hiring Process', label: 'Application Submitted' },
     { section: 'Hiring Process', label: 'Interview List' }, // renamed to "Interviews" (same page, now add + list combined)
-    { section: 'Company Setup', label: 'Organization' }, // split into branches, departments, designations
+    { section: 'Company Setup' }, // entirely replaced by Organization Setup
     { section: 'Support & Operations', label: 'Asset Management' }, // duplicate of Company Setup > Master Data > Company Assets (same /dashboard/support/assets page)
     { section: 'Attendance Section', label: 'All Crewcam Leave' }, // duplicate of "Add Employee Leave" (/dashboard/leaves)
     { section: 'Interview & Selection' }, // whole section merged into "Hiring Process"

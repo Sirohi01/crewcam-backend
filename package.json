@@ -2,11 +2,15 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
+  "engines": {
+    "node": "20.x"
+  },
   "main": "index.js",
   "scripts": {
     "start": "node dist/server.js",
-    "dev": "nodemon --exec ts-node -T src/server.ts",
+    "dev": "nodemon -e ts,js,json --exec ts-node -T src/server.ts",
     "build": "tsc",
+    "seed": "ts-node src/seeders/seedAll.ts",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
   },
   "keywords": [],
@@ -15,7 +19,9 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
+    "@azure/identity": "^4.13.1",
     "@google/generative-ai": "^0.24.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@types/pdfkit": "^0.17.6",
     "bcrypt": "^6.0.0",
     "cloudinary": "^1.41.3",

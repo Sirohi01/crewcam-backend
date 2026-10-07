@@ -72,7 +72,8 @@ export const getBusinessUnits = async (req: AuthRequest, res: Response) => {
 
     const businessUnits = await BusinessUnit.find({ tenantId })
       .populate('head', 'firstName lastName email')
-      .populate('financialOwner', 'firstName lastName email');
+      .populate('financialOwner', 'firstName lastName email')
+      .lean();
 
     res.status(200).json({ data: businessUnits });
   } catch (error: any) {

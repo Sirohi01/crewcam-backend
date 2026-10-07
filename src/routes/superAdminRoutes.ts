@@ -4,7 +4,7 @@ import {
   getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
   resendCompanyCredentials, getNextCorporateId,
-  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs
+  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
@@ -18,11 +18,21 @@ import { createCompanyDraft } from '../controllers/companyWizardController';
 import { getLifecycleTimeline, advanceLifecycle, setLifecycleStatus, provisionWorkspace } from '../controllers/companyLifecycleController';
 import { getAllBanners, createBanner, updateBanner, deleteBanner } from '../controllers/bannerController';
 import { getAutomationRules, updateAutomationRule, getAutomationLogs, runAutomationNow } from '../controllers/automationController';
-import {
-  getAllIndustries, createIndustry, updateIndustry, deleteIndustry,
-  getAllCompanySizes, createCompanySize, updateCompanySize, deleteCompanySize,
-  getAllTimeZones, createTimeZone, updateTimeZone, deleteTimeZone
-} from '../controllers/platformMasterDataController';
+import { getAllIndustries, createIndustry, updateIndustry, deleteIndustry } from '../controllers/dropdowns/industryController';
+import { getAllCompanySizes, createCompanySize, updateCompanySize, deleteCompanySize } from '../controllers/dropdowns/companySizeController';
+import { getAllTimeZones, createTimeZone, updateTimeZone, deleteTimeZone } from '../controllers/dropdowns/timeZoneController';
+import { getAllCurrencys, createCurrency, updateCurrency, deleteCurrency } from '../controllers/dropdowns/currencyController';
+import { getAllBillingCycles, createBillingCycle, updateBillingCycle, deleteBillingCycle } from '../controllers/dropdowns/billingCycleController';
+import { getAllAdvancePayments, createAdvancePayment, updateAdvancePayment, deleteAdvancePayment } from '../controllers/dropdowns/advancePaymentController';
+import { getAllGSTTreatments, createGSTTreatment, updateGSTTreatment, deleteGSTTreatment } from '../controllers/dropdowns/gstTreatmentController';
+import { getAllFinancialYears, createFinancialYear, updateFinancialYear, deleteFinancialYear } from '../controllers/dropdowns/financialYearController';
+import { getAllWeekStartsOns, createWeekStartsOn, updateWeekStartsOn, deleteWeekStartsOn } from '../controllers/dropdowns/weekStartsOnController';
+import { getAllDateFormats, createDateFormat, updateDateFormat, deleteDateFormat } from '../controllers/dropdowns/dateFormatController';
+import { getAllTimeFormats, createTimeFormat, updateTimeFormat, deleteTimeFormat } from '../controllers/dropdowns/timeFormatController';
+import { getAllFirstDayOfMonths, createFirstDayOfMonth, updateFirstDayOfMonth, deleteFirstDayOfMonth } from '../controllers/dropdowns/firstDayOfMonthController';
+import { getAllNumberFormats, createNumberFormat, updateNumberFormat, deleteNumberFormat } from '../controllers/dropdowns/numberFormatController';
+import { getAllLeaveYearStartMonths, createLeaveYearStartMonth, updateLeaveYearStartMonth, deleteLeaveYearStartMonth } from '../controllers/dropdowns/leaveYearStartMonthController';
+import { getAllPreferredLanguages, createPreferredLanguage, updatePreferredLanguage, deletePreferredLanguage } from '../controllers/dropdowns/preferredLanguageController';
 import { authenticate } from '../middleware/auth';
 import { checkPermission } from '../middleware/rbac';
 
@@ -51,6 +61,7 @@ router.delete('/tenants/:id/admins/:adminId', deleteTenantAdmin);
 router.put('/tenants/:id/employees/:employeeId', updateTenantEmployee);
 router.delete('/tenants/:id/employees/:employeeId', deleteTenantEmployee);
 router.post('/tenants/:id/employees/bulk', bulkImportEmployees);
+router.post('/tenants/:id/delete-otp', sendDeleteCompanyOtp);
 router.delete('/tenants/:id', deleteTenant);
 router.post('/tenants/:id/resend-credentials', resendCredentials);
 router.post('/tenants/:id/topup-ai-credits', topUpAiCredits);
@@ -67,6 +78,8 @@ router.get('/tenants/:id/invoices', listInvoicesForTenant);
 router.post('/tenants/:id/invoices', generateInvoice);
 
 router.post('/companies/wizard', createCompanyDraft);
+router.post('/wizard-otp/send', sendWizardOtp);
+router.post('/wizard-otp/verify', verifyWizardOtp);
 
 router.get('/packages', getAllPackages);
 router.post('/packages', createPackage);
@@ -135,6 +148,7 @@ router.put('/automation/rules/:type', updateAutomationRule);
 router.get('/automation/logs', getAutomationLogs);
 router.post('/automation/run', runAutomationNow);
 
+// Dropdowns
 router.get('/industries', getAllIndustries);
 router.post('/industries', createIndustry);
 router.put('/industries/:id', updateIndustry);
@@ -149,5 +163,67 @@ router.get('/time-zones', getAllTimeZones);
 router.post('/time-zones', createTimeZone);
 router.put('/time-zones/:id', updateTimeZone);
 router.delete('/time-zones/:id', deleteTimeZone);
+
+
+router.get('/currencys', getAllCurrencys);
+router.post('/currencys', createCurrency);
+router.put('/currencys/:id', updateCurrency);
+router.delete('/currencys/:id', deleteCurrency);
+
+router.get('/billing-cycles', getAllBillingCycles);
+router.post('/billing-cycles', createBillingCycle);
+router.put('/billing-cycles/:id', updateBillingCycle);
+router.delete('/billing-cycles/:id', deleteBillingCycle);
+
+router.get('/advance-payments', getAllAdvancePayments);
+router.post('/advance-payments', createAdvancePayment);
+router.put('/advance-payments/:id', updateAdvancePayment);
+router.delete('/advance-payments/:id', deleteAdvancePayment);
+
+
+router.get('/gst-treatments', getAllGSTTreatments);
+router.post('/gst-treatments', createGSTTreatment);
+router.put('/gst-treatments/:id', updateGSTTreatment);
+router.delete('/gst-treatments/:id', deleteGSTTreatment);
+
+router.get('/financial-years', getAllFinancialYears);
+router.post('/financial-years', createFinancialYear);
+router.put('/financial-years/:id', updateFinancialYear);
+router.delete('/financial-years/:id', deleteFinancialYear);
+
+router.get('/week-starts-ons', getAllWeekStartsOns);
+router.post('/week-starts-ons', createWeekStartsOn);
+router.put('/week-starts-ons/:id', updateWeekStartsOn);
+router.delete('/week-starts-ons/:id', deleteWeekStartsOn);
+
+router.get('/date-formats', getAllDateFormats);
+router.post('/date-formats', createDateFormat);
+router.put('/date-formats/:id', updateDateFormat);
+router.delete('/date-formats/:id', deleteDateFormat);
+
+router.get('/time-formats', getAllTimeFormats);
+router.post('/time-formats', createTimeFormat);
+router.put('/time-formats/:id', updateTimeFormat);
+router.delete('/time-formats/:id', deleteTimeFormat);
+
+router.get('/first-day-of-months', getAllFirstDayOfMonths);
+router.post('/first-day-of-months', createFirstDayOfMonth);
+router.put('/first-day-of-months/:id', updateFirstDayOfMonth);
+router.delete('/first-day-of-months/:id', deleteFirstDayOfMonth);
+
+router.get('/number-formats', getAllNumberFormats);
+router.post('/number-formats', createNumberFormat);
+router.put('/number-formats/:id', updateNumberFormat);
+router.delete('/number-formats/:id', deleteNumberFormat);
+
+router.get('/leave-year-start-months', getAllLeaveYearStartMonths);
+router.post('/leave-year-start-months', createLeaveYearStartMonth);
+router.put('/leave-year-start-months/:id', updateLeaveYearStartMonth);
+router.delete('/leave-year-start-months/:id', deleteLeaveYearStartMonth);
+
+router.get('/preferred-languages', getAllPreferredLanguages);
+router.post('/preferred-languages', createPreferredLanguage);
+router.put('/preferred-languages/:id', updatePreferredLanguage);
+router.delete('/preferred-languages/:id', deletePreferredLanguage);
 
 export default router;

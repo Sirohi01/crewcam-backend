@@ -296,7 +296,11 @@ export const login2FA = async (req: Request, res: Response) => {
 const findUserByIdentifier = (identifier: string) => {
   const trimmed = identifier.trim();
   return User.findOne({
-    $or: [{ employeeCode: trimmed }, { email: trimmed.toLowerCase() }],
+    $or: [
+      { employeeCode: trimmed }, 
+      { email: trimmed.toLowerCase() },
+      { mobileNumber: trimmed }
+    ],
   }).setOptions({ bypassTenantIsolation: true });
 };
 
@@ -353,25 +357,47 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
     const promises = [];
 
-    if (user.email) {
+    if (isEmail && user.email) {
       promises.push(
         sendMail({
           to: user.email,
           subject: 'Your CrewCam Login OTP',
-          html: `<p>Your login OTP is <strong>${otp}</strong>.</p><p>It expires in 5 minutes.</p>`
+          text: `Namaskar,\n\nTo proceed with your secure login to the CrewCam Dashboard, please use the following One-Time Password (OTP): ${otp}\n\nThis OTP is valid for 5 minutes only.\n\nWarm Regards,\nTeam CrewCam`,
+          html: `
+<div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
+  <div style="background-color: #155e75; padding: 20px; text-align: center; color: white;">
+    <img src="https://res.cloudinary.com/dr8mld4i0/image/upload/v1789638742/crewcam_assets/aqfnuqg5vu8mrq67pfba.png" alt="CrewCam" style="height: 28px; vertical-align: middle;" />
+  </div>
+  <div style="padding: 30px; background-color: #ffffff;">
+    <p style="margin-top: 0;">Namaskar,</p>
+    <p>To proceed with your secure login to the <strong>CrewCam Dashboard</strong>, please verify your identity using the One-Time Password (OTP) below:</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #155e75; background: #f8fafc; padding: 12px 24px; border-radius: 6px; border: 1px solid #e2e8f0;">${otp}</span>
+    </div>
+    <p style="font-size: 14px; color: #475569;"><strong>This OTP is valid for 5 minutes only</strong> and can be used once.</p>
+    <p style="font-size: 13px; color: #64748b;">For your security, please do not share this code with anyone. CrewCam will never ask for your OTP.</p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;" />
+    <p style="margin: 0; font-size: 14px;">Warm Regards,</p>
+    <p style="margin: 4px 0 0 0; font-weight: bold; font-size: 14px;">Team CrewCam</p>
+  </div>
+  <div style="background-color: #f8fafc; padding: 15px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+    &copy; ${new Date().getFullYear()} CrewCam. All Rights Reserved.
+  </div>
+</div>
+          `
         }).catch(e => console.error("Email OTP failed:", e))
       );
-    }
-    
-    const phone = user.mobileNumber || (!isEmail ? identifier : null);
-    if (phone) {
-      promises.push(
-        notificationService.sendWhatsAppOTP(
-          String(user.tenantId),
-          phone,
-          otp
-        ).catch(e => console.error("WhatsApp OTP failed:", e))
-      );
+    } else {
+      const phone = user.mobileNumber || (!isEmail ? identifier : null);
+      if (phone) {
+        promises.push(
+          notificationService.sendWhatsAppOTP(
+            String(user.tenantId),
+            phone,
+            otp
+          ).catch(e => console.error("WhatsApp OTP failed:", e))
+        );
+      }
     }
 
     await Promise.all(promises);
@@ -380,7 +406,7 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     // in the response for testing instead of being delivered anywhere.
     res.status(200).json({
       ...genericResponse,
-      otp: process.env.NODE_ENV === 'production' ? undefined : otp,
+      // otp: process.env.NODE_ENV === 'production' ? undefined : otp,
     });
   } catch (error) {
     res.status(500).json({ message: 'Error sending OTP' });

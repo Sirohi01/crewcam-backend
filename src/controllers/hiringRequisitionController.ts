@@ -50,7 +50,8 @@ export const streamHiringPdf = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Step 1: Manpower Request Form
+import { publishToLinkedIn, publishToNaukri, publishToIndeed } from '../services/publishService';
+
 export const createManpowerRequest = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -67,18 +68,15 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
 
     if (!isAdmin && reqDepartmentId) {
       if (isHod) {
-        // If HOD created it, route to Company Admin / Director
         const roles = await mongoose.model('Role').find({ tenantId, category: { $in: ['company_admin', 'admin', 'director'] } });
         const superAdmin = await User.findOne({ roleId: { $in: roles.map(r => r._id) }, tenantId });
         if (superAdmin) pendingApprovalFrom = superAdmin._id;
       } else {
-        // If HR, Manager, Employee created it, route to HOD of that department
         const roles = await mongoose.model('Role').find({ tenantId, category: { $in: ['hod', 'admin', 'company_admin'] } });
         const hod = await User.findOne({ departmentId: reqDepartmentId, roleId: { $in: roles.map(r => r._id) }, tenantId });
         if (hod) {
           pendingApprovalFrom = hod._id;
         } else {
-          // Fallback to super admin if no HOD found for that department
           const adminRoles = await mongoose.model('Role').find({ tenantId, category: { $in: ['company_admin', 'admin'] } });
           const superAdmin = await User.findOne({ roleId: { $in: adminRoles.map(r => r._id) }, tenantId });
           if (superAdmin) pendingApprovalFrom = superAdmin._id;
@@ -93,14 +91,36 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
       pendingApprovalFrom,
       status: pendingApprovalFrom ? 'Pending' : 'Approved'
     });
-    await logAudit(tenantId, req.user!._id, 'CREATE_MANPOWER_REQUEST', req, { requestId: (request as any)._id });
+    
+    const publishChannels = req.body.publishChannels || [];
+    const publishResults: any = {};
 
-    res.status(201).json(request);
+    const jdContent = request.jobDescriptionSummary || request.detailedJustification || request.justification || 'Join our team!';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const applyUrl = `${frontendUrl}/careers/${request._id}`;
+
+    if (publishChannels.includes('LinkedIn')) {
+      publishResults.linkedin = await publishToLinkedIn({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
+    }
+    if (publishChannels.includes('Naukri.com')) {
+      publishResults.naukri = await publishToNaukri({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
+    }
+    if (publishChannels.includes('Indeed')) {
+      publishResults.indeed = await publishToIndeed({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
+    }
+    if (publishChannels.includes('Other Job Portals')) {
+      publishResults.otherPortals = { success: true, message: 'Queued for generic XML distribution feed' };
+    }
+
+    await logAudit(tenantId, req.user!._id, 'CREATE_MANPOWER_REQUEST', req, { requestId: (request as any)._id, publishResults });
+
+    res.status(201).json({ ...request.toObject(), publishResults });
   } catch (error: any) {
     console.error('Error creating manpower request:', error);
     res.status(500).json({ message: 'Error creating manpower request' });
   }
 };
+
 
 export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
   try {

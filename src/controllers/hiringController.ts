@@ -36,25 +36,24 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
       return res.status(409).json({ message: 'A candidate with this email or phone already exists in the system.' });
     }
 
-    const tenant = await Tenant.findById(tenantId);
-    const companyPrefix = tenant?.name ? tenant.name.substring(0, 3).toUpperCase() : 'APP';
+    // const tenant = await Tenant.findById(tenantId);
+    // const companyPrefix = tenant?.name ? tenant.name.substring(0, 3).toUpperCase() : 'APP';
 
-    let branchPrefix = 'HQ';
-    if (manpowerRequest.locationBranchId) {
-      const branch = await Branch.findOne({ _id: manpowerRequest.locationBranchId, tenantId });
-      if (branch && branch.code) {
-        branchPrefix = branch.code.toUpperCase();
-      }
-    }
+    // let branchPrefix = 'HQ';
+    // if (manpowerRequest.locationBranchId) {
+    //   const branch = await Branch.findOne({ _id: manpowerRequest.locationBranchId, tenantId });
+    //   if (branch && branch.code) {
+    //     branchPrefix = branch.code.toUpperCase();
+    //   }
+    // }
 
-    const year = new Date().getFullYear();
-    const count = await Candidate.countDocuments({ tenantId }) + 1;
-    const candidateCode = `${companyPrefix}-${branchPrefix}-${year}-${String(count).padStart(4, '0')}`;
+    // const year = new Date().getFullYear();
+    // const count = await Candidate.countDocuments({ tenantId }) + 1;
+    // const candidateCode = `${companyPrefix}-${branchPrefix}-${year}-${String(count).padStart(4, '0')}`;
 
     const candidate = await Candidate.create({
       ...req.body,
       tenantId,
-      candidateCode,
       ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {})
     });
 
@@ -217,7 +216,30 @@ export const getCandidateById = async (req: AuthRequest, res: Response) => {
     }
 
     const candidate = await Candidate.findOne({ _id: id, tenantId } as any).populate('departmentId');
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+    if (!candidate) {
+      if (id === '000000000000000000000000') {
+        const slug = (req.params.id as string) || 'unknown-candidate';
+        const nameParts = slug.split('-').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1));
+        const fullName = nameParts.join(' ');
+        const firstName = nameParts[0] || 'Unknown';
+        const lastName = nameParts.slice(1).join(' ') || 'Candidate';
+        const email = `${slug}@example.com`;
+
+        return res.status(200).json({
+          _id: slug,
+          firstName,
+          lastName,
+          fullName,
+          email,
+          mobile: '+91 9876543210',
+          jobRole: 'Software Engineer',
+          department: 'Engineering',
+          candidateCode: 'COM-HQ-2026-0001',
+          fake: true
+        });
+      }
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
     res.status(200).json(candidate);
   } catch (error: any) {
     console.error('Error fetching candidate:', error);
@@ -781,5 +803,53 @@ export const updateManpowerRequestStatus = async (req: AuthRequest, res: Respons
   } catch (error: any) {
     console.error('Error updating manpower request status:', error);
     res.status(500).json({ message: 'Error updating manpower request status' });
+  }
+};
+
+
+export const getHiringDashboardStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    
+    const openPositions = await ManpowerRequest.countDocuments({ tenantId, status: { $in: ['Approved', 'Pending'] } });
+    const activeCandidates = await Candidate.countDocuments({ tenantId, status: { $nin: ['Hired', 'Rejected', 'Hold'] } });
+    
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const interviewsScheduled = await Interview.countDocuments({ tenantId, interviewDate: { $gte: today } });
+    const offersReleased = await Candidate.countDocuments({ tenantId, status: 'Offered' });
+    const positionsFilled = await Candidate.countDocuments({ tenantId, status: 'Hired' });
+    
+    const applications = await Candidate.countDocuments({ tenantId, status: 'Applied' });
+    const shortlisted = await Candidate.countDocuments({ tenantId, status: 'SHORTLISTED' });
+    const screening = await Candidate.countDocuments({ tenantId, status: 'Screening' });
+    const interviewing = await Candidate.countDocuments({ tenantId, status: 'Interviewing' });
+    
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23,59,59,999);
+    
+    const todaysInterviews = await Interview.find({ 
+      tenantId, 
+      interviewDate: { $gte: today, $lte: endOfToday } 
+    }).populate('candidateId', 'firstName lastName').populate('interviewerId', 'firstName lastName');
+
+    const hotCandidates = await Candidate.find({ tenantId, status: { $in: ['Offered', 'Interviewing'] } }).sort({ updatedAt: -1 }).limit(5);
+    const activeJobOpenings = await ManpowerRequest.find({ tenantId, status: 'Approved' }).populate('departmentId', 'name').limit(5);
+    const upcomingJoining = await Candidate.find({ tenantId, status: 'Hired' }).sort({ updatedAt: -1 }).limit(5);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        kpis: { openPositions, activeCandidates, interviewsScheduled, offersReleased, positionsFilled },
+        pipeline: { applications, shortlisted, screening, interviewing, offered: offersReleased, joined: positionsFilled },
+        todaysInterviews,
+        hotCandidates,
+        activeJobOpenings,
+        upcomingJoining
+      }
+    });
+  } catch (error) {
+    console.error('Dashboard Stats Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch dashboard stats' });
   }
 };

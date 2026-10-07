@@ -50,7 +50,7 @@ export const getTenantFeatures = async (tenantId: string): Promise<{ features: s
       if (secs) secs.forEach(s => derivedSections.add(s));
     });
     if (derivedSections.size > 0) {
-      allowedSections = Array.from(new Set([...allowedSections, ...Array.from(derivedSections), 'Workspace', 'Company Setup', 'Admin Section']));
+      allowedSections = Array.from(new Set([...allowedSections, ...Array.from(derivedSections), 'Workspace', 'Company Setup','Organization Setup', 'Admin Section']));
     }
   }
 

@@ -118,13 +118,31 @@ export const getDesignationStats = async (req: AuthRequest, res: Response) => {
     
     const familyCounts = await Designation.aggregate([
       { $match: { tenantId } },
-      { $group: { _id: "$jobFamily", count: { $sum: 1 } } }
+      { 
+        $lookup: {
+          from: 'jobfamilies',
+          localField: 'jobFamily',
+          foreignField: '_id',
+          as: 'familyDoc'
+        }
+      },
+      { $unwind: { path: "$familyDoc", preserveNullAndEmptyArrays: true } },
+      { $group: { _id: "$familyDoc.name", count: { $sum: 1 } } }
     ]);
 
     const gradeCounts = await Designation.aggregate([
       { $match: { tenantId, jobGrade: { $ne: null } } },
-      { $group: { _id: "$jobGrade", count: { $sum: 1 } } },
-      { $sort: { _id: -1 } }
+      { 
+        $lookup: {
+          from: 'jobgrades',
+          localField: 'jobGrade',
+          foreignField: '_id',
+          as: 'gradeDoc'
+        }
+      },
+      { $unwind: { path: "$gradeDoc", preserveNullAndEmptyArrays: true } },
+      { $group: { _id: "$gradeDoc.name", count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
     ]);
 
     res.json({
