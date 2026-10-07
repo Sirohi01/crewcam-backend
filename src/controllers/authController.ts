@@ -120,9 +120,25 @@ const isSubdomainMismatch = async (subdomainRaw: unknown, user: any): Promise<bo
 // corporateId in Company Profile yet simply can't be matched, which is intentional: the field
 // must be configured before Employer Login will accept it.
 const isCorporateIdMismatch = async (corporateIdRaw: unknown, user: any): Promise<boolean> => {
-  if (typeof corporateIdRaw !== 'string' || !corporateIdRaw.trim()) return false;
-  const company = await Company.findOne({ tenantId: user.tenantId, isActive: true }).select('corporateId').lean();
-  return (company?.corporateId || '').trim().toLowerCase() !== corporateIdRaw.trim().toLowerCase();
+  const role = user.roleId
+    ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).select('loginType').lean()
+    : null;
+  const userLoginType = resolveRoleLoginType(role as any);
+
+  const provided = typeof corporateIdRaw === 'string' ? corporateIdRaw.trim().toLowerCase() : '';
+
+  if (userLoginType === 'employer') {
+    if (!provided) return true; 
+    const company = await Company.findOne({ tenantId: user.tenantId, isActive: true }).select('corporateId').lean();
+    return (company?.corporateId || '').trim().toLowerCase() !== provided;
+  }
+
+  if (provided) {
+    const company = await Company.findOne({ tenantId: user.tenantId, isActive: true }).select('corporateId').lean();
+    return (company?.corporateId || '').trim().toLowerCase() !== provided;
+  }
+
+  return false;
 };
 
 // Employee Login and Employer Login are two distinct screens for the same tenant-side app
@@ -200,6 +216,18 @@ export const login = async (req: Request, res: Response) => {
 
     if (await isSubdomainMismatch(req.body.subdomain, user)) {
       return res.status(403).json({ message: "This account doesn't belong to this workspace." });
+    }
+
+    if (await isCorporateIdMismatch(req.body.corporateId, user)) {
+      return res.status(403).json({ message: "Invalid Corporate ID for this workspace." });
+    }
+
+    if (await isLoginTypeMismatch(req.body.loginType, user)) {
+      return res.status(403).json(
+        req.body.loginType === 'employer'
+          ? { message: 'This account is an Employee. Please use the Employee Login portal.' }
+          : { message: 'This account is a Company Admin. Please use the Employer Login portal.' }
+      );
     }
 
     const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;

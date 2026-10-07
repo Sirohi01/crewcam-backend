@@ -429,7 +429,7 @@ export const seedUsersAndCompanies = async () => {
 
     // 5. Create a User (Admin User)
     const adminEmail = 'tejodhara.chunduri@encodency.com';
-    let adminUser = await User.findOne({ email: adminEmail, tenantId: tenantIdString });
+    let adminUser = await User.findOne({ email: adminEmail }, null, { bypassTenantIsolation: true });
     if (!adminUser) {
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash('Admin@123', salt);

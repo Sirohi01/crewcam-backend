@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { User } from '../models/User';
-import { Role, resolveRoleScope } from '../models/Role';
+import { Role, resolveRoleScope, resolveRoleLoginType } from '../models/Role';
 import { EmployeePermissionOverride } from '../models/EmployeePermissionOverride';
 import { SidebarConfig } from '../models/SidebarConfig';
 import { DashboardWidgetConfig } from '../models/DashboardWidgetConfig';
@@ -251,7 +251,11 @@ export const getMySidebar = async (req: AuthRequest, res: Response) => {
     };
     const visible = items.filter((item) => isVisible(item, ctx));
 
-    res.status(200).json({ items: visible, roleScope: resolveRoleScope(role) });
+    res.status(200).json({ 
+      items: visible, 
+      roleScope: resolveRoleScope(role),
+      loginType: resolveRoleLoginType(role as any)
+    });
   } catch (error: any) {
     console.error('getMySidebar error:', error);
     res.status(500).json({ message: 'Error fetching sidebar' });
