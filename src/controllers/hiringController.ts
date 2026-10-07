@@ -386,11 +386,28 @@ export const deleteCandidate = async (req: AuthRequest, res: Response) => {
     //   }
     // }
 
-    const candidate = await Candidate.findOneAndDelete({ _id: id, tenantId } as any);
+    const candidate = await Candidate.findOne({ _id: id, tenantId } as any);
 
     if (!candidate) {
       return res.status(404).json({ message: 'Candidate not found' });
     }
+
+    if (candidate.profileImageUrl && candidate.profileImageUrl.includes('res.cloudinary.com')) {
+      try {
+        const urlParts = candidate.profileImageUrl.split('/');
+        const fileWithExt = urlParts[urlParts.length - 1];
+        const folderIndex = urlParts.findIndex((p: string) => p === 'crewcam_uploads');
+        if (folderIndex !== -1) {
+          const publicId = `crewcam_uploads/${fileWithExt.split('.')[0]}`;
+          const cloudinary = require('cloudinary').v2;
+          await cloudinary.uploader.destroy(publicId);
+        }
+      } catch (err) {
+        console.error('Error deleting Cloudinary image:', err);
+      }
+    }
+
+    await Candidate.deleteOne({ _id: id, tenantId } as any);
 
     await AuditLog.create({
       tenantId,

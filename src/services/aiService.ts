@@ -122,10 +122,29 @@ const SCREENING_JSON_SCHEMA: JsonSchemaDef = {
   },
 };
 
+const buildManpowerContext = async (tenantId: string, candidateId: string): Promise<string> => {
+  const pipelineState = await getOrCreatePipelineState(tenantId, candidateId);
+  const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
+  if (!manpowerStep?.refId) return '';
+
+  const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
+  if (!manpowerRequest) return '';
+
+  return [
+    manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
+    manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
+    manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
+    manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
+    manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
+    manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
+  ].filter(Boolean).join('\n');
+};
+
 const callScreeningAi = async (
   resolved: ResolvedAiProvider,
   jobRole: string,
   resumeText: string,
+  manpowerContext: string,
 ): Promise<{ result: ScreeningResult; promptTokens: number; completionTokens: number; model: string }> => {
   const { raw, promptTokens, completionTokens } = await callAiJson({
     provider: resolved.provider,
@@ -136,7 +155,7 @@ const callScreeningAi = async (
       'you never decide whether a candidate is accepted or rejected, you only describe fit. ' +
       'Be specific and evidence-based; do not penalize non-standard formats, career gaps, or names/schools ' +
       'that are not from well-known institutions.',
-    userPrompt: `Job role: ${jobRole}\n\nResume text (PII redacted):\n${resumeText}`,
+    userPrompt: `Job role: ${jobRole}\n${manpowerContext ? `\nRole Requirements Context:\n${manpowerContext}\n` : ''}\nResume text (PII redacted):\n${resumeText}`,
     jsonSchema: SCREENING_JSON_SCHEMA,
   });
 
@@ -186,9 +205,10 @@ export const screenResume = async (
   }
 
   const redactedText = stripPii(extractedText);
+  const manpowerContext = await buildManpowerContext(tenantId, candidateId);
 
   try {
-    const { result, promptTokens, completionTokens, model } = await callScreeningAi(resolved, candidate.jobRole, redactedText);
+    const { result, promptTokens, completionTokens, model } = await callScreeningAi(resolved, candidate.jobRole, redactedText, manpowerContext);
     const pricing = MODEL_PRICING[model] ?? { promptPer1k: 0, completionPer1k: 0 };
     const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
 
@@ -580,23 +600,7 @@ const ROUND_GUIDANCE: Record<string, string> = {
 };
 
 
-const buildManpowerContext = async (tenantId: string, candidateId: string): Promise<string> => {
-  const pipelineState = await getOrCreatePipelineState(tenantId, candidateId);
-  const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
-  if (!manpowerStep?.refId) return '';
 
-  const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
-  if (!manpowerRequest) return '';
-
-  return [
-    manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
-    manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
-    manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
-    manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
-    manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
-    manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
-  ].filter(Boolean).join('\n');
-};
 
 
 export const generateInterviewQuestions = async (

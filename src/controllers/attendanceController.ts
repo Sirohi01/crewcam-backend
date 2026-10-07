@@ -314,7 +314,7 @@ export const hrOverrideAttendance = async (req: AuthRequest, res: Response) => {
         clockInTime: clockInTime ? new Date(clockInTime) : new Date(date),
         status: status || 'Present',
         locationIp: 'HR_OVERRIDE'
-      };
+      } as any;
       if (clockOutTime) {
         payload.clockOutTime = new Date(clockOutTime);
         if (payload.clockInTime) {
