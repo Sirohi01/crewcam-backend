@@ -13,6 +13,7 @@ export interface IInterviewQuestion {
   recordingPublicId?: string;
   transcript?: string;
   answerAnalysis?: IAnswerAnalysis;
+  manualOverride?: 'strong' | 'adequate' | 'weak';
   answeredAt?: Date;
 }
 
@@ -40,6 +41,8 @@ export interface IInterview extends Document {
   overallAnalysis?: IOverallAnalysis;
   recordingSessionStartedAt?: Date;
   recordingSessionEndedAt?: Date;
+  notes?: string;
+  attachments?: { name: string, url: string }[];
 }
 
 const interviewSchema = new Schema<IInterview>({
@@ -73,6 +76,7 @@ const interviewSchema = new Schema<IInterview>({
       reasoning: { type: String },
       followUpSuggestion: { type: String },
     },
+    manualOverride: { type: String, enum: ['strong', 'adequate', 'weak'] },
     answeredAt: { type: Date },
   }],
   overallAnalysis: {
@@ -84,6 +88,11 @@ const interviewSchema = new Schema<IInterview>({
   },
   recordingSessionStartedAt: { type: Date },
   recordingSessionEndedAt: { type: Date },
+  notes: { type: String },
+  attachments: [{
+    name: { type: String },
+    url: { type: String }
+  }]
 }, {
   timestamps: true
 });

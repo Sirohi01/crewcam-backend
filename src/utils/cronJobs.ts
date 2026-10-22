@@ -13,7 +13,7 @@ export const startCronJobs = () => {
       const today = moment().startOf('day').toDate();
       
       // Get all active employees with shift timings
-      const users = await User.find({ isActive: true, employmentStatus: 'active' }).populate('shiftTimingId');
+      const users = await User.find({ isActive: true, employmentStatus: 'active' }).populate('shiftTimingId').setOptions({ bypassTenantIsolation: true });
 
       for (const user of users) {
         // Check if they clocked in today

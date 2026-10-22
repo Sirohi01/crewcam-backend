@@ -867,6 +867,76 @@ export const analyzeAnswerRecording = async (
   }
 };
 
+interface TextAnswerAnalysisAiResult {
+  verdict: 'strong' | 'adequate' | 'weak' | 'no_answer';
+  reasoning: string;
+}
+
+const TEXT_ANSWER_ANALYSIS_JSON_SCHEMA: JsonSchemaDef = {
+  name: 'text_answer_analysis',
+  schema: {
+    type: 'object',
+    properties: {
+      verdict: { type: 'string', enum: ['strong', 'adequate', 'weak', 'no_answer'] },
+      reasoning: { type: 'string', description: '2-4 sentence explanation of the verdict, referencing what was/was not covered' },
+    },
+    required: ['verdict', 'reasoning'],
+    additionalProperties: false,
+  },
+};
+
+export const evaluateInterviewTextAnswers = async (
+  tenantId: string,
+  interviewId: string,
+  triggeredBy: string,
+): Promise<{ questions: IInterviewQuestion[] }> => {
+  const resolved = await resolveTenantAiProvider(tenantId);
+  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
+
+  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId', 'firstName lastName jobRole');
+  if (!interview) throw new AiFeatureError('Interview not found', 404);
+  const candidate = interview.candidateId as any;
+
+  if (!interview.interviewQuestions || interview.interviewQuestions.length === 0) return { questions: [] };
+
+  for (let i = 0; i < interview.interviewQuestions.length; i++) {
+    const q = interview.interviewQuestions[i];
+    if (q.transcript && (!q.answerAnalysis || q.answerAnalysis.verdict === 'no_answer')) {
+      try {
+        const userPrompt = `Role: ${candidate?.jobRole || 'Unknown role'}\nInterview question: "${q.question}"\nCandidate's written answer: "${q.transcript}"\nEvaluate the answer.`;
+        const { raw, promptTokens, completionTokens } = await callAiJson({
+          provider: resolved.provider,
+          apiKey: resolved.apiKey,
+          model: resolved.model,
+          systemPrompt: 'You are assisting a live interviewer. Read the candidate\'s typed answer and judge how well it answers the given question for the given role. Be concise and fair.',
+          userPrompt,
+          jsonSchema: TEXT_ANSWER_ANALYSIS_JSON_SCHEMA,
+        });
+        const result = JSON.parse(raw) as TextAnswerAnalysisAiResult;
+        q.answerAnalysis = {
+          verdict: result.verdict,
+          reasoning: result.reasoning,
+        } as IAnswerAnalysis;
+        q.answeredAt = new Date();
+
+        const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+        const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+        await AiUsageLog.create({
+          tenantId, feature: 'interview-answer-analysis', aiModel: resolved.model,
+          promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+          costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+          metadata: { interviewId, questionIndex: i }, createdBy: triggeredBy, updatedBy: triggeredBy,
+        } as any);
+      } catch (err: any) {
+        console.error("Error evaluating text answer:", err);
+      }
+    }
+  }
+
+  await interview.save();
+  return { questions: interview.interviewQuestions };
+};
+
 interface OverallAnalysisAiResult {
   summary: string;
   strengths: string[];

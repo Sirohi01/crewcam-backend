@@ -456,9 +456,14 @@ export const getOfferLetters = async (req: AuthRequest, res: Response) => {
     if (candidateId) filter.candidateId = candidateId;
 
     const offers = await OfferLetter.find(filter)
-      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode')
+      .populate('candidateId', 'firstName lastName jobRole candidateCode uniqueId employeeCode profileImageUrl email phone applicationDetails')
       .sort({ createdAt: -1 })
       .lean();
+
+    try {
+      require('fs').writeFileSync('d:/crewcam/backend/debug_offers.json', JSON.stringify(offers, null, 2));
+    } catch (e) {}
+
     const mapped = offers.map((o: any) => {
       const empCode = o.employeeCode || o.uniqueId || o.candidateCode || (o.candidateId as any)?.employeeCode || (o.candidateId as any)?.uniqueId || (o.candidateId as any)?.candidateCode || '-';
       return {
