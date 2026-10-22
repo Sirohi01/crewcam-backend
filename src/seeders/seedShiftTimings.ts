@@ -1,16 +1,12 @@
-import mongoose from 'mongoose';
 import { ShiftTiming } from '../models/ShiftTiming';
 import { Tenant } from '../models/Tenant';
-import dotenv from 'dotenv';
-dotenv.config();
 
-const run = async () => {
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/CREWCAM');
+export const seedShiftTimings = async () => {
 
   const tenants = await Tenant.find({});
   if (tenants.length === 0) {
     console.log('No tenant found to seed shift timings for.');
-    process.exit(1);
+    return;
   }
 
   for (const tenant of tenants) {
@@ -62,8 +58,5 @@ const run = async () => {
     }
   }
 
-  console.log('Done.');
-  process.exit(0);
+  console.log('Shift Timings seeded successfully.');
 };
-
-run().catch(console.error);

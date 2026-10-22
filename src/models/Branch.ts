@@ -24,6 +24,14 @@ export interface IBranch extends ITenantScoped, IAuditable {
   lat?: number;
   lng?: number;
   isActive: boolean;
+  parentBranch?: mongoose.Types.ObjectId | string;
+  businessUnit?: mongoose.Types.ObjectId | string;
+  division?: string;
+  costCenter?: string;
+  branchHead?: mongoose.Types.ObjectId | string;
+  description?: string;
+  addressLine2?: string;
+  website?: string;
 }
 
 const BranchSchema = new Schema<IBranch>({
@@ -48,6 +56,14 @@ const BranchSchema = new Schema<IBranch>({
   lat: { type: Number },
   lng: { type: Number },
   isActive: { type: Boolean, default: true },
+  parentBranch: { type: Schema.Types.ObjectId, ref: 'Branch' },
+  businessUnit: { type: Schema.Types.ObjectId, ref: 'BusinessUnit' },
+  division: { type: String },
+  costCenter: { type: String },
+  branchHead: { type: Schema.Types.ObjectId, ref: 'User' },
+  description: { type: String },
+  addressLine2: { type: String },
+  website: { type: String },
 }, { timestamps: true });
 
 BranchSchema.plugin(tenantPlugin);

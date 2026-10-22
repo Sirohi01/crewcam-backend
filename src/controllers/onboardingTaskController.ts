@@ -80,7 +80,7 @@ export const updateOnboardingTask = async (req: AuthRequest, res: Response) => {
     const updatePayload: any = { ...parsed.data, ...(req.user?._id && { updatedBy: req.user._id }) };
     if (parsed.data.status === 'DONE') updatePayload.completedAt = new Date();
 
-    const task = await OnboardingTask.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true });
+    const task = await OnboardingTask.findByIdAndUpdate(req.params.id, updatePayload, { returnDocument: 'after', runValidators: true });
     if (!task) return res.status(404).json({ message: 'Task not found' });
     await writeAudit('UPDATE_ONBOARDING_TASK', req.user?._id, String(task.tenantId), { title: task.title, status: task.status });
     res.status(200).json(task);

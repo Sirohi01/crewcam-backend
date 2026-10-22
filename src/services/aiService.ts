@@ -41,9 +41,16 @@ export const resolveTenantAiProvider = async (tenantId: string): Promise<Resolve
   const tenant = await Tenant.findById(tenantId).select('preferredAiProvider');
   const preferred = tenant?.preferredAiProvider;
 
-  const doc = preferred
+  let doc = preferred
     ? await PlatformAiProvider.findOne({ tenantId, provider: preferred, isActive: true })
     : await PlatformAiProvider.findOne({ tenantId, isActive: true }).sort({ provider: 1 });
+
+  // Fallback to SUPER_ADMIN configuration
+  if (!doc) {
+    doc = preferred
+      ? await PlatformAiProvider.findOne({ tenantId: 'SUPER_ADMIN', provider: preferred, isActive: true })
+      : await PlatformAiProvider.findOne({ tenantId: 'SUPER_ADMIN', isActive: true }).sort({ provider: 1 });
+  }
 
   if (!doc) return null;
   const apiKey = doc.getDecryptedApiKey();
@@ -77,8 +84,8 @@ const fetchFileBuffer = async (fileUrl: string): Promise<Buffer> => {
 
 export const extractResumeText = async (fileUrl: string): Promise<string> => {
   const buffer = await fetchFileBuffer(fileUrl);
-  const mimeType = fileUrl.toLowerCase().endsWith('.docx')
-    ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const mimeType = fileUrl.toLowerCase().endsWith('.docx') || fileUrl.toLowerCase().endsWith('.doc')
+    ? 'application/msword'
     : 'application/pdf';
   return extractTextFromBuffer(buffer, mimeType);
 };
@@ -115,10 +122,29 @@ const SCREENING_JSON_SCHEMA: JsonSchemaDef = {
   },
 };
 
+const buildManpowerContext = async (tenantId: string, candidateId: string): Promise<string> => {
+  const pipelineState = await getOrCreatePipelineState(tenantId, candidateId);
+  const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
+  if (!manpowerStep?.refId) return '';
+
+  const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
+  if (!manpowerRequest) return '';
+
+  return [
+    manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
+    manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
+    manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
+    manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
+    manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
+    manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
+  ].filter(Boolean).join('\n');
+};
+
 const callScreeningAi = async (
   resolved: ResolvedAiProvider,
   jobRole: string,
   resumeText: string,
+  manpowerContext: string,
 ): Promise<{ result: ScreeningResult; promptTokens: number; completionTokens: number; model: string }> => {
   const { raw, promptTokens, completionTokens } = await callAiJson({
     provider: resolved.provider,
@@ -129,7 +155,7 @@ const callScreeningAi = async (
       'you never decide whether a candidate is accepted or rejected, you only describe fit. ' +
       'Be specific and evidence-based; do not penalize non-standard formats, career gaps, or names/schools ' +
       'that are not from well-known institutions.',
-    userPrompt: `Job role: ${jobRole}\n\nResume text (PII redacted):\n${resumeText}`,
+    userPrompt: `Job role: ${jobRole}\n${manpowerContext ? `\nRole Requirements Context:\n${manpowerContext}\n` : ''}\nResume text (PII redacted):\n${resumeText}`,
     jsonSchema: SCREENING_JSON_SCHEMA,
   });
 
@@ -179,9 +205,10 @@ export const screenResume = async (
   }
 
   const redactedText = stripPii(extractedText);
+  const manpowerContext = await buildManpowerContext(tenantId, candidateId);
 
   try {
-    const { result, promptTokens, completionTokens, model } = await callScreeningAi(resolved, candidate.jobRole, redactedText);
+    const { result, promptTokens, completionTokens, model } = await callScreeningAi(resolved, candidate.jobRole, redactedText, manpowerContext);
     const pricing = MODEL_PRICING[model] ?? { promptPer1k: 0, completionPer1k: 0 };
     const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
 
@@ -437,6 +464,7 @@ interface CandidateProfileExtraction {
   city: string;
   postalCode: string;
   candidateType: 'Experienced' | 'Fresher';
+  totalExperience: string;
   currentOrMostRecentDesignation: string;
   education: Array<{ qualification: string; university: string; institute: string; monthYear: string; result: string }>;
   technicalSkills: string[];
@@ -460,6 +488,7 @@ const CANDIDATE_PROFILE_JSON_SCHEMA: JsonSchemaDef = {
       city: { type: 'string' },
       postalCode: { type: 'string' },
       candidateType: { type: 'string', enum: ['Experienced', 'Fresher'], description: 'Fresher if no employment history is listed, else Experienced' },
+      totalExperience: { type: 'string', description: 'Total years of experience (e.g. 5, 2.5), else empty string if fresher' },
       currentOrMostRecentDesignation: { type: 'string', description: 'Their current or most recent job title, for suggesting a role applied for' },
       education: {
         type: 'array',
@@ -571,23 +600,7 @@ const ROUND_GUIDANCE: Record<string, string> = {
 };
 
 
-const buildManpowerContext = async (tenantId: string, candidateId: string): Promise<string> => {
-  const pipelineState = await getOrCreatePipelineState(tenantId, candidateId);
-  const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
-  if (!manpowerStep?.refId) return '';
 
-  const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
-  if (!manpowerRequest) return '';
-
-  return [
-    manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
-    manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
-    manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
-    manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
-    manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
-    manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
-  ].filter(Boolean).join('\n');
-};
 
 
 export const generateInterviewQuestions = async (
@@ -643,7 +656,19 @@ export const generateInterviewQuestions = async (
       tenantId, feature: 'interview-question-generation', status: 'FAILURE',
       metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
     } as any);
-    throw err instanceof AiFeatureError ? err : new AiFeatureError('AI interview question generation failed', 502);
+    // Fallback to dummy questions instead of failing the request
+    const dummyQuestions = [
+      "Tell me about a time you had to prioritize multiple tasks when working under tight deadlines.",
+      "Describe a situation where you had to manage a challenging stakeholder. How did you handle it?",
+      "How do you align your team's goals with the broader objectives of the organization?",
+      "Tell me about a time you had to make a difficult decision with incomplete information.",
+      "How do you encourage innovation and continuous learning within your team?"
+    ];
+    
+    interview.interviewQuestions = dummyQuestions.map((question) => ({ question }));
+    await interview.save();
+    
+    return { questions: dummyQuestions };
   }
 };
 

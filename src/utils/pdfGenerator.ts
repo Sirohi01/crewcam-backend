@@ -38,7 +38,7 @@ if (hasCloudinaryConfig) {
   });
 }
 
-const loadHeaderImage = async (imageUrl?: string): Promise<Buffer | null> => {
+export const loadHeaderImage = async (imageUrl?: string): Promise<Buffer | null> => {
   if (!imageUrl) return null;
   try {
     const parsed = new URL(imageUrl, 'http://local');

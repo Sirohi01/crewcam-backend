@@ -14,6 +14,7 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
     if (req.query.action) query.action = req.query.action;
     if (req.query.userId) query.userId = req.query.userId;
     if (req.query.status) query.status = req.query.status;
+    if (req.query.candidateId) query['details.candidateId'] = req.query.candidateId;
 
     const logs = await AuditLog.find(query)
       .populate('userId', 'firstName lastName email')
@@ -34,5 +35,30 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching audit logs' });
+  }
+};
+
+export const createAuditLog = async (req: AuthRequest, res: Response) => {
+  try {
+    const { action, module, status, details } = req.body;
+    
+    if (!action || !module || !status) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const log = await AuditLog.create({
+      tenantId: req.user?.tenantId,
+      userId: req.user?._id,
+      action,
+      module,
+      status,
+      details,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent']
+    });
+
+    res.status(201).json({ message: 'Audit log created', data: log });
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating audit log' });
   }
 };

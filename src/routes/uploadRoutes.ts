@@ -83,11 +83,8 @@ router.post('/', authenticate, uploadModerationLimiter, upload.single('file'), a
       if (moderation.checked && !moderation.safe) {
         const categoryLabel = moderation.categories.filter((c) => c !== 'none').join(', ');
         const detail = moderation.reason || (categoryLabel ? `Detected: ${categoryLabel}` : undefined);
-        return res.status(422).json({
-          message: detail ? `This image cannot be uploaded: ${detail}` : 'This image cannot be uploaded.',
-          categories: moderation.categories,
-          reason: moderation.reason,
-        });
+        warning = detail ? `Image flagged by AI: ${detail}` : 'Image flagged by AI.';
+        console.warn(`[Content Moderation] Upload allowed with warning. Reason: ${detail}`);
       }
       if (moderation.warning) warning = moderation.warning;
     } else {

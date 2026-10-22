@@ -17,9 +17,13 @@ export interface INominee {
 export interface INomination extends ITenantScoped {
   employeeName?: string;
   empCode?: string;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
   designation?: string;
   department?: string;
   fatherHusbandSpouse?: string;
+  dob?: Date;
   gender?: string;
   dateOfJoining?: string;
   mobileNumber?: string;
@@ -38,9 +42,19 @@ export interface INomination extends ITenantScoped {
   nominee2Mobile?: string;
   nominee2Percentage?: string;
   nominee2Address?: string;
+  guardianName?: string;
   guardianMobile?: string;
+  guardianRelationship?: string;
+  guardianAddress?: string;
   verifiedBy?: string;
   verifierRemarks?: string;
+  docs?: {
+    aadhaarNominee: boolean;
+    aadhaarGuardian: boolean;
+    aadhaarEmployee: boolean;
+    other: boolean;
+  };
+  otherDocText?: string;
 
   candidateId: Types.ObjectId;
   employeeId?: Types.ObjectId;
@@ -61,9 +75,13 @@ export interface INomination extends ITenantScoped {
 const nominationSchema = new Schema<INomination>({
   employeeName: { type: String },
   empCode: { type: String },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
   designation: { type: String },
   department: { type: String },
   fatherHusbandSpouse: { type: String },
+  dob: { type: Date },
   gender: { type: String },
   dateOfJoining: { type: String },
   mobileNumber: { type: String },
@@ -82,9 +100,19 @@ const nominationSchema = new Schema<INomination>({
   nominee2Mobile: { type: String },
   nominee2Percentage: { type: String },
   nominee2Address: { type: String },
+  guardianName: { type: String },
   guardianMobile: { type: String },
+  guardianRelationship: { type: String },
+  guardianAddress: { type: String },
   verifiedBy: { type: String },
   verifierRemarks: { type: String },
+  docs: {
+    aadhaarNominee: { type: Boolean, default: false },
+    aadhaarGuardian: { type: Boolean, default: false },
+    aadhaarEmployee: { type: Boolean, default: false },
+    other: { type: Boolean, default: false }
+  },
+  otherDocText: { type: String },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -110,7 +138,7 @@ const nominationSchema = new Schema<INomination>({
   hrRemarks: { type: String },
   pdfUrl: { type: String },
   status: { type: String, enum: ['Pending', 'Submitted', 'Verified'], default: 'Pending' }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 nominationSchema.plugin(tenantPlugin);
 

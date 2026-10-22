@@ -35,6 +35,7 @@ import jdKpaRoutes from './routes/jdKpaRoutes';
 import locationRoutes from './routes/locationRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import businessUnitRoutes from './routes/businessUnitRoutes';
+import businessMappingRoutes from './routes/businessMappingRoutes';
 import designationRoutes from './routes/designationRoutes';
 import jobFamilyRoutes from './routes/jobFamilyRoutes';
 import jobGradeRoutes from './routes/jobGradeRoutes';
@@ -42,6 +43,8 @@ import companyPolicyRoutes from './routes/companyPolicyRoutes';
 import departmentKpiRoutes from './routes/departmentKpiRoutes';
 import customFieldRoutes from './routes/customFieldRoutes';
 import teamMemberRoutes from './routes/teamMemberRoutes';
+import notificationRoutes from './routes/notificationRoutes';
+import divisionRoutes from './routes/divisionRoutes';
 
 export function createApp() {
   const app = express();
@@ -50,8 +53,8 @@ export function createApp() {
   // these must be mounted with express.raw() before the global express.json() below.
   app.use('/api/v1/webhooks', express.raw({ type: '*/*' }), webhookRoutes);
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
   app.use(cookieParser());
   app.use(helmet());
 
@@ -128,6 +131,7 @@ export function createApp() {
   app.use('/api/v1/ai', aiEmployeeRoutes);
   app.use('/api/v1', jdKpaRoutes);
   app.use('/api/v1/business-units', businessUnitRoutes);
+  app.use('/api/v1/business-mappings', businessMappingRoutes);
   app.use('/api/v1/designations', designationRoutes);
   app.use('/api/v1/job-families', jobFamilyRoutes);
   app.use('/api/v1/job-grades', jobGradeRoutes);
@@ -135,6 +139,8 @@ export function createApp() {
   app.use('/api/v1/department-kpis', departmentKpiRoutes);
   app.use('/api/v1/custom-fields', customFieldRoutes);
   app.use('/api/v1/sub-departments', teamMemberRoutes);
+  app.use('/api/v1/notifications', notificationRoutes);
+  app.use('/api/v1/divisions', divisionRoutes);
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));

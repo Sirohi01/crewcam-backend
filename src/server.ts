@@ -19,6 +19,7 @@ import communicationRoutes from './routes/communicationRoutes';
 import hrAdminRoutes from './routes/hrAdminRoutes';
 import pmsRoutes from './routes/pmsRoutes';
 import hiringRoutes from './routes/hiringRoutes';
+import careerPortalRoutes from './routes/careerPortalRoutes';
 import financeRoutes from './routes/financeRoutes';
 import supportRoutes from './routes/supportRoutes';
 import sessionRoutes from './routes/sessionRoutes';
@@ -52,21 +53,36 @@ const PORT = process.env.PORT || 8000;
 // these must be mounted with express.raw() before the global express.json() below.
 app.use('/api/v1/webhooks', express.raw({ type: '*/*' }), webhookRoutes);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 app.use(helmet());
-const serverCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+const serverCorsOrigins = (
+  process.env.CORS_ORIGIN ||
+  'http://localhost:3000,https://panchkarmaa.in,https://admin.panchkarmaa.in'
+)
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+// app.use(cors({
+//   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+//     if (!origin || serverCorsOrigins.includes(origin)) return callback(null, true);
+//     callback(new Error('Not allowed by CORS'));
+//   },
+//   credentials: true,
+// }));
+
 app.use(cors({
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || serverCorsOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+  origin: (origin, callback) => {
+    if (!origin || serverCorsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
 }));
+
 
 // Basic route
 app.get('/api/health', (req: Request, res: Response) => {
@@ -97,6 +113,7 @@ app.use('/api/v1/communication', communicationRoutes);
 app.use('/api/v1/hr-admin', hrAdminRoutes);
 app.use('/api/v1/pms', pmsRoutes);
 app.use('/api/v1/hiring', hiringRoutes);
+app.use('/api/v1/careers', careerPortalRoutes);
 app.use('/api/v1/finance', financeRoutes);
 app.use('/api/v1/support', supportRoutes);
 app.use('/api/v1/sessions', sessionRoutes);
@@ -114,7 +131,7 @@ app.use('/api/v1/sub-departments', teamMemberRoutes);
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
-// Global Error Handler
+// Global Error Handler (triggered restart)
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Unhandled error:', err);
   const isProduction = process.env.NODE_ENV === 'production';
@@ -124,7 +141,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/CREWCAM';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/crewcam';
 
 mongoose.connect(MONGODB_URI, { maxPoolSize: 20 })
   .then(() => {

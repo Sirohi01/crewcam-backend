@@ -9,6 +9,8 @@ export interface IJoiningConfirmation extends ITenantScoped {
   reportingTo?: string;
   failureToReportDate?: string;
   subject?: string;
+  candidateCode?: string;
+  uniqueId?: string;
 
   candidateId: Types.ObjectId;
   confirmedJoiningDate: Date;
@@ -31,6 +33,8 @@ const joiningConfirmationSchema = new Schema<IJoiningConfirmation>({
   reportingTo: { type: String },
   failureToReportDate: { type: String },
   subject: { type: String },
+  candidateCode: { type: String },
+  uniqueId: { type: String },
 
   candidateId: { type: Schema.Types.ObjectId, ref: 'Candidate', required: true },
   confirmedJoiningDate: { type: Date, required: true },
@@ -43,7 +47,7 @@ const joiningConfirmationSchema = new Schema<IJoiningConfirmation>({
   status: { type: String, enum: ['Pending', 'Sent', 'Confirmed'], default: 'Pending' },
   confirmedByCandidate: { type: Boolean, default: false },
   sentBy: { type: Schema.Types.ObjectId, ref: 'User', required: true }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 joiningConfirmationSchema.plugin(tenantPlugin);
 

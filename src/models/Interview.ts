@@ -28,9 +28,9 @@ export interface IInterview extends Document {
   tenantId: Types.ObjectId;
   candidateId: Types.ObjectId;
   interviewerId: Types.ObjectId;
-  roundType: 'Walk-In' | 'Telephonic' | 'Technical' | 'HR' | 'HR & HOD' | 'Managerial' | 'Final';
-  scheduledDate: Date;
-  status: 'Scheduled' | 'In_Progress' | 'Completed' | 'Cancelled' | 'No_Show';
+  roundType: 'Written' | 'Walk-In' | 'Telephonic' | 'Technical' | 'HR' | 'HR & HOD' | 'Managerial' | 'Final';
+  scheduledDate?: Date;
+  status: 'Pending_Scheduling' | 'Scheduled' | 'In_Progress' | 'Completed' | 'Cancelled' | 'No_Show';
   rating?: number;
   feedback?: string;
   mode?: 'In-person' | 'Phone' | 'Video';
@@ -48,14 +48,14 @@ const interviewSchema = new Schema<IInterview>({
   interviewerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   roundType: {
     type: String,
-    enum: ['Walk-In', 'Telephonic', 'Technical', 'HR', 'HR & HOD', 'Managerial', 'Final'],
+    enum: ['Written', 'Walk-In', 'Telephonic', 'Technical', 'HR', 'HR & HOD', 'Managerial', 'Final'],
     required: true
   },
-  scheduledDate: { type: Date, required: true },
+  scheduledDate: { type: Date },
   status: {
     type: String,
-    enum: ['Scheduled', 'In_Progress', 'Completed', 'Cancelled', 'No_Show'],
-    default: 'Scheduled'
+    enum: ['Pending_Scheduling', 'Scheduled', 'In_Progress', 'Completed', 'Cancelled', 'No_Show'],
+    default: 'Pending_Scheduling'
   },
   rating: { type: Number, min: 1, max: 5 },
   feedback: { type: String },

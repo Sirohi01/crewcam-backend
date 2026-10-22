@@ -30,7 +30,7 @@ export const updateJdLibraryEntry = async (req: AuthRequest, res: Response) => {
     const entry = await JdLibrary.findOneAndUpdate(
       { _id: req.params.id as string, tenantId },
       { ...req.body, updatedBy: req.user!._id },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!entry) return res.status(404).json({ message: 'JD library entry not found' });
     res.status(200).json(entry);
@@ -77,7 +77,7 @@ export const updateKpaLibraryEntry = async (req: AuthRequest, res: Response) => 
     const entry = await KpaLibrary.findOneAndUpdate(
       { _id: req.params.id as string, tenantId },
       { ...req.body, updatedBy: req.user!._id },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!entry) return res.status(404).json({ message: 'KPA library entry not found' });
     res.status(200).json(entry);

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEmployee, deleteEmployee, getCurrentEmployee, getEmployeeById, getEmployees, getExEmployees, updateEmployee } from '../controllers/employeeController';
+import { createEmployee, deleteEmployee, getCurrentEmployee, getEmployeeById, getEmployees, getExEmployees, updateEmployee, getMinimalEmployees } from '../controllers/employeeController';
 import { authenticate } from '../middleware/auth';
 import { tenantResolver } from '../middleware/tenantResolver';
 import { checkPermission } from '../middleware/rbac';
@@ -11,6 +11,7 @@ router.use(tenantResolver);
 router.use(requireFeature('Core HR'));
 
 router.get('/current', getCurrentEmployee);
+router.get('/minimal', getMinimalEmployees);
 router.get('/ex', checkPermission('EMPLOYEE_READ'), getExEmployees);
 router.get('/', checkPermission('EMPLOYEE_READ'), getEmployees);
 router.get('/:id', checkPermission('EMPLOYEE_READ'), getEmployeeById);

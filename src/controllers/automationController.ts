@@ -37,7 +37,7 @@ export const updateAutomationRule = async (req: AuthRequest, res: Response) => {
     if (!AUTOMATION_RULE_TYPES.includes(type as any)) {
       return res.status(400).json({ message: 'Unknown automation rule type' });
     }
-    const rule = await AutomationRule.findOneAndUpdate({ type } as any, parsed.data, { new: true, upsert: true });
+    const rule = await AutomationRule.findOneAndUpdate({ type } as any, parsed.data, { returnDocument: 'after', upsert: true });
     res.status(200).json(rule);
   } catch (error) {
     console.error('Error updating automation rule:', error);

@@ -7,7 +7,7 @@ export interface IDesignation extends ITenantScoped, IAuditable {
   code: string;
   jobGrade?: mongoose.Types.ObjectId;
   jobFamily?: mongoose.Types.ObjectId;
-  businessUnit?: string;
+  businessUnit?: mongoose.Types.ObjectId | string;
   division?: string;
   departmentId?: mongoose.Types.ObjectId;
   department?: string; // Storing string mapping if department model is not strictly linked
@@ -33,7 +33,7 @@ const DesignationSchema = new Schema<IDesignation>({
   code: { type: String, required: true },
   jobGrade: { type: Schema.Types.ObjectId, ref: 'JobGrade' },
   jobFamily: { type: Schema.Types.ObjectId, ref: 'JobFamily' },
-  businessUnit: { type: String },
+  businessUnit: { type: Schema.Types.ObjectId, ref: 'BusinessUnit' },
   division: { type: String },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
   department: { type: String },

@@ -1,13 +1,9 @@
-import mongoose from 'mongoose';
 import { Course } from '../models/Course';
 import { Tenant } from '../models/Tenant';
 import { User } from '../models/User';
-import dotenv from 'dotenv';
-dotenv.config();
 
-const runSeed = async () => {
+export const seedLMS = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crucam');
     
     const tenant = await Tenant.findOne();
     if(!tenant) {
@@ -18,7 +14,7 @@ const runSeed = async () => {
 
     if(!tenant || !adminOrHr) {
       console.log("No tenant or Admin/HR user found");
-      process.exit(1);
+      return;
     }
 
     const course = new Course({
@@ -57,11 +53,8 @@ const runSeed = async () => {
 
     await course.save();
     console.log("Successfully seeded Generative AI Course!");
-    process.exit(0);
   } catch (error) {
-    console.error(error);
-    process.exit(1);
+    console.error('Error seeding LMS:', error);
+    throw error;
   }
 };
-
-runSeed();

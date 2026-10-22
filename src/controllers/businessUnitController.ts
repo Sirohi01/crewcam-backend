@@ -72,7 +72,8 @@ export const getBusinessUnits = async (req: AuthRequest, res: Response) => {
 
     const businessUnits = await BusinessUnit.find({ tenantId })
       .populate('head', 'firstName lastName email')
-      .populate('financialOwner', 'firstName lastName email');
+      .populate('financialOwner', 'firstName lastName email')
+      .lean();
 
     res.status(200).json({ data: businessUnits });
   } catch (error: any) {
@@ -126,7 +127,7 @@ export const updateBusinessUnit = async (req: AuthRequest, res: Response) => {
     const updatedBusinessUnit = await BusinessUnit.findByIdAndUpdate(
       id,
       { $set: req.body },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedBusinessUnit) {

@@ -1,24 +1,17 @@
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-dotenv.config();
-
 import { Tenant } from '../models/Tenant';
 import { ManpowerRequest } from '../models/ManpowerRequest';
 
-async function seed() {
-  await mongoose.connect(process.env.MONGODB_URI as string);
-  console.log('Connected to MongoDB');
-
+export const seedManpower = async () => {
   const tenant = await Tenant.findOne();
   if (!tenant) {
     console.log('No tenant found. Run main seed first.');
-    process.exit(1);
+    return;
   }
 
   const existingCount = await ManpowerRequest.countDocuments({ tenantId: tenant._id });
   if (existingCount > 0) {
     console.log(`Found ${existingCount} existing manpower requests. Skipping seed.`);
-    process.exit(0);
+    return;
   }
 
   console.log('Seeding manpower requests...');
@@ -57,10 +50,4 @@ async function seed() {
   ]);
 
   console.log('Seeded manpower requests.');
-  process.exit(0);
-}
-
-seed().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+};

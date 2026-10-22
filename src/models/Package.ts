@@ -14,6 +14,7 @@ export interface IPackage extends Document, IAuditable {
   maxDesignations: number;
   maxUsers: number;
   features: string[];
+  addOnModules: string[];
   planCode: string;
   planBadge: string;
   displayOrder: number;
@@ -42,6 +43,7 @@ const PackageSchema = new Schema<IPackage>({
   maxDesignations: { type: Number, required: true, default: 10 },
   maxUsers: { type: Number, required: true },
   features: [{ type: String }],
+  addOnModules: [{ type: String }],
   planCode: { type: String, default: '' },
   planBadge: { type: String, default: '' },
   displayOrder: { type: Number, default: 0 },

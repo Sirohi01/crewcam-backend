@@ -11,7 +11,7 @@ export interface IDepartment extends ITenantScoped, IAuditable {
   description?: string;
   isActive: boolean;
   departmentType?: string;
-  businessUnit?: string;
+  businessUnit?: mongoose.Types.ObjectId | string;
   effectiveDate?: Date;
   keyResponsibilities?: string;
   employeeCapacity?: number;
@@ -28,7 +28,7 @@ const DepartmentSchema = new Schema<IDepartment>({
   description: { type: String },
   isActive: { type: Boolean, default: true },
   departmentType: { type: String },
-  businessUnit: { type: String },
+  businessUnit: { type: Schema.Types.ObjectId, ref: 'BusinessUnit' },
   effectiveDate: { type: Date },
   keyResponsibilities: { type: String },
   employeeCapacity: { type: Number },

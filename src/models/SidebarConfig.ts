@@ -6,7 +6,8 @@ export interface ISidebarConfig extends ITenantScoped, IAuditable {
   section: string;
   sectionOrder: number;
   label: string;
-  href: string;
+  href?: string;
+  itemType?: 'SECTION' | 'LINK';
   icon: string;
   order: number;
   parent?: string;
@@ -23,7 +24,8 @@ const SidebarConfigSchema = new Schema<ISidebarConfig>({
   section: { type: String, required: true },
   sectionOrder: { type: Number, required: true, default: 999 },
   label: { type: String, required: true },
-  href: { type: String, required: true },
+  href: { type: String },
+  itemType: { type: String, enum: ['SECTION', 'LINK'], default: 'LINK' },
   icon: { type: String, default: 'Circle' },
   order: { type: Number, required: true, default: 0 },
   parent: { type: String },

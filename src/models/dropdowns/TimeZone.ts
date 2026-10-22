@@ -1,5 +1,5 @@
 ﻿import mongoose, { Schema, Model } from 'mongoose';
-import { auditPlugin, IAuditable } from './plugins/auditPlugin';
+import { auditPlugin, IAuditable } from '../plugins/auditPlugin';
 
 export interface ITimeZone extends IAuditable {
   name: string;
@@ -10,7 +10,7 @@ export interface ITimeZone extends IAuditable {
 }
 
 const timeZoneSchema = new Schema<ITimeZone>({
-  name: { type: String, required: true, trim: true },
+  name: { type: String, required: true, trim: true, unique: true },
   identifier: { type: String, required: true, trim: true },
   offset: { type: String, required: true, trim: true },
   description: { type: String },

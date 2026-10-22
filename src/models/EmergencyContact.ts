@@ -25,6 +25,9 @@ export interface IMedicalInfo {
 export interface IEmergencyContact extends ITenantScoped {
   employeeName?: string;
   empCode?: string;
+  employeeCode?: string;
+  uniqueId?: string;
+  candidateCode?: string;
   designation?: string;
   department?: string;
   dateOfJoining?: string;
@@ -54,6 +57,13 @@ export interface IEmergencyContact extends ITenantScoped {
     name: string;
     status: 'Pending' | 'Submitted' | 'Verified';
   }[];
+  docs?: {
+    aadhaarNominee?: boolean;
+    aadhaarGuardian?: boolean;
+    aadhaarEmployee?: boolean;
+    other?: boolean;
+  };
+  otherDocText?: string;
   hrVerifiedBy?: string;
   hrVerifiedDate?: Date;
   hrRemarks?: string;
@@ -63,6 +73,9 @@ export interface IEmergencyContact extends ITenantScoped {
 const emergencyContactSchema = new Schema<IEmergencyContact>({
   employeeName: { type: String },
   empCode: { type: String },
+  employeeCode: { type: String },
+  uniqueId: { type: String },
+  candidateCode: { type: String },
   designation: { type: String },
   department: { type: String },
   dateOfJoining: { type: String },
@@ -113,12 +126,20 @@ const emergencyContactSchema = new Schema<IEmergencyContact>({
     status: { type: String, enum: ['Pending', 'Submitted', 'Verified'], default: 'Pending' },
   }],
 
+  docs: {
+    aadhaarNominee: { type: Boolean, default: false },
+    aadhaarGuardian: { type: Boolean, default: false },
+    aadhaarEmployee: { type: Boolean, default: false },
+    other: { type: Boolean, default: false },
+  },
+  otherDocText: { type: String },
+
   hrVerifiedBy: { type: String },
   hrVerifiedDate: { type: Date },
   hrRemarks: { type: String },
 
   status: { type: String, enum: ['Pending', 'Submitted', 'Verified'], default: 'Pending' },
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 emergencyContactSchema.plugin(tenantPlugin);
 

@@ -209,7 +209,7 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
           },
         }),
       },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
     await writeAudit('UPDATE_LEAD', req.user?._id, { companyName: lead.companyName, stage: lead.stage });
@@ -243,7 +243,7 @@ export const addLeadNote = async (req: AuthRequest, res: Response) => {
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       { $push: { activityLog: { note: parsed.data.note, ...(req.user?._id && { createdBy: req.user._id }), createdAt: new Date() } } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
     await writeAudit('ADD_LEAD_NOTE', req.user?._id, { companyName: lead.companyName, note: parsed.data.note });
@@ -392,7 +392,7 @@ export const updateLeadMasterData = async (req: AuthRequest, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
     }
-    const entry = await LeadMasterData.findByIdAndUpdate(req.params.id, parsed.data, { new: true });
+    const entry = await LeadMasterData.findByIdAndUpdate(req.params.id, parsed.data, { returnDocument: 'after' });
     if (!entry) return res.status(404).json({ message: 'Entry not found' });
     res.status(200).json(entry);
   } catch (error) {
@@ -594,7 +594,7 @@ export const updateReminderSettings = async (req: AuthRequest, res: Response) =>
     const settings = await LeadReminderSettings.findOneAndUpdate(
       { userId: req.user._id },
       { $set: parsed.data },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
     res.status(200).json(settings);
   } catch (error) {

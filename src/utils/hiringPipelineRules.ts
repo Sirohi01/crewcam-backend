@@ -71,6 +71,7 @@ export const STEP_RULES: StepRule[] = [
   { stepNumber: 22, key: 'probationReview', label: 'Probation Review Form', requires: [{ key: 'teamIntro', status: 'completed' }] },
   { stepNumber: 23, key: 'performanceEval', label: 'Employee Performance Evaluation Sheet', requires: [{ key: 'probationReview', status: 'completed' }] },
   { stepNumber: 24, key: 'idCard', label: 'Visiting Card / ID Card', requires: [{ key: 'appointmentLetter', status: 'completed' }] },
+  { stepNumber: 25, key: 'releaseQA', label: 'Release QA Checks', requires: [{ key: 'idCard', status: 'completed' }] },
 ];
 
 export const STEP_RULE_BY_KEY: Record<string, StepRule> = Object.fromEntries(STEP_RULES.map((r) => [r.key, r]));
