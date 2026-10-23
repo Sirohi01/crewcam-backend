@@ -15,6 +15,7 @@ import { Role, resolveRoleLoginType } from '../models/Role';
 import { buildPasswordResetEmail, sendMail } from '../services/mailer';
 import { notificationService } from '../services/notificationService';
 import { normalizeSubdomain } from '../utils/subdomain';
+import { isDevEnvironment } from '../utils/env';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 30 * 1000;
@@ -72,6 +73,10 @@ const issueSession = async (user: any, req: Request, res: Response, portal: unkn
   res.cookie(cookieNames.token, token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
   res.cookie(cookieNames.refreshToken, refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
 
+  // The access token is only ever set as an httpOnly cookie above — it must never
+  // also go out in the JSON body, or httpOnly buys nothing (XSS / response logging
+  // could just read it from here instead). No caller reads this return value's
+  // token field; it's intentionally not returned.
   return {
     user: {
       id: user._id,
@@ -81,7 +86,6 @@ const issueSession = async (user: any, req: Request, res: Response, portal: unkn
       profilePictureUrl: user.profilePictureUrl,
       tenantId: user.tenantId,
     },
-    token
   };
 };
 
@@ -160,7 +164,7 @@ const isLoginTypeMismatch = async (loginTypeRaw: unknown, user: any): Promise<bo
 const isPortalMismatch = async (portal: unknown, user: any): Promise<boolean> => {
   if (portal !== 'super-admin' && portal !== 'employer') return false;
   const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
-  const isSuperAdmin = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
+  const isSuperAdmin = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN';
   return (portal === 'super-admin' && !isSuperAdmin) || (portal === 'employer' && isSuperAdmin);
 };
 
@@ -231,7 +235,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
-    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
+    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN';
 
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
     if (lifecycleBlock && !isSuperAdminRole) {
@@ -350,18 +354,23 @@ export const sendLoginOtp = async (req: Request, res: Response) => {
     }
 
     if (await isPortalMismatch(req.body.portal, user)) return res.status(403).json({ message: 'User does not have access to this portal.' });
-    // if (await isSubdomainMismatch(req.body.subdomain, user)) return res.status(200).json(genericResponse);
-    // if (await isCorporateIdMismatch(req.body.corporateId, user)) return res.status(200).json(genericResponse);
-    // if (await isLoginTypeMismatch(req.body.loginType, user)) {
-    //   return res.status(403).json(
-    //     req.body.loginType === 'employer'
-    //       ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
-    //       : { message: 'This account is a Company Admin. Please use Employer Login instead.', redirectTo: '/employer-login' }
-    //   );
-    // }
+
+    if (req.body.loginType === 'employer') {
+      if (await isCorporateIdMismatch(req.body.corporateId, user)) {
+        return res.status(400).json({ message: 'Invalid Corporate ID. Please enter the correct Corporate ID registered for your company.' });
+      }
+    }
+
+    if (await isLoginTypeMismatch(req.body.loginType, user)) {
+      return res.status(403).json(
+        req.body.loginType === 'employer'
+          ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
+          : { message: 'This account is a Company Admin. Please use Employer Login with Corporate ID instead.', redirectTo: '/employer-login' }
+      );
+    }
 
     const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
-    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
+    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN';
 
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
     if (lifecycleBlock && !isSuperAdminRole) return res.status(403).json(lifecycleBlock);
@@ -480,22 +489,23 @@ export const verifyLoginOtp = async (req: Request, res: Response) => {
           : { message: 'This account is a Company Admin. Please use the Employer portal instead.' }
       );
     }
-    // if (await isSubdomainMismatch(req.body.subdomain, user)) {
-    //   return res.status(403).json({ message: "This account doesn't belong to this workspace." });
-    // }
-    // if (await isCorporateIdMismatch(req.body.corporateId, user)) {
-    //   return res.status(403).json({ message: 'Invalid Corporate ID.' });
-    // }
-    // if (await isLoginTypeMismatch(req.body.loginType, user)) {
-    //   return res.status(403).json(
-    //     req.body.loginType === 'employer'
-    //       ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
-    //       : { message: 'This account is a Company Admin. Please use Employer Login instead.', redirectTo: '/employer-login' }
-    //   );
-    // }
+
+    if (req.body.loginType === 'employer') {
+      if (await isCorporateIdMismatch(req.body.corporateId, user)) {
+        return res.status(400).json({ message: 'Invalid Corporate ID. Please enter the correct Corporate ID registered for your company.' });
+      }
+    }
+
+    if (await isLoginTypeMismatch(req.body.loginType, user)) {
+      return res.status(403).json(
+        req.body.loginType === 'employer'
+          ? { message: 'This account is not a Company Admin. Please use Employee Login instead.', redirectTo: '/login' }
+          : { message: 'This account is a Company Admin. Please use Employer Login with Corporate ID instead.', redirectTo: '/employer-login' }
+      );
+    }
 
     const role = user.roleId ? await Role.findById(user.roleId).setOptions({ bypassTenantIsolation: true }).lean() : null;
-    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN' || user.email === 'admin@crewcam.app';
+    const isSuperAdminRole = (role && role.permissions?.includes('SUPER_ADMIN')) || user.tenantId === 'SUPER_ADMIN';
 
     const lifecycleBlock = await getLifecycleBlock(user.tenantId);
     if (lifecycleBlock && !isSuperAdminRole) return res.status(403).json(lifecycleBlock);
@@ -614,7 +624,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
     res.status(200).json({
       message: 'If the email exists, a reset link has been sent',
-      resetToken: process.env.NODE_ENV === 'production' ? undefined : resetToken,
+      resetToken: isDevEnvironment() ? resetToken : undefined,
     });
   } catch (error) {
     res.status(500).json({ message: 'Error creating reset token' });

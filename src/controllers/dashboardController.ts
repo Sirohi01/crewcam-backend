@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { User } from '../models/User';
 import { Branch } from '../models/Branch';
-import { Role, resolveRoleScope } from '../models/Role';
+import { Role, resolveRoleScope, resolveRoleLoginType } from '../models/Role';
 import { isWidgetVisible } from '../utils/visibilityFilter';
 import { LeaveRequest } from '../models/LeaveRequest';
 import { Attendance } from '../models/Attendance';
@@ -57,8 +57,25 @@ export const getDashboardConfig = async (req: AuthRequest, res: Response) => {
       .map((w) => w.widgetKey);
 
     const effectivePermissions = await getEffectivePermissions(req);
+    const loginType = resolveRoleLoginType(role);
+    const roleName = (role?.name || '').toLowerCase();
 
-    res.status(200).json({ scope, effectivePermissions, widgets: widgetKeys });
+    // Determine dashboard category
+    let category = 'employee';
+    if (loginType === 'employer' || effectivePermissions.includes('*') || effectivePermissions.includes('SUPER_ADMIN')) {
+      category = 'admin';
+    } else if (
+      roleName.includes('hr') ||
+      roleName.includes('recruiter') ||
+      roleName.includes('talent') ||
+      effectivePermissions.some((p) => p.startsWith('ATS_') || p.includes('HIRING_PROCESS') || p.includes('RECRUITER'))
+    ) {
+      category = 'hr';
+    } else {
+      category = 'employee';
+    }
+
+    res.status(200).json({ scope, category, loginType, effectivePermissions, widgets: widgetKeys });
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching dashboard configuration' });
   }

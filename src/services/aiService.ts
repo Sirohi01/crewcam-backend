@@ -37,26 +37,59 @@ export interface ResolvedAiProvider {
   apiKey: string;
   model: string;
 }
-export const resolveTenantAiProvider = async (tenantId: string): Promise<ResolvedAiProvider | null> => {
+export const resolveAllTenantAiProviders = async (tenantId: string): Promise<ResolvedAiProvider[]> => {
   const tenant = await Tenant.findById(tenantId).select('preferredAiProvider');
   const preferred = tenant?.preferredAiProvider;
 
-  let doc = preferred
-    ? await PlatformAiProvider.findOne({ tenantId, provider: preferred, isActive: true })
-    : await PlatformAiProvider.findOne({ tenantId, isActive: true }).sort({ provider: 1 });
+  // 1. Fetch tenant-specific active providers
+  const tenantDocs = await PlatformAiProvider.find({ tenantId, isActive: true });
+  // 2. Fetch SUPER_ADMIN active providers as platform defaults
+  const superAdminDocs = await PlatformAiProvider.find({ tenantId: 'SUPER_ADMIN', isActive: true }).setOptions({ bypassTenantIsolation: true });
 
-  // Fallback to SUPER_ADMIN configuration
-  if (!doc) {
-    doc = preferred
-      ? await PlatformAiProvider.findOne({ tenantId: 'SUPER_ADMIN', provider: preferred, isActive: true })
-      : await PlatformAiProvider.findOne({ tenantId: 'SUPER_ADMIN', isActive: true }).sort({ provider: 1 });
+  // Merge: tenant docs take precedence over SUPER_ADMIN for the same provider
+  const providerMap = new Map<string, any>();
+  for (const doc of superAdminDocs) {
+    providerMap.set(doc.provider, doc);
+  }
+  for (const doc of tenantDocs) {
+    providerMap.set(doc.provider, doc);
   }
 
-  if (!doc) return null;
-  const apiKey = doc.getDecryptedApiKey();
-  if (!apiKey) return null;
+  const docs = Array.from(providerMap.values());
 
-  return { provider: doc.provider, apiKey, model: doc.modelName };
+  // Sort preferred provider first if configured
+  if (preferred) {
+    docs.sort((a, b) => (a.provider === preferred ? -1 : b.provider === preferred ? 1 : 0));
+  }
+
+  const resolvedList: ResolvedAiProvider[] = [];
+  for (const doc of docs) {
+    let apiKey = doc.getDecryptedApiKey();
+    // Allow .env override if provided (useful for local dev / quick fixes)
+    if (doc.provider === 'OpenAI' && process.env.OPENAI_API_KEY) {
+      apiKey = process.env.OPENAI_API_KEY;
+    } else if (doc.provider === 'Gemini' && process.env.GEMINI_API_KEY) {
+      apiKey = process.env.GEMINI_API_KEY;
+    }
+    if (apiKey) {
+      resolvedList.push({ provider: doc.provider, apiKey, model: doc.modelName });
+    }
+  }
+
+  // If no providers were in DB or OpenAI was missing, inject from .env if available
+  if (process.env.OPENAI_API_KEY && !resolvedList.some(p => p.provider === 'OpenAI')) {
+    resolvedList.push({ provider: 'OpenAI', apiKey: process.env.OPENAI_API_KEY, model: 'gpt-4o-mini' });
+  }
+  if (process.env.GEMINI_API_KEY && !resolvedList.some(p => p.provider === 'Gemini')) {
+    resolvedList.push({ provider: 'Gemini', apiKey: process.env.GEMINI_API_KEY, model: 'gemini-2.5-flash' });
+  }
+
+  return resolvedList;
+};
+
+export const resolveTenantAiProvider = async (tenantId: string): Promise<ResolvedAiProvider | null> => {
+  const providers = await resolveAllTenantAiProviders(tenantId);
+  return providers[0] || null;
 };
 
 const NOT_CONFIGURED_MESSAGE = 'No AI provider is active for this account — contact your administrator.';
@@ -76,6 +109,12 @@ export const stripPii = (text: string): string =>
     .replace(/\b\d{9,18}\b/g, '[account-number]');
 
 const fetchFileBuffer = async (fileUrl: string): Promise<Buffer> => {
+  if (!fileUrl || !fileUrl.startsWith('http')) {
+    throw new AiFeatureError(
+      `Invalid resume URL — must be a public https URL, not "${(fileUrl || '').slice(0, 60)}"`,
+      422,
+    );
+  }
   const response = await fetch(toSignedCloudinaryUrl(fileUrl));
   if (!response.ok) throw new AiFeatureError(`Could not fetch resume file (HTTP ${response.status})`);
   const arrayBuffer = await response.arrayBuffer();
@@ -514,7 +553,7 @@ const CANDIDATE_PROFILE_JSON_SCHEMA: JsonSchemaDef = {
         },
       },
     },
-    required: ['firstName', 'lastName', 'email', 'phone', 'gender', 'dateOfBirth', 'address', 'country', 'state', 'city', 'postalCode', 'candidateType', 'currentOrMostRecentDesignation', 'education', 'technicalSkills', 'employmentHistory'],
+    required: ['firstName', 'lastName', 'email', 'phone', 'gender', 'dateOfBirth', 'address', 'country', 'state', 'city', 'postalCode', 'candidateType', 'totalExperience', 'currentOrMostRecentDesignation', 'education', 'technicalSkills', 'employmentHistory'],
     additionalProperties: false,
   },
 };
@@ -523,8 +562,9 @@ export const extractCandidateProfile = async (
   resumeUrl: string,
   triggeredBy: string,
 ): Promise<CandidateProfileExtraction> => {
-  const resolved = await resolveTenantAiProvider(tenantId);
-  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
+  const providers = await resolveAllTenantAiProviders(tenantId);
+  console.log(`[AI Extraction] Available active providers for tenant ${tenantId}:`, providers.map(p => ({ provider: p.provider, model: p.model, keyLen: p.apiKey?.length })));
+  if (!providers.length) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
 
   let resumeText: string;
   try {
@@ -534,42 +574,60 @@ export const extractCandidateProfile = async (
   }
   if (!resumeText) throw new AiFeatureError('Resume contained no extractable text', 422);
 
-  try {
-    const { raw, promptTokens, completionTokens } = await callAiJson({
-      provider: resolved.provider,
-      apiKey: resolved.apiKey,
-      model: resolved.model,
-      systemPrompt:
-        'You extract structured candidate profile information from a resume, to auto-fill a job application ' +
-        'form. Only use information explicitly present in the resume text; leave a field as an empty string ' +
-        '(or empty array) if it is not stated — never invent or guess personal details.',
-      userPrompt: `Resume text:\n${resumeText.slice(0, MAX_RESUME_CHARS)}`,
-      jsonSchema: CANDIDATE_PROFILE_JSON_SCHEMA,
-    });
-    const result = JSON.parse(raw) as CandidateProfileExtraction;
+  const providerErrors: Array<{ provider: string; error: string }> = [];
 
-    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
-    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
-    await AiUsageLog.create({
-      tenantId, feature: 'candidate-profile-extraction', aiModel: resolved.model,
-      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
-      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
-      createdBy: triggeredBy, updatedBy: triggeredBy,
-    } as any);
-    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+  for (let i = 0; i < providers.length; i++) {
+    const provider = providers[i];
+    console.log(`[AI Extraction] Attempting provider ${i + 1}/${providers.length}: ${provider.provider} (${provider.model})`);
+    try {
+      const { raw, promptTokens, completionTokens } = await callAiJson({
+        provider: provider.provider,
+        apiKey: provider.apiKey,
+        model: provider.model,
+        systemPrompt:
+          'You extract structured candidate profile information from a resume, to auto-fill a job application ' +
+          'form. Only use information explicitly present in the resume text; leave a field as an empty string ' +
+          '(or empty array) if it is not stated — never invent or guess personal details.',
+        userPrompt: `Resume text:\n${resumeText.slice(0, MAX_RESUME_CHARS)}`,
+        jsonSchema: CANDIDATE_PROFILE_JSON_SCHEMA,
+      });
+      const result = JSON.parse(raw) as CandidateProfileExtraction;
 
-    return result;
-  } catch (err: any) {
-    await AiUsageLog.create({
-      tenantId, feature: 'candidate-profile-extraction', status: 'FAILURE',
-      metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
-    } as any);
-    if (err instanceof AiFeatureError) throw err;
-    if (isQuotaError(err.message)) {
-      throw new AiFeatureError(`${describeQuotaError(err.message)} Please fill the form in manually for now.`, 429);
+      const pricing = MODEL_PRICING[provider.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+      const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+      await AiUsageLog.create({
+        tenantId, feature: 'candidate-profile-extraction', aiModel: provider.model,
+        promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+        costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+        createdBy: triggeredBy, updatedBy: triggeredBy,
+      } as any);
+      await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+
+      return result;
+    } catch (err: any) {
+      console.warn(`[AI Provider ${provider.provider} (${provider.model}) failed]:`, err.message);
+      providerErrors.push({ provider: provider.provider, error: err.message });
+      await AiUsageLog.create({
+        tenantId, feature: 'candidate-profile-extraction', status: 'FAILURE',
+        aiModel: provider.model,
+        metadata: { error: err.message, provider: provider.provider },
+        createdBy: triggeredBy, updatedBy: triggeredBy,
+      } as any);
+
+      // If there are other configured providers to try, continue
+      if (i < providers.length - 1) {
+        continue;
+      }
     }
-    throw new AiFeatureError('AI resume extraction failed', 502);
   }
+
+  const lastErr = providerErrors[providerErrors.length - 1]?.error || 'unknown error';
+  const errorSummary = providerErrors.map(e => `[${e.provider}: ${e.error}]`).join(' | ');
+
+  if (isQuotaError(lastErr)) {
+    throw new AiFeatureError(`${describeQuotaError(lastErr)} (Providers tried: ${errorSummary})`, 429);
+  }
+  throw new AiFeatureError(`AI resume extraction failed across all providers: ${errorSummary}`, 502);
 };
 
 interface InterviewQuestionsResult {

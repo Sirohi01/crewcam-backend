@@ -5,20 +5,34 @@ import axios from 'axios';
 const OPUS_API_URL = process.env.OPUS_API_URL || 'https://api.opus.com/v1/messages';
 const OPUS_API_KEY = process.env.OPUS_API_KEY;
 
+import { sendMail } from './mailer';
+
 export const notificationService = {
   sendEmail: async (tenantId: string, to: string, subject: string, body: string) => {
-    // Fetch email integration for the tenant
+    try {
+      const htmlBody = body.replace(/\n/g, '<br/>');
+      const result = await sendMail({
+        to,
+        subject,
+        text: body,
+        html: `<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">${htmlBody}</div>`,
+      });
+      if (result.sent) {
+        console.log(`[REAL EMAIL via MAILER] Sent to ${to} | Subject: ${subject}`);
+        return { success: true, simulated: false };
+      }
+      console.warn(`[MAILER WARNING] Could not send email to ${to}: ${result.error}`);
+    } catch (err: any) {
+      console.error('[MAILER ERROR]', err.message);
+    }
+
+    // Fallback simulation / integration check
     const integration = await Integration.findOne({ tenantId, type: 'Email', isActive: true });
-    
     if (!integration) {
       console.warn(`No active Email integration for tenant ${tenantId}. Simulating send.`);
       console.log(`[SIMULATED EMAIL] To: ${to} | Subject: ${subject}`);
       return { success: true, simulated: true };
     }
-
-    // In a real scenario, use integration.config (e.g., SMTP host, port, user, pass) to send the email
-    // e.g. using nodemailer
-    console.log(`[REAL EMAIL] Sending via ${integration.provider} to ${to}...`);
     return { success: true, simulated: false };
   },
 

@@ -250,12 +250,23 @@ export const getMySidebar = async (req: AuthRequest, res: Response) => {
       allowedSections: tenantData.allowedSections,
     };
     const visible = items.filter((item) => isVisible(item, ctx));
+    const loginType = resolveRoleLoginType(role);
+    const roleScope = resolveRoleScope(role);
 
-    res.status(200).json({ 
-      items: visible, 
-      roleScope: resolveRoleScope(role),
-      loginType: resolveRoleLoginType(role as any)
-    });
+    // If the user's role is employee, ensure company admin sections are not accessible/visible
+    const ADMIN_EXCLUSIVE_SECTIONS = new Set([
+      'Organization Setup',
+      'Company Setup',
+      'Sidebar Section',
+      'Admin Section',
+      'Admin UI',
+    ]);
+
+    const filteredVisible = loginType === 'employer'
+      ? visible
+      : visible.filter((item: any) => !ADMIN_EXCLUSIVE_SECTIONS.has(item.section));
+
+    res.status(200).json({ items: filteredVisible, roleScope, loginType });
   } catch (error: any) {
     console.error('getMySidebar error:', error);
     res.status(500).json({ message: 'Error fetching sidebar' });

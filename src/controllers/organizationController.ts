@@ -245,6 +245,8 @@ export const createDepartment = async (req: AuthRequest, res: Response) => {
     if (req.body.reportingToId && !mongoose.Types.ObjectId.isValid(req.body.reportingToId)) delete req.body.reportingToId;
     if (req.body.hodEmployeeId === '') delete req.body.hodEmployeeId;
     if (req.body.reportingToId === '') delete req.body.reportingToId;
+    if (req.body.businessUnit && !mongoose.Types.ObjectId.isValid(req.body.businessUnit)) delete req.body.businessUnit;
+    if (req.body.businessUnit === '') delete req.body.businessUnit;
     
     const department = new Department({
       ...req.body,
@@ -263,11 +265,13 @@ export const updateDepartment = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);
     const resolvedBranchId = await ensureBranch(tenantId, req.body.branchId);
-    const { name, code, description, isActive, departmentType, businessUnit, effectiveDate, keyResponsibilities, employeeCapacity, workingDays, defaultShift } = req.body;
+    const { name, code, description, isActive, departmentType, effectiveDate, keyResponsibilities, employeeCapacity, workingDays, defaultShift } = req.body;
     let hodEmployeeId = req.body.hodEmployeeId;
     if (!hodEmployeeId || (hodEmployeeId && !mongoose.Types.ObjectId.isValid(hodEmployeeId))) hodEmployeeId = null;
     let reportingToId = req.body.reportingToId;
     if (!reportingToId || (reportingToId && !mongoose.Types.ObjectId.isValid(reportingToId))) reportingToId = null;
+    let businessUnit = req.body.businessUnit;
+    if (!businessUnit || (businessUnit && !mongoose.Types.ObjectId.isValid(businessUnit))) businessUnit = null;
 
     const department = await Department.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,

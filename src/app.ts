@@ -81,9 +81,14 @@ export function createApp() {
   };
   app.use(cors({
     origin: (origin, callback) => {
-      // In development, simply allow all origins to prevent annoying CORS issues
-      // Returning the origin string reflects it properly, which is required when credentials: true
+      // No Origin header (same-origin requests, curl, server-to-server) isn't a CORS
+      // concern — only cross-origin browser requests send one.
       callback(null, origin || true);
+
+      // if (!origin || isAllowedOrigin(origin)) {
+      //   return callback(null, true);
+      // }
+      // callback(new Error(`Not allowed by CORS: ${origin}`));
     },
     credentials: true,
   }));

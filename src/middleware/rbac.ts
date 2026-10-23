@@ -35,8 +35,8 @@ export const getEffectivePermissions = async (req: AuthRequest): Promise<string[
 export const checkPermission = (requiredPermission: string) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      // Hardcoded Super Admin bypass matching authController.ts logic
-      if (req.user?.tenantId === 'SUPER_ADMIN' || req.user?.email === 'admin@crewcam.app') {
+      // Super Admin bypass matching authController.ts's isSuperAdminRole logic.
+      if (req.user?.tenantId === 'SUPER_ADMIN') {
         return next();
       }
 

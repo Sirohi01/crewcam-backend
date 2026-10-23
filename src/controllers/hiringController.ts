@@ -433,7 +433,13 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const interview = await Interview.create({ ...req.body, tenantId });
+    const isPendingScheduling = !req.body.scheduledDate;
+    
+    const interview = await Interview.create({ 
+      ...req.body, 
+      tenantId,
+      status: isPendingScheduling ? 'Pending_Scheduling' : 'Scheduled' 
+    });
 
     // Automatically move candidate to Interviewing status if not already
     const candidate = await Candidate.findOneAndUpdate(
@@ -446,31 +452,59 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
 
     // Send notifications
     if (candidate) {
-      const interviewer = await User.findById(req.body.interviewerId);
-      const candidateName = `${candidate.firstName} ${candidate.lastName}`;
-      const interviewerName = interviewer ? `${interviewer.firstName} ${interviewer.lastName}` : 'an interviewer';
-      const scheduledDateStr = new Date(req.body.scheduledDate).toLocaleString();
+      try {
+        const interviewer = await User.findById(req.body.interviewerId).setOptions({ bypassTenantIsolation: true });
+        const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+        const interviewerName = interviewer ? `${interviewer.firstName} ${interviewer.lastName}` : 'an interviewer';
+        
+        if (isPendingScheduling) {
+          // Send a link to the candidate so they can pick a slot
+          const schedulingLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/candidate/schedule-interview/${(interview as any)._id}`;
+          const emailBody = `Dear ${candidateName},\n\nYou have been shortlisted for a ${req.body.roundType} interview with ${interviewerName}!\n\nPlease select an available time slot for your interview using the following link:\n${schedulingLink}\n\nBest regards,\nHR Team`;
+          
+          if (candidate.email) {
+            await notificationService.sendEmail(String(tenantId), candidate.email, 'Action Required: Schedule Your Interview', emailBody);
+          }
+        } else {
+          // Direct scheduling
+          const scheduledDateStr = new Date(req.body.scheduledDate).toLocaleString('en-IN', {
+            dateStyle: 'full',
+            timeStyle: 'short',
+          });
+          const jobRole = candidate.jobRole || 'Job Role';
+          const round = req.body.roundType || 'Interview';
+          const mode = req.body.mode || 'In-person';
+          const locationOrLink = req.body.location || req.body.meetingLink || 'Details will be shared shortly';
+          const locationDetail = req.body.location ? `\nLocation / Venue: ${req.body.location}` : '';
+          const meetingDetail = req.body.meetingLink ? `\nMeeting Link: ${req.body.meetingLink}` : '';
 
-      const emailBody = `Dear ${candidateName},\n\nYour interview has been scheduled on ${scheduledDateStr} with ${interviewerName}.\n\nBest regards,\nHR Team`;
-      const whatsappBody = `Hi ${candidateName}, your interview is scheduled on ${scheduledDateStr} with ${interviewerName}.`;
+          // Candidate Email & WhatsApp
+          const emailBody = `Dear ${candidateName},\n\nYour ${round} interview for the position of "${jobRole}" has been scheduled.\n\nDate & Time: ${scheduledDateStr}\nInterviewer: ${interviewerName}\nMode: ${mode}${locationDetail}${meetingDetail}\n\nPlease be available 5 minutes prior to the scheduled time.\n\nBest regards,\nHR Team`;
+          const whatsappBody = `Dear ${candidateName}, your ${round} interview for "${jobRole}" with ${interviewerName} is scheduled on ${scheduledDateStr}.\nMode: ${mode}\nVenue/Link: ${locationOrLink}\n\n- HR Team`;
 
-      if (candidate.email) {
-        await notificationService.sendEmail(String(tenantId), candidate.email, 'Interview Scheduled', emailBody);
-      }
-      if (candidate.phone) {
-        await notificationService.sendWhatsApp(String(tenantId), candidate.phone, whatsappBody);
-      }
+          if (candidate.email) {
+            await notificationService.sendEmail(String(tenantId), candidate.email, `Interview Scheduled: ${jobRole} (${round})`, emailBody);
+          }
+          if (candidate.phone) {
+            await notificationService.sendWhatsApp(String(tenantId), candidate.phone, whatsappBody);
+          }
 
-      if (interviewer) {
-        const interviewerEmailBody = `Dear ${interviewerName},\n\nYou have an interview scheduled with ${candidateName} on ${scheduledDateStr}.\n\nBest regards,\nHR Team`;
-        const interviewerWhatsAppBody = `Hi ${interviewerName}, you have an interview scheduled with ${candidateName} on ${scheduledDateStr}.`;
+          // Interviewer Email & WhatsApp
+          if (interviewer) {
+            const interviewerPhone = (interviewer as any).mobileNumber || (interviewer as any).phone;
+            const interviewerEmailBody = `Dear ${interviewerName},\n\nYou have an upcoming ${round} interview scheduled with candidate ${candidateName} for the position of "${jobRole}".\n\nDate & Time: ${scheduledDateStr}\nMode: ${mode}${locationDetail}${meetingDetail}\nCandidate Contact: ${candidate.phone || candidate.email || 'N/A'}\n\nBest regards,\nHR Team`;
+            const interviewerWhatsAppBody = `Dear ${interviewerName}, you have a ${round} interview with ${candidateName} for "${jobRole}" on ${scheduledDateStr}.\nMode: ${mode}\nVenue/Link: ${locationOrLink}\n\n- HR Team`;
 
-        if (interviewer.email) {
-          await notificationService.sendEmail(String(tenantId), interviewer.email, 'Interview Scheduled', interviewerEmailBody);
+            if (interviewer.email) {
+              await notificationService.sendEmail(String(tenantId), interviewer.email, `Upcoming Interview: ${candidateName} - ${jobRole} (${round})`, interviewerEmailBody);
+            }
+            if (interviewerPhone) {
+              await notificationService.sendWhatsApp(String(tenantId), interviewerPhone, interviewerWhatsAppBody);
+            }
+          }
         }
-        if ((interviewer as any).phone) {
-          await notificationService.sendWhatsApp(String(tenantId), (interviewer as any).phone, interviewerWhatsAppBody);
-        }
+      } catch (notifyErr: any) {
+        console.error('[Schedule Interview Notification Error]:', notifyErr.message);
       }
     }
 

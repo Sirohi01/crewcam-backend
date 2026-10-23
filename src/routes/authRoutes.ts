@@ -19,6 +19,7 @@ router.post('/logout', logout);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 
+router.post('/2fa/setup', authenticate, setup2FA);
 router.post('/2fa/enable', authenticate, verifyAndEnable2FA);
 router.post('/2fa/disable', authenticate, disable2FA);
 
