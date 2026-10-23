@@ -488,14 +488,14 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       try {
         const interviewer = await User.findById(req.body.interviewerId).setOptions({ bypassTenantIsolation: true });
         const candidateName = `${candidate.firstName} ${candidate.lastName}`;
-        const interviewerName = interviewer ? `${intervn\nYou have been shortlisted for a ${req.body.roundType} interview with ${interviewerName}!\n\nPlease select an available time slot for your interview using the following link:\n${schedulingLink}\n\nBest regards,\nHR Team`;
-          
-          if (candidate.email) {iewer.firstName} ${interviewer.lastName}` : 'an interviewer';
+        const interviewerName = interviewer ? `${interviewer.firstName} ${interviewer.lastName}` : 'an interviewer';
         
         if (isPendingScheduling) {
           // Send a link to the candidate so they can pick a slot
           const schedulingLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/candidate/schedule-interview/${(interview as any)._id}`;
-          const emailBody = `Dear ${candidateName},\
+          const emailBody = `Dear ${candidateName},\n\nYou have been shortlisted for a ${req.body.roundType} interview with ${interviewerName}!\n\nPlease select an available time slot for your interview using the following link:\n${schedulingLink}\n\nBest regards,\nHR Team`;
+          
+          if (candidate.email) {
             await notificationService.sendEmail(String(tenantId), candidate.email, 'Action Required: Schedule Your Interview', emailBody);
           }
         } else {
