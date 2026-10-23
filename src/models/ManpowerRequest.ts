@@ -1,4 +1,8 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import './Designation';
+import './Department';
+import './Branch';
+import './User';
 
 export interface IManpowerRequest extends Document {
   tenantId: Types.ObjectId;
@@ -7,6 +11,7 @@ export interface IManpowerRequest extends Document {
   requestDate?: Date;
   locationBranchId?: Types.ObjectId;
   designation?: string;
+  designationId?: Types.ObjectId;
   workLocation?: string;
   reportingTo?: Types.ObjectId;
   employmentTypes?: string[];
@@ -71,6 +76,7 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   requestDate: { type: Date },
   locationBranchId: { type: Schema.Types.ObjectId, ref: 'Branch' },
   designation: { type: String },
+  designationId: { type: Schema.Types.ObjectId, ref: 'Designation' },
   workLocation: { type: String },
   reportingTo: { type: Schema.Types.ObjectId, ref: 'User' },
   employmentTypes: [{ type: String }],
@@ -127,7 +133,8 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   hrHeadSignature: { type: String },
   pdfUrl: { type: String }
 }, {
-  timestamps: true
+  timestamps: true,
+  strictPopulate: false
 });
 
 import { tenantPlugin } from './plugins/tenantPlugin';

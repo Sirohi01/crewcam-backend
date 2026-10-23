@@ -32,7 +32,7 @@ export const getEffectivePermissions = async (req: AuthRequest): Promise<string[
   return Array.from(effective);
 };
 
-export const checkPermission = (requiredPermission: string) => {
+export const checkPermission = (requiredPermission: string | string[]) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       // Hardcoded Super Admin bypass matching authController.ts logic
@@ -56,11 +56,12 @@ export const checkPermission = (requiredPermission: string) => {
         return next();
       }
 
-      if (permissions.includes(requiredPermission)) {
+      const requiredList = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+      if (requiredList.some((p) => permissions.includes(p))) {
         return next();
       }
 
-      return res.status(403).json({ message: `Access denied: Requires ${requiredPermission} permission` });
+      return res.status(403).json({ message: `Access denied: Requires permission` });
     } catch (error: any) {
       console.error('RBAC Error:', error);
       res.status(500).json({ message: 'Internal server error during permission check' });

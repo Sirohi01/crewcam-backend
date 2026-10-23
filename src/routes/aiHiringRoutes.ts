@@ -10,7 +10,7 @@ import { requireFeature } from '../middleware/featureGate';
 import { requireAiCredits } from '../middleware/aiCreditGate';
 import { aiScreeningLimiter, aiGenerationLimiter, aiInterviewRecordingLimiter } from '../middleware/rateLimiter';
 import { triggerResumeScreening, getResumeScreenings, getResumeScreeningQueue, triggerExtractResumeProfile } from '../controllers/aiHiringController';
-import { triggerGenerateJdAndKra, triggerGenerateInterviewQuestions, triggerGenerateAnswer } from '../controllers/aiManpowerController';
+import { triggerGenerateJdAndKra, triggerGenerateInterviewQuestions, triggerGenerateAnswer, triggerEvaluateTextAnswers } from '../controllers/aiManpowerController';
 import { startInterviewSession, uploadAndAnalyzeAnswer, endInterviewSession } from '../controllers/interviewRecordingController';
 
 const hasCloudinaryConfig = Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
@@ -104,6 +104,14 @@ router.post(
   requireAiCredits,
   aiGenerationLimiter,
   triggerGenerateAnswer,
+);
+router.post(
+  '/hiring/interviews/:id/evaluate-text',
+  requireFeature('ai-hiring'),
+  checkPermission('ATS_WRITE'),
+  requireAiCredits,
+  aiGenerationLimiter,
+  triggerEvaluateTextAnswers,
 );
 router.post(
   '/hiring/interviews/:id/start',
