@@ -5,9 +5,44 @@ import { WhiteLabel } from '../models/WhiteLabel';
 import { Integration } from '../models/Integration';
 import { PlatformAiProvider } from '../models/PlatformAiProvider';
 import { Tenant } from '../models/Tenant';
+import { Branch } from '../models/Branch';
+import { Department } from '../models/Department';
+import { Designation } from '../models/Designation';
 import { normalizeSubdomain } from '../utils/subdomain';
 
 const ACTIVE_LIFECYCLE_STATUSES = ['ACTIVE', 'LIVE'];
+
+// ORGANIZATION SETUP STATUS
+// A brand-new company has no org structure yet, so the sidebar hides every other section
+// until this comes back `completed: true` (see DynamicSidebar.tsx). "Complete" is defined
+// as the minimum structure every other module (attendance, hiring, payroll) assumes exists:
+// at least one branch, one department and one designation. No manual "finish setup" step —
+// this just reflects whether that data exists yet.
+export const getOrganizationSetupStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const [branchCount, departmentCount, designationCount] = await Promise.all([
+      Branch.countDocuments({ tenantId }),
+      Department.countDocuments({ tenantId }),
+      Designation.countDocuments({ tenantId }),
+    ]);
+
+    const checklist = {
+      branch: branchCount > 0,
+      department: departmentCount > 0,
+      designation: designationCount > 0,
+    };
+
+    res.status(200).json({
+      completed: Object.values(checklist).every(Boolean),
+      checklist,
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error checking organization setup status', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
 
 // SESSIONS
 export const getActiveSessions = async (req: AuthRequest, res: Response) => {

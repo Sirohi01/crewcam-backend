@@ -11,7 +11,8 @@ import {
   getIntegrations,
   configureIntegration,
   getTenantAiProviderOptions,
-  setTenantAiProvider
+  setTenantAiProvider,
+  getOrganizationSetupStatus
 } from '../controllers/settingsController';
 
 const router = Router();
@@ -26,6 +27,9 @@ router.use(tenantResolver);
 // Sessions
 router.get('/sessions', getActiveSessions);
 router.delete('/sessions/:sessionId', revokeSession);
+
+// Organization setup — has this tenant created a branch/department/designation yet?
+router.get('/organization-setup-status', getOrganizationSetupStatus);
 
 // Whitelabel
 router.get('/whitelabel', getWhitelabel);

@@ -40,6 +40,25 @@ const requireTenantId = (req: AuthRequest) => {
 
 const normalizeId = (value: any) => value ? value.toString() : '';
 
+// Several optional reference fields (reportingToId, assistantCoHeadId, budgetOwnerId, ...)
+// follow the same rule: keep a valid ObjectId, otherwise treat as "not set" rather than
+// letting an empty string or a stale id reach Mongoose and fail validation.
+const normalizeOptionalObjectId = (value: any): string | null => {
+  if (!value || !mongoose.Types.ObjectId.isValid(value)) return null;
+  return value;
+};
+
+const DEPARTMENT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Department codes aren't a hard unique index (see the model), so both create and update
+// check for an existing active department with the same code for this tenant here.
+const assertUniqueDepartmentCode = async (tenantId: string, code: string, excludeId?: string) => {
+  const query: any = { tenantId, isActive: true, code: { $regex: `^${code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } };
+  if (excludeId) query._id = { $ne: excludeId };
+  const existing = await Department.findOne(query);
+  if (existing) throw new Error(`Department code "${code}" is already in use`);
+};
+
 const ensureBranch = async (tenantId: string, branchId: string) => {
   if (!branchId || !mongoose.Types.ObjectId.isValid(branchId)) {
     let firstBranch = await Branch.findOne({ tenantId, isActive: true } as any);
@@ -229,6 +248,10 @@ export const getDepartmentById = async (req: AuthRequest, res: Response) => {
     const department = await Department.findOne({ _id: id, tenantId, isActive: true } as any)
       .populate('branchId')
       .populate('hodEmployeeId', 'firstName lastName email')
+      .populate('reportingToId', 'firstName lastName email')
+      .populate('assistantCoHeadId', 'firstName lastName email')
+      .populate('budgetOwnerId', 'firstName lastName email')
+      .populate('businessUnit', 'name code')
       .lean();
     if (!department) return res.status(404).json({ message: 'Department not found' });
     res.status(200).json({ data: department });
@@ -241,56 +264,77 @@ export const createDepartment = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);
     await checkPackageLimit(tenantId, 'departments');
+
+    const name = String(req.body.name || '').trim();
+    const code = String(req.body.code || '').trim().toUpperCase();
+    if (!name) throw new Error('Department name is required');
+    if (!code) throw new Error('Department code is required');
+    if (req.body.departmentEmail && !DEPARTMENT_EMAIL_RE.test(req.body.departmentEmail)) {
+      throw new Error('Department email is not a valid email address');
+    }
+    await assertUniqueDepartmentCode(tenantId, code);
+
     const resolvedBranchId = await ensureBranch(tenantId, req.body.branchId);
-    
-    if (req.body.hodEmployeeId && !mongoose.Types.ObjectId.isValid(req.body.hodEmployeeId)) delete req.body.hodEmployeeId;
-    if (req.body.reportingToId && !mongoose.Types.ObjectId.isValid(req.body.reportingToId)) delete req.body.reportingToId;
-    if (req.body.hodEmployeeId === '') delete req.body.hodEmployeeId;
-    if (req.body.reportingToId === '') delete req.body.reportingToId;
-    if (req.body.businessUnit && !mongoose.Types.ObjectId.isValid(req.body.businessUnit)) delete req.body.businessUnit;
-    if (req.body.businessUnit === '') delete req.body.businessUnit;
-    
+    const businessUnit = req.body.businessUnit && mongoose.Types.ObjectId.isValid(req.body.businessUnit) ? req.body.businessUnit : null;
+
     const department = new Department({
       ...req.body,
+      name,
+      code,
       branchId: resolvedBranchId,
+      businessUnit,
+      hodEmployeeId: normalizeOptionalObjectId(req.body.hodEmployeeId),
+      reportingToId: normalizeOptionalObjectId(req.body.reportingToId),
+      assistantCoHeadId: normalizeOptionalObjectId(req.body.assistantCoHeadId),
+      budgetOwnerId: normalizeOptionalObjectId(req.body.budgetOwnerId),
       tenantId,
       createdBy: req.user?._id
     });
     await department.save();
     res.status(201).json({ message: 'Department created successfully', data: department });
   } catch (error: any) {
-    res.status(400).json({ message: process.env.NODE_ENV === 'production' ? 'Invalid request' : error.message });
+    res.status(400).json({ message: process.env.NODE_ENV === 'production' && !error.message?.startsWith('Department') ? 'Invalid request' : error.message });
   }
 };
 
 export const updateDepartment = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = requireTenantId(req);
+
+    const name = String(req.body.name || '').trim();
+    const code = String(req.body.code || '').trim().toUpperCase();
+    if (!name) throw new Error('Department name is required');
+    if (!code) throw new Error('Department code is required');
+    if (req.body.departmentEmail && !DEPARTMENT_EMAIL_RE.test(req.body.departmentEmail)) {
+      throw new Error('Department email is not a valid email address');
+    }
+    await assertUniqueDepartmentCode(tenantId, code, String(req.params.id));
+
     const resolvedBranchId = await ensureBranch(tenantId, req.body.branchId);
-    const { name, code, description, isActive, departmentType, effectiveDate, keyResponsibilities, employeeCapacity, workingDays, defaultShift } = req.body;
-    let hodEmployeeId = req.body.hodEmployeeId;
-    if (!hodEmployeeId || (hodEmployeeId && !mongoose.Types.ObjectId.isValid(hodEmployeeId))) hodEmployeeId = null;
-    let reportingToId = req.body.reportingToId;
-    if (!reportingToId || (reportingToId && !mongoose.Types.ObjectId.isValid(reportingToId))) reportingToId = null;
-    let businessUnit = req.body.businessUnit;
-    if (!businessUnit || (businessUnit && !mongoose.Types.ObjectId.isValid(businessUnit))) businessUnit = null;
+    const {
+      description, isActive, departmentType, effectiveDate, keyResponsibilities, employeeCapacity,
+      workingDays, defaultShift, costCenter, probationPeriodMonths, departmentEmail, departmentKeywords, documents,
+    } = req.body;
+    const businessUnit = req.body.businessUnit && mongoose.Types.ObjectId.isValid(req.body.businessUnit) ? req.body.businessUnit : null;
 
     const department = await Department.findOneAndUpdate(
       { _id: req.params.id, tenantId } as any,
-      { $set: { 
-          name, code, branchId: resolvedBranchId, description, isActive, 
+      { $set: {
+          name, code, branchId: resolvedBranchId, description, isActive,
           departmentType, businessUnit, effectiveDate, keyResponsibilities, employeeCapacity,
-          workingDays, defaultShift,
-          updatedBy: req.user?._id, 
-          ...(hodEmployeeId !== undefined && { hodEmployeeId }),
-          ...(reportingToId !== undefined && { reportingToId })
+          workingDays, defaultShift, costCenter, probationPeriodMonths, departmentEmail, departmentKeywords, documents,
+          hodEmployeeId: normalizeOptionalObjectId(req.body.hodEmployeeId),
+          reportingToId: normalizeOptionalObjectId(req.body.reportingToId),
+          assistantCoHeadId: normalizeOptionalObjectId(req.body.assistantCoHeadId),
+          budgetOwnerId: normalizeOptionalObjectId(req.body.budgetOwnerId),
+          updatedBy: req.user?._id,
       } },
       { returnDocument: 'after', runValidators: true }
     );
     if (!department) return res.status(404).json({ message: 'Department not found' });
     res.status(200).json({ message: 'Department updated successfully', data: department });
   } catch (error: any) {
-    res.status(400).json({ message: process.env.NODE_ENV === 'production' ? 'Invalid request' : error.message });
+    res.status(400).json({ message: process.env.NODE_ENV === 'production' && !error.message?.startsWith('Department') ? 'Invalid request' : error.message });
   }
 };
 
