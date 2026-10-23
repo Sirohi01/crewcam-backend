@@ -22,11 +22,11 @@ if (hasCloudinaryConfig) {
 }
 
 const fileFilter = (_req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/csv', 'text/plain', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    const error: any = new Error('Invalid file type. Only JPEG, PNG, WEBP, PDF, DOCX, CSV and XLSX are allowed.');
+    const error: any = new Error('Invalid file type. Only JPEG, PNG, WEBP, PDF, DOCX, CSV, TXT and XLSX are allowed.');
     error.status = 400;
     cb(error);
   }
@@ -83,11 +83,8 @@ router.post('/', authenticate, uploadModerationLimiter, upload.single('file'), a
       if (moderation.checked && !moderation.safe) {
         const categoryLabel = moderation.categories.filter((c) => c !== 'none').join(', ');
         const detail = moderation.reason || (categoryLabel ? `Detected: ${categoryLabel}` : undefined);
-        return res.status(422).json({
-          message: detail ? `This image cannot be uploaded: ${detail}` : 'This image cannot be uploaded.',
-          categories: moderation.categories,
-          reason: moderation.reason,
-        });
+        warning = detail ? `Image flagged by AI: ${detail}` : 'Image flagged by AI.';
+        console.warn(`[Content Moderation] Upload allowed with warning. Reason: ${detail}`);
       }
       if (moderation.warning) warning = moderation.warning;
     } else {

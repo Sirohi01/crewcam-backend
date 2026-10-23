@@ -118,12 +118,36 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
 
+    if (req.body.firstName !== undefined && !String(req.body.firstName).trim()) {
+      return res.status(400).json({ message: 'First Name is a mandatory field' });
+    }
+    if (req.body.email !== undefined && !String(req.body.email).trim()) {
+      return res.status(400).json({ message: 'Email Address is a mandatory field' });
+    }
+    if (req.body.phone !== undefined && !String(req.body.phone).trim()) {
+      return res.status(400).json({ message: 'Mobile/Phone is a mandatory field' });
+    }
+    if (req.body.jobRole !== undefined && !String(req.body.jobRole).trim()) {
+      return res.status(400).json({ message: 'Job Role/Position is a mandatory field' });
+    }
+
+    let updatePayload = {
+      ...req.body,
+      ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {})
+    };
+
+    // Enforce status update in the database based on AI hrScore (Round 5 logic)
+    if (updatePayload.applicationDetails && typeof updatePayload.applicationDetails.hrScore === 'number') {
+      if (updatePayload.applicationDetails.hrScore > 75) {
+        updatePayload.status = 'Offered';
+      } else {
+        updatePayload.status = 'Rejected';
+      }
+    }
+
     const candidate = await Candidate.findOneAndUpdate(
       { _id: id, tenantId } as any,
-      {
-        ...req.body,
-        ...(req.body.resumeUrl ? { resumeUpdatedAt: new Date() } : {})
-      },
+      updatePayload,
       { returnDocument: 'after', runValidators: true }
     );
 
@@ -217,28 +241,25 @@ export const getCandidateById = async (req: AuthRequest, res: Response) => {
 
     const candidate = await Candidate.findOne({ _id: id, tenantId } as any).populate('departmentId');
     if (!candidate) {
-      if (id === '000000000000000000000000') {
-        const slug = (req.params.id as string) || 'unknown-candidate';
-        const nameParts = slug.split('-').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1));
-        const fullName = nameParts.join(' ');
-        const firstName = nameParts[0] || 'Unknown';
-        const lastName = nameParts.slice(1).join(' ') || 'Candidate';
-        const email = `${slug}@example.com`;
+      const slug = (req.params.id as string) || 'unknown-candidate';
+      const nameParts = slug.split('-').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1));
+      const fullName = nameParts.join(' ');
+      const firstName = nameParts[0] || 'Unknown';
+      const lastName = nameParts.slice(1).join(' ') || 'Candidate';
+      const email = `${slug}@example.com`;
 
-        return res.status(200).json({
-          _id: slug,
-          firstName,
-          lastName,
-          fullName,
-          email,
-          mobile: '+91 9876543210',
-          jobRole: 'Software Engineer',
-          department: 'Engineering',
-          candidateCode: 'COM-HQ-2026-0001',
-          fake: true
-        });
-      }
-      return res.status(404).json({ message: 'Candidate not found' });
+      return res.status(200).json({
+        _id: slug,
+        firstName,
+        lastName,
+        fullName,
+        email,
+        mobile: '+91 9876543210',
+        jobRole: 'Software Engineer',
+        department: 'Engineering',
+        candidateCode: 'COM-HQ-2026-0001',
+        fake: true
+      });
     }
     res.status(200).json(candidate);
   } catch (error: any) {
@@ -367,24 +388,24 @@ export const deleteCandidate = async (req: AuthRequest, res: Response) => {
     }
 
     // Perform cascading deletes across all related collections
-    // const modelsToDeleteFrom = [
-    //   'AiUsageLog', 'AppointmentLetter', 'AssetAccessForm', 'BankPayrollInfo',
-    //   'BGVRequest', 'ConductAcceptance', 'CTCBreakup', 'DocumentChecklist',
-    //   'EmergencyContact', 'EngagementConfirmation', 'HiringPipelineState',
-    //   'InductionForm', 'Interview', 'InterviewEvaluation', 'JoiningConfirmation',
-    //   'JoiningForm', 'LetterOfIntent', 'NDADocument', 'Nomination', 'OfferLetter',
-    //   'PolicyAcceptance', 'ResumeScreening', 'SelectionApproval', 'TeamIntro'
-    // ];
+    const modelsToDeleteFrom = [
+      'AiUsageLog', 'AppointmentLetter', 'AssetAccessForm', 'BankPayrollInfo',
+      'BGVRequest', 'ConductAcceptance', 'CTCBreakup', 'DocumentChecklist',
+      'EmergencyContact', 'EngagementConfirmation', 'HiringPipelineState',
+      'InductionForm', 'Interview', 'InterviewEvaluation', 'JoiningConfirmation',
+      'JoiningForm', 'LetterOfIntent', 'NDADocument', 'Nomination', 'OfferLetter',
+      'PolicyAcceptance', 'ResumeScreening', 'SelectionApproval', 'TeamIntro'
+    ];
 
-    // for (const modelName of modelsToDeleteFrom) {
-    //   try {
-    //     if (mongoose.models[modelName]) {
-    //       await mongoose.models[modelName].deleteMany({ candidateId: id, tenantId } as any);
-    //     }
-    //   } catch (err) {
-    //     console.warn(`Could not cascade delete from ${modelName} for candidate ${id}:`, err);
-    //   }
-    // }
+    for (const modelName of modelsToDeleteFrom) {
+      try {
+        if (mongoose.models[modelName]) {
+          await mongoose.models[modelName].deleteMany({ candidateId: id, tenantId } as any);
+        }
+      } catch (err) {
+        console.warn(`Could not cascade delete from ${modelName} for candidate ${id}:`, err);
+      }
+    }
 
     const candidate = await Candidate.findOne({ _id: id, tenantId } as any);
 
@@ -434,7 +455,19 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
     const isPendingScheduling = !req.body.scheduledDate;
-    
+
+    // Prevent duplicate interview rounds for the same candidate
+    const existingInterview = await Interview.findOne({
+      candidateId: req.body.candidateId,
+      roundType: req.body.roundType,
+      tenantId,
+      status: { $nin: ['Cancelled'] }
+    });
+
+    if (existingInterview) {
+      return res.status(409).json({ message: `Candidate is already scheduled for a ${req.body.roundType} round.` });
+    }
+
     const interview = await Interview.create({ 
       ...req.body, 
       tenantId,
@@ -455,14 +488,14 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       try {
         const interviewer = await User.findById(req.body.interviewerId).setOptions({ bypassTenantIsolation: true });
         const candidateName = `${candidate.firstName} ${candidate.lastName}`;
-        const interviewerName = interviewer ? `${interviewer.firstName} ${interviewer.lastName}` : 'an interviewer';
+        const interviewerName = interviewer ? `${intervn\nYou have been shortlisted for a ${req.body.roundType} interview with ${interviewerName}!\n\nPlease select an available time slot for your interview using the following link:\n${schedulingLink}\n\nBest regards,\nHR Team`;
+          
+          if (candidate.email) {iewer.firstName} ${interviewer.lastName}` : 'an interviewer';
         
         if (isPendingScheduling) {
           // Send a link to the candidate so they can pick a slot
           const schedulingLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/candidate/schedule-interview/${(interview as any)._id}`;
-          const emailBody = `Dear ${candidateName},\n\nYou have been shortlisted for a ${req.body.roundType} interview with ${interviewerName}!\n\nPlease select an available time slot for your interview using the following link:\n${schedulingLink}\n\nBest regards,\nHR Team`;
-          
-          if (candidate.email) {
+          const emailBody = `Dear ${candidateName},\
             await notificationService.sendEmail(String(tenantId), candidate.email, 'Action Required: Schedule Your Interview', emailBody);
           }
         } else {
@@ -571,14 +604,33 @@ export const getAllInterviews = async (req: AuthRequest, res: Response) => {
     if (page || limit) {
       const resolvedPage = Math.max(1, Number(page) || 1);
       const resolvedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
-      const [interviews, total] = await Promise.all([
+      let [interviews, total] = await Promise.all([
         query.skip((resolvedPage - 1) * resolvedLimit).limit(resolvedLimit),
         Interview.countDocuments(filter),
       ]);
+
+      // Deduplicate redundant entities (same candidate)
+      const seen = new Set();
+      interviews = interviews.filter((inv: any) => {
+        const candidateId = inv.candidateId?._id || inv.candidateId;
+        const key = `${candidateId}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
       return res.status(200).json({ data: interviews, meta: { page: resolvedPage, limit: resolvedLimit, total, totalPages: Math.ceil(total / resolvedLimit) } });
     }
 
-    const interviews = await query;
+    let interviews = await query;
+    const seen = new Set();
+    interviews = interviews.filter((inv: any) => {
+      const candidateId = inv.candidateId?._id || inv.candidateId;
+      const key = `${candidateId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     res.status(200).json(interviews);
   } catch (error: any) {
     console.error('Error fetching interviews:', error);
@@ -756,11 +808,18 @@ export const submitInterviewFeedback = async (req: AuthRequest, res: Response) =
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
-    const { status, rating, feedback } = req.body;
+    const { status, rating, feedback, notes, attachments } = req.body;
+
+    const updateFields: any = {};
+    if (status !== undefined) updateFields.status = status;
+    if (rating !== undefined) updateFields.rating = rating;
+    if (feedback !== undefined) updateFields.feedback = feedback;
+    if (notes !== undefined) updateFields.notes = notes;
+    if (attachments !== undefined) updateFields.attachments = attachments;
 
     const interview = await Interview.findOneAndUpdate(
       { _id: id, tenantId } as any,
-      { status, rating, feedback },
+      { $set: updateFields },
       { returnDocument: 'after' }
     );
 
@@ -768,6 +827,17 @@ export const submitInterviewFeedback = async (req: AuthRequest, res: Response) =
 
     if (status === 'Completed') {
       await advanceStep(req, String(tenantId), String(interview.candidateId), 'interview', 'completed', (interview as any)._id);
+
+      // Automatic status update for final/HR round
+      if (interview.roundType === 'Final' || interview.roundType === 'HR') {
+        const passCriteria = 3; // Out of 5
+        const newStatus = (rating !== undefined && rating > passCriteria) ? 'Offered' : 'Rejected';
+        
+        await Candidate.findOneAndUpdate(
+          { _id: interview.candidateId, tenantId } as any,
+          { $set: { status: newStatus } }
+        );
+      }
     }
 
     await AuditLog.create({

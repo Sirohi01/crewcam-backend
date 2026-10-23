@@ -131,7 +131,7 @@ app.use('/api/v1/sub-departments', teamMemberRoutes);
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
-// Global Error Handler
+// Global Error Handler (triggered restart)
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Unhandled error:', err);
   const isProduction = process.env.NODE_ENV === 'production';

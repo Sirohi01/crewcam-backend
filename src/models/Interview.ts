@@ -13,6 +13,7 @@ export interface IInterviewQuestion {
   recordingPublicId?: string;
   transcript?: string;
   answerAnalysis?: IAnswerAnalysis;
+  manualOverride?: 'strong' | 'adequate' | 'weak';
   answeredAt?: Date;
 }
 
@@ -29,8 +30,8 @@ export interface IInterview extends Document {
   candidateId: Types.ObjectId;
   interviewerId: Types.ObjectId;
   roundType: 'Written' | 'Walk-In' | 'Telephonic' | 'Technical' | 'HR' | 'HR & HOD' | 'Managerial' | 'Final';
-  scheduledDate: Date;
-  status: 'Scheduled' | 'In_Progress' | 'Completed' | 'Cancelled' | 'No_Show';
+  scheduledDate?: Date;
+  status: 'Pending_Scheduling' | 'Scheduled' | 'In_Progress' | 'Completed' | 'Cancelled' | 'No_Show';
   rating?: number;
   feedback?: string;
   mode?: 'In-person' | 'Phone' | 'Video';
@@ -40,6 +41,8 @@ export interface IInterview extends Document {
   overallAnalysis?: IOverallAnalysis;
   recordingSessionStartedAt?: Date;
   recordingSessionEndedAt?: Date;
+  notes?: string;
+  attachments?: { name: string, url: string }[];
 }
 
 const interviewSchema = new Schema<IInterview>({
@@ -51,11 +54,11 @@ const interviewSchema = new Schema<IInterview>({
     enum: ['Written', 'Walk-In', 'Telephonic', 'Technical', 'HR', 'HR & HOD', 'Managerial', 'Final'],
     required: true
   },
-  scheduledDate: { type: Date, required: true },
+  scheduledDate: { type: Date },
   status: {
     type: String,
-    enum: ['Scheduled', 'In_Progress', 'Completed', 'Cancelled', 'No_Show'],
-    default: 'Scheduled'
+    enum: ['Pending_Scheduling', 'Scheduled', 'In_Progress', 'Completed', 'Cancelled', 'No_Show'],
+    default: 'Pending_Scheduling'
   },
   rating: { type: Number, min: 1, max: 5 },
   feedback: { type: String },
@@ -73,6 +76,7 @@ const interviewSchema = new Schema<IInterview>({
       reasoning: { type: String },
       followUpSuggestion: { type: String },
     },
+    manualOverride: { type: String, enum: ['strong', 'adequate', 'weak'] },
     answeredAt: { type: Date },
   }],
   overallAnalysis: {
@@ -84,6 +88,11 @@ const interviewSchema = new Schema<IInterview>({
   },
   recordingSessionStartedAt: { type: Date },
   recordingSessionEndedAt: { type: Date },
+  notes: { type: String },
+  attachments: [{
+    name: { type: String },
+    url: { type: String }
+  }]
 }, {
   timestamps: true
 });
