@@ -199,7 +199,7 @@ export const getManpowerRequestStats = async (req: AuthRequest, res: Response) =
 export const getManpowerRequestById = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id as string)) {
       return res.status(400).json({ message: 'Invalid manpower request ID' });
     }
     const request = await ManpowerRequest.findOne({ _id: req.params.id, tenantId } as any)

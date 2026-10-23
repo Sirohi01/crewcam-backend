@@ -133,8 +133,7 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   hrHeadSignature: { type: String },
   pdfUrl: { type: String }
 }, {
-  timestamps: true,
-  strictPopulate: false
+  timestamps: true
 });
 
 import { tenantPlugin } from './plugins/tenantPlugin';
