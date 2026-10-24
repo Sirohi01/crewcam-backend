@@ -11,9 +11,12 @@ export interface IJobGrade extends ITenantScoped, IAuditable {
   jobFamily?: mongoose.Types.ObjectId;
   parentGrade?: mongoose.Types.ObjectId;
   payRange?: string;
+  payRangeMin?: string;
+  payRangeMax?: string;
   ctcRangeMin?: string;
   ctcRangeMax?: string;
   probationPeriod?: string;
+  remarks?: string;
 }
 
 const JobGradeSchema = new Schema<IJobGrade>({
@@ -25,9 +28,12 @@ const JobGradeSchema = new Schema<IJobGrade>({
   jobFamily: { type: Schema.Types.ObjectId, ref: 'JobFamily' },
   parentGrade: { type: Schema.Types.ObjectId, ref: 'JobGrade' },
   payRange: { type: String },
+  payRangeMin: { type: String },
+  payRangeMax: { type: String },
   ctcRangeMin: { type: String },
   ctcRangeMax: { type: String },
   probationPeriod: { type: String },
+  remarks: { type: String },
 }, { timestamps: true });
 
 JobGradeSchema.plugin(tenantPlugin);

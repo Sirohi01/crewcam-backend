@@ -5,6 +5,7 @@ import { auditPlugin, IAuditable } from './plugins/auditPlugin';
 export interface IDepartmentDocument {
   name: string;
   url: string;
+  size?: number;
   uploadedAt: Date;
 }
 
@@ -56,6 +57,7 @@ const DepartmentSchema = new Schema<IDepartment>({
   documents: [{
     name: { type: String, required: true },
     url: { type: String, required: true },
+    size: { type: Number },
     uploadedAt: { type: Date, default: Date.now },
   }],
 }, { timestamps: true });

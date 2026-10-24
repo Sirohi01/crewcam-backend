@@ -38,6 +38,13 @@ const passwordSchema = z.string()
 const refreshExpiry = () => new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
 const resetExpiry = () => new Date(Date.now() + 1000 * 60 * 30);
 
+// Must mirror signAccessToken's '1d' and refreshExpiry's 30-day window. Without an
+// explicit maxAge, these became session cookies the browser can drop on its own
+// schedule (tab/browser close, "clear on exit" settings) — far sooner and less
+// predictably than the token itself actually expires, which read as random logouts.
+const ACCESS_TOKEN_COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24;
+const REFRESH_TOKEN_COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
+
 // crewcam-frontend (employer/employee portal) and crewcam-superadmin both talk to this same
 // backend origin in local dev (and could share a parent domain in prod) — giving each portal
 // its own cookie names means logging out of one can never touch the other's session, instead
@@ -70,8 +77,8 @@ const issueSession = async (user: any, req: Request, res: Response, portal: unkn
 
   const isProduction = process.env.NODE_ENV === 'production';
   const cookieNames = sessionCookieNames(portal);
-  res.cookie(cookieNames.token, token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
-  res.cookie(cookieNames.refreshToken, refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+  res.cookie(cookieNames.token, token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/', maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_MS });
+  res.cookie(cookieNames.refreshToken, refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/', maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_MS });
 
   // The access token is only ever set as an httpOnly cookie above — it must never
   // also go out in the JSON body, or httpOnly buys nothing (XSS / response logging
@@ -572,8 +579,8 @@ export const refreshToken = async (req: Request, res: Response) => {
     );
 
     const isProduction = process.env.NODE_ENV === 'production';
-    res.cookie(cookieNames.token, signAccessToken(user), { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
-    res.cookie(cookieNames.refreshToken, nextRefreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/' });
+    res.cookie(cookieNames.token, signAccessToken(user), { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/', maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_MS });
+    res.cookie(cookieNames.refreshToken, nextRefreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/', maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_MS });
 
     res.status(200).json({ message: 'Token refreshed successfully' });
   } catch (error) {

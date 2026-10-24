@@ -1,17 +1,53 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { ManpowerRequest } from '../models/ManpowerRequest';
+import { Candidate } from '../models/Candidate';
+import { Tenant } from '../models/Tenant';
+import { normalizeSubdomain } from '../utils/subdomain';
+import { storeBuffer } from '../utils/fileStorage';
+import { apiLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
+const resumeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (allowed.includes(file.mimetype)) return cb(null, true);
+    const error: any = new Error('Resume must be a PDF or Word document.');
+    error.status = 400;
+    cb(error);
+  },
+});
+
+const ACTIVE_LIFECYCLE_STATUSES = ['ACTIVE', 'LIVE'];
+
+// Every public careers endpoint resolves to one tenant's own postings, the same way
+// getPublicWhitelabel (settingsController.ts) resolves branding — by subdomain, requiring
+// the tenant to be active. Without this, /jobs had no tenant filter at all and mixed every
+// tenant's approved, Career-Portal-published jobs into one global list.
+const resolvePublicTenantId = async (subdomainParam: unknown): Promise<string | null> => {
+  const subdomain = normalizeSubdomain(subdomainParam as string | undefined);
+  if (!subdomain) return null;
+  const tenant = await Tenant.findOne({ subdomain, isActive: true }).select('lifecycleStatus').lean();
+  if (!tenant || !ACTIVE_LIFECYCLE_STATUSES.includes(tenant.lifecycleStatus)) return null;
+  return String(tenant._id);
+};
+
 /**
- * GET /api/careers/jobs
- * Public API to fetch published jobs for the Career Portal.
+ * GET /api/v1/careers/jobs?subdomain=<tenant-subdomain>
+ * Public API to fetch one company's published jobs for its own careers page.
  */
 router.get('/jobs', async (req: Request, res: Response) => {
   try {
-    const { search, location } = req.query;
+    const { search, location, subdomain } = req.query;
+
+    const tenantId = await resolvePublicTenantId(subdomain);
+    if (!tenantId) return res.status(404).json({ message: 'Company not found' });
 
     const filter: any = {
+      tenantId,
       publishChannels: 'Career Portal', // Must have 'Career Portal' selected
       status: 'Approved' // Only show approved jobs
     };
@@ -31,7 +67,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
     let results = jobs;
     if (location && String(location).trim()) {
       const locTerm = String(location).trim().toLowerCase();
-      results = results.filter((job: any) => 
+      results = results.filter((job: any) =>
         job.workLocation?.toLowerCase().includes(locTerm) ||
         job.locationBranchId?.name?.toLowerCase().includes(locTerm) ||
         job.locationBranchId?.city?.toLowerCase().includes(locTerm)
@@ -42,6 +78,97 @@ router.get('/jobs', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching career portal jobs:', error);
     res.status(500).json({ message: 'Error fetching jobs' });
+  }
+});
+
+/**
+ * GET /api/v1/careers/jobs/:id?subdomain=<tenant-subdomain>
+ * Public API for one job's full detail, for a company's careers page.
+ */
+router.get('/jobs/:id', async (req: Request, res: Response) => {
+  try {
+    const tenantId = await resolvePublicTenantId(req.query.subdomain);
+    if (!tenantId) return res.status(404).json({ message: 'Company not found' });
+
+    if (!String(req.params.id).match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    const job = await ManpowerRequest.findOne({
+      _id: req.params.id,
+      tenantId,
+      publishChannels: 'Career Portal',
+      status: 'Approved',
+    })
+      .populate('departmentId', 'name')
+      .populate('locationBranchId', 'name city state')
+      .lean();
+
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+    res.status(200).json({ data: job });
+  } catch (error: any) {
+    console.error('Error fetching career portal job:', error);
+    res.status(500).json({ message: 'Error fetching job' });
+  }
+});
+
+/**
+ * POST /api/v1/careers/jobs/:id/apply
+ * Public application submission for one of a company's own published jobs. The job's own
+ * tenantId is the only source of truth for which tenant the resulting candidate belongs to
+ * — unlike /bharat-organic/apply, this never falls back to a freshly-minted ObjectId, so an
+ * application can't land in no tenant's pipeline.
+ */
+router.post('/jobs/:id/apply', apiLimiter, resumeUpload.single('resume'), async (req: Request, res: Response) => {
+  try {
+    if (!String(req.params.id).match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    const job = await ManpowerRequest.findOne({
+      _id: req.params.id,
+      publishChannels: 'Career Portal',
+      status: 'Approved',
+    }).lean();
+    if (!job) return res.status(404).json({ message: 'Job not found or no longer accepting applications' });
+
+    const { firstName, lastName, email, phone, currentCTC, expectedCTC, totalExperience, currentLocation, linkedin } = req.body;
+    if (!firstName || !lastName || !email || !phone) {
+      return res.status(400).json({ message: 'First name, last name, email and phone are required' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'A resume (PDF or Word document) is required' });
+    }
+
+    const resumeUrl = await storeBuffer(req.file.buffer, req.file.originalname, req.file.mimetype, req, 'crewcam_resumes');
+
+    const candidate = await Candidate.create({
+      tenantId: job.tenantId,
+      firstName,
+      lastName,
+      email,
+      phone,
+      jobRole: job.jobTitle,
+      departmentId: job.departmentId,
+      resumeUrl,
+      resumeUpdatedAt: new Date(),
+      source: 'Career Portal',
+      status: 'Applied',
+      applicationDetails: {
+        currentCTC: currentCTC || '',
+        expectedCTC: expectedCTC || '',
+        totalExperience: totalExperience || '',
+        currentLocation: currentLocation || '',
+        linkedin: linkedin || '',
+        appliedVia: 'Career Portal',
+        jobId: String(job._id),
+      },
+    });
+
+    res.status(201).json({ message: 'Application submitted successfully', candidateId: candidate._id });
+  } catch (error: any) {
+    console.error('Error submitting career portal application:', error);
+    res.status(500).json({ message: error.status === 400 ? error.message : 'Error submitting application' });
   }
 });
 

@@ -30,7 +30,6 @@ export const syncSidebarDefaults = async (tenantId: string) => {
   // already renamed it, or it was freshly upserted), the old-labeled row is just a
   // leftover — delete it instead of renaming into a collision.
   const LABEL_RENAMES: Array<{ section: string; from: string; to: string }> = [
-    { section: 'Hiring Process', from: 'Step 1 - Manpower Requests', to: 'Job Requisition' },
     { section: 'Hiring Process', from: 'Interview Round', to: 'Interview Round - 3' },
     { section: 'Hiring Process', from: 'Written Assessment', to: 'Interview Round - 4' },
   ];
@@ -45,6 +44,40 @@ export const syncSidebarDefaults = async (tenantId: string) => {
     } else {
       await SidebarConfig.updateOne({ _id: legacyItem._id, tenantId } as any, { label: rename.to });
       legacyItem.label = rename.to;
+    }
+  }
+
+  // Purge any legacy requirement items or manpower requests from "Hiring Process"
+  await SidebarConfig.deleteMany({
+    tenantId,
+    section: 'Hiring Process',
+    label: { $in: ['Career', 'Recruiter Dashboard', 'Job Requisition', 'Post New Job', 'Step 1 - Manpower Requests', 'Step 1 - Manpower Request'] }
+  } as any);
+
+  // Remove purged items from in-memory existing list
+  for (let i = existing.length - 1; i >= 0; i--) {
+    if (existing[i].section === 'Hiring Process' && ['Career', 'Recruiter Dashboard', 'Job Requisition', 'Post New Job', 'Step 1 - Manpower Requests'].includes(existing[i].label)) {
+      existing.splice(i, 1);
+    }
+  }
+
+  // Migrate Requirement items from "Hiring Process" to "Requirement"
+  const REQUIREMENT_MIGRATION_LABELS = ['Career', 'Recruiter Dashboard', 'Job Requisition', 'Post New Job'];
+  for (const label of REQUIREMENT_MIGRATION_LABELS) {
+    const hiringItem = existing.find((i) => i.section === 'Hiring Process' && i.label === label);
+    if (!hiringItem) continue;
+    const reqItem = existing.find((i) => i.section === 'Requirement' && i.label === label);
+    if (reqItem) {
+      await SidebarConfig.deleteOne({ _id: hiringItem._id, tenantId } as any);
+      const idx = existing.indexOf(hiringItem);
+      if (idx !== -1) existing.splice(idx, 1);
+    } else {
+      await SidebarConfig.updateOne(
+        { _id: hiringItem._id, tenantId } as any,
+        { section: 'Requirement', sectionOrder: SECTION_ORDER['Requirement'] ?? 4 }
+      );
+      hiringItem.section = 'Requirement';
+      hiringItem.sectionOrder = SECTION_ORDER['Requirement'] ?? 4;
     }
   }
 
@@ -147,17 +180,7 @@ export const syncSidebarDefaults = async (tenantId: string) => {
     { section: 'Admin Section', label: 'Add JD' }, // replaced by Company Setup > Master Data > JD Library
     { section: 'Admin Section', label: 'Add KRA' }, // replaced by Company Setup > Master Data > KPA Library
     { section: 'Hiring Process', label: 'Add New Interview' }, // merged into single "Interviews" page (add + list combined)
-    { section: 'Hiring Process', label: 'Interview Process' },
-    { section: 'Hiring Process', label: 'Interview Round - 1' },
-    { section: 'Hiring Process', label: 'Interview Round - 2' },
-    { section: 'Hiring Process', label: 'Interview Round - 3' },
-    { section: 'Hiring Process', label: 'Interview Round - 4' },
-    { section: 'Hiring Process', label: 'Interview Round - 5' },
-    { section: 'Hiring Process', label: 'Review and Edit' },
-    { section: 'Hiring Process', label: 'Submit Application' },
-    { section: 'Hiring Process', label: 'AI Screening Evaluation' },
-    { section: 'Hiring Process', label: 'HOD Evaluation' },
-    { section: 'Hiring Process', label: 'Application Submitted' },
+    { section: 'Hiring Process', label: 'Add Candidate' }, // legacy label for the same page now seeded as "Candidate" — was showing as a duplicate row
     { section: 'Hiring Process', label: 'Interview List' }, // renamed to "Interviews" (same page, now add + list combined)
     { section: 'Company Setup' }, // entirely replaced by Organization Setup
     { section: 'Support & Operations', label: 'Asset Management' }, // duplicate of Company Setup > Master Data > Company Assets (same /dashboard/support/assets page)

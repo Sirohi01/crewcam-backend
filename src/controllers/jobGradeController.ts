@@ -4,7 +4,7 @@ import { JobGrade } from '../models/JobGrade';
 export const createJobGrade = async (req: Request, res: Response) => {
   try {
     const tenantId = (req as any).user.tenantId;
-    const { name, code, description, level, isActive, jobFamily, parentGrade, payRange, ctcRangeMin, ctcRangeMax, probationPeriod } = req.body;
+    const { name, code, description, level, isActive, jobFamily, parentGrade, payRange, payRangeMin, payRangeMax, ctcRangeMin, ctcRangeMax, probationPeriod, remarks } = req.body;
 
     const existing = await JobGrade.findOne({ tenantId, code });
     if (existing) {
@@ -21,9 +21,12 @@ export const createJobGrade = async (req: Request, res: Response) => {
       ...(jobFamily && { jobFamily }),
       ...(parentGrade && { parentGrade }),
       payRange,
+      payRangeMin,
+      payRangeMax,
       ctcRangeMin,
       ctcRangeMax,
-      probationPeriod
+      probationPeriod,
+      remarks
     });
 
     await jobGrade.save();

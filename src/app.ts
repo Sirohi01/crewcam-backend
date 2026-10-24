@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import authRoutes from './routes/authRoutes';
 import companyRoutes from './routes/companyRoutes';
+import careerPortalRoutes from './routes/careerPortalRoutes';
 import superAdminRoutes from './routes/superAdminRoutes';
 import masterDataRoutes from './routes/masterDataRoutes';
 import employeeRoutes from './routes/employeeRoutes';
@@ -123,6 +124,7 @@ export function createApp() {
   app.use('/api/v1/hr-admin', hrAdminRoutes);
   app.use('/api/v1/pms', pmsRoutes);
   app.use('/api/v1/hiring', hiringRoutes);
+  app.use('/api/v1/careers', careerPortalRoutes);
   app.use('/api/v1/finance', financeRoutes);
   app.use('/api/v1/support', supportRoutes);
   app.use('/api/v1/sessions', sessionRoutes);
