@@ -56,14 +56,20 @@ IntegrationSchema.methods.getDecryptedCredentials = function (): Record<string, 
   return decrypted;
 };
 
+// Only credential fields that look like secrets (password/secret/token/key-shaped names,
+// e.g. "apiKey", "authToken") get masked. Non-secret config (baseUrl, jobsPath, webhookUrl,
+// ...) is returned as-is so an admin reopening a saved connection sees what's actually
+// configured instead of every field looking blank/wiped.
+const SENSITIVE_CREDENTIAL_KEY = /password|secret|token|key/i;
+
 IntegrationSchema.methods.getMaskedCredentials = function (): Record<string, string> {
   const masked: Record<string, string> = {};
   const creds: any = this.credentials;
   if (creds) {
-    if (creds instanceof Map) {
-      creds.forEach((_value: string, key: string) => { masked[key] = '********'; });
-    } else {
-      Object.entries(creds).forEach(([key]) => { masked[key] = '********'; });
+    const decrypted = this.getDecryptedCredentials();
+    const keys = creds instanceof Map ? Array.from(creds.keys()) : Object.keys(creds);
+    for (const key of keys as string[]) {
+      masked[key] = SENSITIVE_CREDENTIAL_KEY.test(key) ? '********' : decrypted[key];
     }
   }
   return masked;

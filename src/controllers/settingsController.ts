@@ -174,6 +174,70 @@ export const configureIntegration = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Error configuring integration', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
 };
+
+// Providers like Slack/WhatsApp/Stripe only ever make sense as one connection per tenant, so
+// configureIntegration above (PUT /integrations, no id) stays a singleton upsert-by-provider for
+// them — unchanged behavior. "career-site" is the one provider a tenant can reasonably have more
+// than one of (a company with several websites, each with its own careers page); these three
+// endpoints manage that as an explicit list of integration documents instead of a single upsert.
+
+/** POST /integrations — always creates a new connection rather than upserting one by provider,
+ * so a tenant can add a second (third, ...) "career-site" connection for another of its websites. */
+export const createIntegration = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const tenantId = (req.tenantId || req.user.tenantId) as any;
+    const { provider, credentials, isActive } = req.body;
+    if (!provider) return res.status(400).json({ message: 'provider is required' });
+
+    const integration = await Integration.create({ tenantId, provider, credentials, isActive: isActive !== false });
+    const obj = integration.toObject();
+    obj.credentials = integration.getMaskedCredentials();
+
+    res.status(201).json({ message: 'Integration created successfully', integration: obj });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error creating integration', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
+
+/** PUT /integrations/:id — updates one specific connection by its own id, for editing one of
+ * several connected sites without touching the others. */
+export const updateIntegrationById = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const tenantId = (req.tenantId || req.user.tenantId) as any;
+    const { credentials, isActive } = req.body;
+
+    const integration = await Integration.findOne({ _id: req.params.id, tenantId });
+    if (!integration) return res.status(404).json({ message: 'Integration not found' });
+
+    if (credentials) integration.credentials = { ...integration.getDecryptedCredentials(), ...credentials } as any;
+    if (isActive !== undefined) integration.isActive = isActive;
+    await integration.save();
+
+    const obj = integration.toObject();
+    obj.credentials = integration.getMaskedCredentials();
+
+    res.status(200).json({ message: 'Integration updated successfully', integration: obj });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating integration', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
+
+/** DELETE /integrations/:id — removes one specific connected site. */
+export const deleteIntegrationById = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const tenantId = (req.tenantId || req.user.tenantId) as any;
+
+    const result = await Integration.deleteOne({ _id: req.params.id, tenantId } as any);
+    if (!result.deletedCount) return res.status(404).json({ message: 'Integration not found' });
+
+    res.status(200).json({ message: 'Integration deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error deleting integration', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
 export const getTenantAiProviderOptions = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });

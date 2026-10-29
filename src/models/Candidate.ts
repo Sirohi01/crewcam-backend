@@ -19,6 +19,13 @@ export interface ICandidate extends Document {
   comments?: string;
   profileImageUrl?: string;
   applicationDetails?: Record<string, unknown>;
+  // Set when this candidate was pulled in from a tenant's own career site (see
+  // careerSiteSync.service.ts syncCareerSiteApplicants) rather than entered manually —
+  // externalApplicationId is that site's own application _id, used to upsert idempotently;
+  // sourceSite distinguishes which configured website it came from when a tenant has more than one.
+  externalApplicationId?: string;
+  externalJobId?: string;
+  sourceSite?: string;
 }
 
 const candidateSchema = new Schema<ICandidate>({
@@ -45,9 +52,14 @@ const candidateSchema = new Schema<ICandidate>({
   comments: { type: String }
   , profileImageUrl: { type: String }
   , applicationDetails: { type: Schema.Types.Mixed }
+  , externalApplicationId: { type: String, index: true }
+  , externalJobId: { type: String }
+  , sourceSite: { type: String }
 }, {
   timestamps: true
 });
+
+candidateSchema.index({ tenantId: 1, externalApplicationId: 1 }, { unique: true, sparse: true });
 
 import { tenantPlugin } from './plugins/tenantPlugin';
 candidateSchema.plugin(tenantPlugin);

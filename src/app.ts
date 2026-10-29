@@ -46,6 +46,7 @@ import customFieldRoutes from './routes/customFieldRoutes';
 import teamMemberRoutes from './routes/teamMemberRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import divisionRoutes from './routes/divisionRoutes';
+import testPublishRoutes from './routes/testPublishRoutes';
 
 export function createApp() {
   const app = express();
@@ -136,6 +137,11 @@ export function createApp() {
   app.use('/api/v1/locations', locationRoutes);
   app.use('/api/v1/ai', aiHiringRoutes);
   app.use('/api/v1/ai', aiEmployeeRoutes);
+  // Deliberately unauthenticated (self-called by publishService.ts with no token, same as
+  // careerPortalRoutes) — must be registered before the bare '/api/v1' mount below, whose
+  // router applies `router.use(authenticate)` with no path restriction and would otherwise
+  // 401 every /api/v1/* request registered after it, this one included.
+  app.use('/api/v1/test-publish', testPublishRoutes);
   app.use('/api/v1', jdKpaRoutes);
   app.use('/api/v1/business-units', businessUnitRoutes);
   app.use('/api/v1/business-mappings', businessMappingRoutes);

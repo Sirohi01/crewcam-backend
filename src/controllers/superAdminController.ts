@@ -14,6 +14,8 @@ import { Attendance } from '../models/Attendance';
 import { LeaveRequest } from '../models/LeaveRequest';
 import { Ticket } from '../models/Ticket';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
+import { Integration } from '../models/Integration';
+import { normalizeWebsiteBaseUrl } from '../services/careerSiteSync.service';
 import { Counter } from '../models/Counter';
 import { AuthToken } from '../models/AuthToken';
 import { hashToken } from '../utils/authTokens';
@@ -395,6 +397,20 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     });
     await company.save();
 
+    // Points the tenant's "career-site" integration at the website given for this
+    // company, so job-sync works out of the box instead of needing a one-off manual
+    // setup (see scripts/setupCareerSiteIntegration.ts) per tenant.
+    const careerSiteBaseUrl = website && normalizeWebsiteBaseUrl(website);
+    if (careerSiteBaseUrl) {
+      await Integration.create({
+        tenantId: tenant._id,
+        provider: 'career-site',
+        isActive: true,
+        credentials: { baseUrl: careerSiteBaseUrl, jobsPath: '/api/careers/jobs' },
+        ...(req.user?._id && { createdBy: req.user._id }),
+      } as any);
+    }
+
     // Create Company Admin Role
     if (finalCorporateId && finalCorporateId.startsWith('CORP-')) {
       const parts = finalCorporateId.split('-');
@@ -491,6 +507,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
         Role.deleteMany({ tenantId: createdTenantId }),
         User.deleteMany({ tenantId: createdTenantId }),
         Payment.deleteMany({ tenantId: createdTenantId }),
+        Integration.deleteMany({ tenantId: createdTenantId, provider: 'career-site' }),
       ]).catch((rollbackErr) => console.error('Rollback failed:', rollbackErr));
     }
     res.status(500).json({ message: 'Internal server error while creating tenant' });
@@ -653,6 +670,28 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     if (Object.keys(updatePayload).length > 0) {
       await Company.updateMany({ tenantId: id as string }, { $set: updatePayload });
     }
+
+    // Keep the "career-site" integration's baseUrl pointed at this tenant's current
+    // website whenever it changes, same source as on creation — preserves a custom
+    // jobsPath if one was already configured.
+    if (website !== undefined) {
+      const careerSiteBaseUrl = normalizeWebsiteBaseUrl(website);
+      if (careerSiteBaseUrl) {
+        let integration = await Integration.findOne({ tenantId: id as string, provider: 'career-site' });
+        if (!integration) {
+          integration = new Integration({ tenantId: id as string, provider: 'career-site', isActive: true, credentials: {} });
+        }
+        const existingCreds = integration.getDecryptedCredentials();
+        integration.credentials = {
+          ...existingCreds,
+          baseUrl: careerSiteBaseUrl,
+          jobsPath: existingCreds.jobsPath || '/api/careers/jobs',
+        };
+        integration.isActive = true;
+        await integration.save();
+      }
+    }
+
     const adminRole = await Role.findOne({ tenantId: id as string, name: 'Company Admin' }).lean();
     let adminUser = null;
     if (adminRole) {

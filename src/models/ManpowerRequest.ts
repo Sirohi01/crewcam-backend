@@ -47,6 +47,14 @@ export interface IManpowerRequest extends Document {
   budgetCTC?: number;
   salaryCtcMin?: number;
   salaryCtcMax?: number;
+  salaryCurrency?: string;
+  jobCategory?: string;
+  workMode?: string;
+  noticePeriod?: string;
+  travelRequired?: string;
+  shiftTiming?: string;
+  probationPeriod?: string;
+  otherNotes?: string;
   budgetApprovedBy?: Types.ObjectId;
   benefits?: string[];
   otherBenefits?: string;
@@ -67,6 +75,15 @@ export interface IManpowerRequest extends Document {
   directorApprovalSignature?: string;
   hrHeadSignature?: string;
   pdfUrl?: string;
+
+  // Set when this request mirrors a job pulled in from a tenant's own career site
+  // (see services/careerSiteSync.service.ts) instead of being authored in HR-CRM.
+  sourceSystem?: 'manual' | 'career-site';
+  externalJobId?: string;
+  lastSyncedAt?: Date;
+  // Which of this tenant's (possibly several) connected career-site Integrations this
+  // job was pulled from / should be scoped to — see careerSiteSync.service.ts.
+  sourceSite?: string;
 }
 
 const manpowerRequestSchema = new Schema<IManpowerRequest>({
@@ -112,6 +129,14 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   budgetCTC: { type: Number },
   salaryCtcMin: { type: Number },
   salaryCtcMax: { type: Number },
+  salaryCurrency: { type: String },
+  jobCategory: { type: String },
+  workMode: { type: String },
+  noticePeriod: { type: String },
+  travelRequired: { type: String },
+  shiftTiming: { type: String },
+  probationPeriod: { type: String },
+  otherNotes: { type: String },
   budgetApprovedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   benefits: [{ type: String }],
   otherBenefits: { type: String },
@@ -131,10 +156,19 @@ const manpowerRequestSchema = new Schema<IManpowerRequest>({
   departmentHeadSignature: { type: String },
   directorApprovalSignature: { type: String },
   hrHeadSignature: { type: String },
-  pdfUrl: { type: String }
+  pdfUrl: { type: String },
+
+  sourceSystem: { type: String, enum: ['manual', 'career-site'], default: 'manual' },
+  externalJobId: { type: String },
+  lastSyncedAt: { type: Date },
+  sourceSite: { type: String },
 }, {
   timestamps: true
 });
+
+// One mirrored row per (tenant, site, remote job) — lets a re-sync upsert instead of duplicating,
+// and keeps two different connected sites from colliding if they happen to reuse the same id.
+manpowerRequestSchema.index({ tenantId: 1, sourceSite: 1, externalJobId: 1 }, { unique: true, sparse: true });
 
 import { tenantPlugin } from './plugins/tenantPlugin';
 import { auditPlugin } from './plugins/auditPlugin';

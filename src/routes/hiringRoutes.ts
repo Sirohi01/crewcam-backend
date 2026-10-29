@@ -48,7 +48,10 @@ import {
   updateSelectionApprovalDecision,
   deleteSelectionApproval,
   deleteManpowerRequest,
-  mockPublishPlatform
+  mockPublishPlatform,
+  syncManpowerRequestsFromCareerSite,
+  syncCandidatesFromCareerSite,
+  publishManpowerRequestToChannels
 } from '../controllers/hiringRequisitionController';
 import {
   updateOfferLetter,
@@ -178,6 +181,8 @@ router.get('/pdf-view', checkPermission('ORG_READ'), streamHiringPdf);
 router.post('/candidates', checkPermission('ATS_WRITE'), createCandidate);
 router.get('/dashboard-stats', authenticate, tenantResolver, getHiringDashboardStats);
 router.get('/candidates', checkPermission('ATS_READ'), getCandidates);
+// Pulls applied candidates + resumes in from every connected career site (must stay above /candidates/:id).
+router.post('/candidates/sync-career-site', checkPermission('ATS_WRITE'), syncCandidatesFromCareerSite);
 router.post('/candidates/:candidateId/fast-track-ctc', checkPermission('ATS_WRITE'), fastTrackToCTC);
 router.get('/candidates/:candidateId/hiring-profile', checkPermission('ATS_READ'), getCandidateHiringProfile);
 router.get('/employees/:employeeId/candidate', checkPermission('ATS_READ'), getCandidateForEmployee);
@@ -259,9 +264,11 @@ router.post('/manpower-request', checkPermission('ORG_WRITE'), createManpowerReq
 router.get('/manpower-request', checkPermission('ORG_READ'), getManpowerRequests);
 router.post('/mock-publish-platform', authenticate, mockPublishPlatform);
 router.get('/manpower-request/stats', checkPermission('ORG_READ'), getManpowerRequestStats);
+router.post('/manpower-request/sync-career-site', checkPermission('ORG_WRITE'), syncManpowerRequestsFromCareerSite);
 router.get('/manpower-request/:id', checkPermission('ORG_READ'), getManpowerRequestById);
 router.put('/manpower-request/:id', checkPermission('ORG_WRITE'), updateManpowerRequest);
 router.put('/manpower-request/:id/status', checkPermission('ORG_WRITE'), updateManpowerRequestStatus);
+router.put('/manpower-request/:id/publish', checkPermission('ORG_WRITE'), publishManpowerRequestToChannels);
 router.delete('/manpower-request/:id', checkPermission(['ORG_WRITE', 'ORG_DELETE', 'HIRING_PROCESS_JOB_REQUISITION_DELETE', 'HIRING_PROCESS_JOB_REQUISITION_WRITE', 'ATS_WRITE', '*']), deleteManpowerRequest);
 router.post('/manpower-request/:id/generate-pdf', checkPermission('ORG_READ'), generateManpowerRequestPdf);
 

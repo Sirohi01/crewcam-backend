@@ -6,6 +6,11 @@ export interface PublishPayload {
   applyUrl: string;
 }
 
+// Self-URL for the mock Naukri/LinkedIn endpoints (testPublishRoutes.ts) this process also
+// serves, so test-mode publishing is a real HTTP round trip (sent, validated, stored,
+// responded) instead of a console.log faking success with nothing behind it.
+const TEST_PUBLISH_BASE_URL = process.env.TEST_PUBLISH_BASE_URL || `http://localhost:${process.env.PORT || 8000}`;
+
 /**
  * Publishes a job to LinkedIn.
  */
@@ -14,26 +19,26 @@ export async function publishToLinkedIn(payload: PublishPayload, organizationUrn
   const accessToken = process.env.LINKEDIN_ACCESS_TOKEN;
   const urn = organizationUrn || process.env.LINKEDIN_ORGANIZATION_URN;
 
-  if (isTestMode || !accessToken || !urn) {
-    console.log('[publishService] [TEST MODE] Would publish to LinkedIn:', payload.jobTitle);
-    return { success: true, externalId: `mock-linkedin-${Date.now()}` };
-  }
+  // No real LinkedIn credentials configured — route the exact same request to this app's
+  // own mock LinkedIn endpoint instead of the real API.
+  const useTestEndpoint = isTestMode || !accessToken || !urn;
+  const url = useTestEndpoint ? `${TEST_PUBLISH_BASE_URL}/api/v1/test-publish/linkedin/ugcPosts` : 'https://api.linkedin.com/v2/ugcPosts';
 
   try {
     const textContent = `We're hiring a ${payload.jobTitle}!\n\n${payload.jobDescription.substring(0, 500)}...\n\nApply here: ${payload.applyUrl}`;
     const requestBody = {
-      author: `urn:li:organization:${urn}`,
+      author: `urn:li:organization:${urn || 'test-org'}`,
       lifecycleState: "PUBLISHED",
       specificContent: { "com.linkedin.ugc.ShareContent": { shareCommentary: { text: textContent }, shareMediaCategory: "NONE" } },
       visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" }
     };
-    const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', requestBody, {
-      headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' }
+    const response = await axios.post(url, requestBody, {
+      headers: { 'Authorization': `Bearer ${accessToken || 'test-token'}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' }
     });
     return { success: true, externalId: response.data.id };
   } catch (error: any) {
     console.error('[publishService] LinkedIn publish failed:', error?.response?.data || error?.message);
-    return { success: false, error: error?.message || 'LinkedIn publish failed' };
+    return { success: false, error: error?.response?.data?.message || error?.message || 'LinkedIn publish failed' };
   }
 }
 
@@ -45,24 +50,23 @@ export async function publishToNaukri(payload: PublishPayload): Promise<{ succes
   const isTestMode = process.env.TEST_PUBLISH_MODE === 'true';
   const apiKey = process.env.NAUKRI_API_KEY;
 
-  if (isTestMode || !apiKey) {
-    console.log('[publishService] [TEST MODE] Would publish to Naukri.com:', payload.jobTitle);
-    return { success: true, externalId: `mock-naukri-${Date.now()}` };
-  }
+  // No real Naukri API key configured — route to this app's own mock Naukri endpoint
+  // instead of the real API.
+  const useTestEndpoint = isTestMode || !apiKey;
+  const url = useTestEndpoint ? `${TEST_PUBLISH_BASE_URL}/api/v1/test-publish/naukri/jobs` : 'https://api.naukri.com/v2/jobs';
 
   try {
-    // Mocking real Naukri API structure
-    const response = await axios.post('https://api.naukri.com/v2/jobs', {
+    const response = await axios.post(url, {
       title: payload.jobTitle,
       description: payload.jobDescription,
       applyUrl: payload.applyUrl
     }, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
+      headers: { 'Authorization': `Bearer ${apiKey || 'test-key'}` }
     });
     return { success: true, externalId: response.data.jobId };
   } catch (error: any) {
-    console.error('[publishService] Naukri publish failed:', error?.message);
-    return { success: false, error: error?.message || 'Naukri publish failed' };
+    console.error('[publishService] Naukri publish failed:', error?.response?.data || error?.message);
+    return { success: false, error: error?.response?.data?.message || error?.message || 'Naukri publish failed' };
   }
 }
 

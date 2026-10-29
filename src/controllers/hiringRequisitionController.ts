@@ -11,6 +11,7 @@ import { advanceStep } from '../utils/hiringPipelineHelpers';
 import { getSignedCloudinaryPdfUrl, savePdfToCloudinary } from '../utils/pdfGenerator';
 import { generateManpowerRequisitionPdfBuffer } from '../utils/manpowerPdfGenerator';
 import { getCompanyDocumentBranding } from '../utils/companyDocumentBranding';
+import { syncCareerSiteJobs, postJobToCareerSites, syncCareerSiteApplicants } from '../services/careerSiteSync.service';
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -51,6 +52,41 @@ export const streamHiringPdf = async (req: AuthRequest, res: Response) => {
 };
 
 import { publishToLinkedIn, publishToNaukri, publishToIndeed } from '../services/publishService';
+
+/** Pushes one manpower request out to whichever channels are ticked, shared by both the
+ * one-shot "create + publish" path and the explicit "publish an existing, already-approved
+ * requisition" path (see publishManpowerRequestToChannels below) so the two never drift. */
+async function publishRequestToChannels(tenantId: string, request: any, publishChannels: string[]) {
+  const publishResults: any = {};
+  const jdContent = request.jobDescriptionSummary || request.detailedJustification || request.justification || 'Join our team!';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const applyUrl = `${frontendUrl}/careers/${request._id}`;
+
+  if (publishChannels.includes('LinkedIn')) {
+    publishResults.linkedin = await publishToLinkedIn({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
+  }
+  if (publishChannels.includes('Naukri.com')) {
+    publishResults.naukri = await publishToNaukri({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
+  }
+  if (publishChannels.includes('Indeed')) {
+    publishResults.indeed = await publishToIndeed({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
+  }
+  if (publishChannels.includes('Other Job Portals')) {
+    publishResults.otherPortals = { success: true, message: 'Queued for generic XML distribution feed' };
+  }
+  // "Website" always shows on this tenant's own hosted careers page (reads straight
+  // from ManpowerRequest — see careerPortalRoutes.ts) with no action needed. For
+  // tenants that also run their own separate site(s), this additionally pushes the job
+  // out to every connected "career-site" Integration with a postPath configured; a
+  // tenant with no such site (or none with postPath set) gets a no-op {skipped: true}
+  // result, so nothing changes for them, and a tenant with several sites gets the job
+  // pushed to all of them.
+  if (publishChannels.includes('Website')) {
+    await request.populate('departmentId', 'name');
+    publishResults.website = await postJobToCareerSites(tenantId, request);
+  }
+  return publishResults;
+}
 
 export const createManpowerRequest = async (req: AuthRequest, res: Response) => {
   try {
@@ -101,24 +137,7 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
     });
     
     const publishChannels = req.body.publishChannels || [];
-    const publishResults: any = {};
-
-    const jdContent = request.jobDescriptionSummary || request.detailedJustification || request.justification || 'Join our team!';
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const applyUrl = `${frontendUrl}/careers/${request._id}`;
-
-    if (publishChannels.includes('LinkedIn')) {
-      publishResults.linkedin = await publishToLinkedIn({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
-    }
-    if (publishChannels.includes('Naukri.com')) {
-      publishResults.naukri = await publishToNaukri({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
-    }
-    if (publishChannels.includes('Indeed')) {
-      publishResults.indeed = await publishToIndeed({ jobTitle: request.jobTitle, jobDescription: jdContent, applyUrl });
-    }
-    if (publishChannels.includes('Other Job Portals')) {
-      publishResults.otherPortals = { success: true, message: 'Queued for generic XML distribution feed' };
-    }
+    const publishResults = await publishRequestToChannels(String(tenantId), request, publishChannels);
 
     await logAudit(tenantId, req.user!._id, 'CREATE_MANPOWER_REQUEST', req, { requestId: (request as any)._id, publishResults });
 
@@ -129,6 +148,44 @@ export const createManpowerRequest = async (req: AuthRequest, res: Response) => 
   }
 };
 
+
+/** Pulls live job postings from this tenant's own career site (configured as an
+ * "career-site" Integration) into the Jobs list. Safe to call repeatedly. */
+export const syncManpowerRequestsFromCareerSite = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) {
+      res.status(400).json({ message: 'Tenant could not be resolved for this request' });
+      return;
+    }
+
+    const result = await syncCareerSiteJobs(String(tenantId));
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error('Error syncing jobs from career site:', error);
+    res.status(500).json({ message: error.message || 'Error syncing jobs from career site' });
+  }
+};
+
+/** Pulls applied candidates + resumes from every one of this tenant's connected career
+ * site(s) into the Candidates list, so recruitment can start straight from HR-CRM. Safe
+ * to call repeatedly — re-running it updates the same candidate record instead of
+ * duplicating it (matched on the site's own application id). */
+export const syncCandidatesFromCareerSite = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) {
+      res.status(400).json({ message: 'Tenant could not be resolved for this request' });
+      return;
+    }
+
+    const result = await syncCareerSiteApplicants(String(tenantId));
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error('Error syncing candidates from career site:', error);
+    res.status(500).json({ message: error.message || 'Error syncing candidates from career site' });
+  }
+};
 
 export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
   try {
@@ -278,6 +335,41 @@ export const updateManpowerRequestStatus = async (req: AuthRequest, res: Respons
   } catch (error: any) {
     console.error('Error updating manpower request:', error);
     res.status(500).json({ message: 'Error updating manpower request' });
+  }
+};
+
+/** Publishes an already-approved requisition out to the channels ticked for it right now
+ * (Website, LinkedIn, Naukri, Indeed, ...) — the "choose where to post" path from the Jobs
+ * list's Post Job action, as opposed to createManpowerRequest's one-shot create-and-publish. */
+export const publishManpowerRequestToChannels = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const { id } = req.params;
+    const publishChannels: string[] = Array.isArray(req.body.publishChannels) ? req.body.publishChannels : [];
+
+    const request = await ManpowerRequest.findOne({ _id: id, tenantId } as any);
+    if (!request) return res.status(404).json({ message: 'Manpower request not found' });
+
+    const publishResults = await publishRequestToChannels(String(tenantId), request, publishChannels);
+
+    request.publishChannels = publishChannels;
+    request.recruitmentStatus = 'Posted';
+    // Posting to channels (including HR-CRM's own hosted careers page, which only ever
+    // lists status: 'Approved' requests — see careerPortalRoutes.ts) implies approval;
+    // without this, ticking "Website" here looked like it worked but the job stayed
+    // invisible on the public page because it was still sitting at status: 'Pending'.
+    if (request.status !== 'Approved') {
+      request.status = 'Approved';
+      request.approvedBy = req.user!._id as any;
+      request.approvalDate = new Date();
+    }
+    await request.save();
+
+    await logAudit(tenantId, req.user!._id, 'PUBLISH_MANPOWER_REQUEST', req, { requestId: id, publishChannels, publishResults });
+    res.status(200).json({ ...request.toObject(), publishResults });
+  } catch (error: any) {
+    console.error('Error publishing manpower request:', error);
+    res.status(500).json({ message: 'Error publishing manpower request to channels' });
   }
 };
 

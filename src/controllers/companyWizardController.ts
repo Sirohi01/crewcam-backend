@@ -7,6 +7,9 @@ import { Package } from '../models/Package';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
+import { Integration } from '../models/Integration';
+import { normalizeWebsiteBaseUrl } from '../services/careerSiteSync.service';
+import { normalizeSubdomain } from '../utils/subdomain';
 import { z } from 'zod';
 
 const wizardSchema = z.object({
@@ -127,9 +130,17 @@ export const createCompanyDraft = async (req: AuthRequest, res: Response) => {
     const perUserPrice = data.billingCycle === 'YEARLY' ? pkg.pricePerUserYearlyINR : pkg.pricePerUserMonthlyINR;
     const userLimit = data.userLimit || pkg.maxUsers;
 
+    // Tenant.subdomain (not WhiteLabel.customSubdomain) is what every public, subdomain-based
+    // lookup actually queries — login branding, employer-login's subdomain check, and the
+    // public careers page (careerPortalRoutes.ts). Without this, a company's own careers page
+    // 404s on every request no matter what jobs or publish channels are set, since it can
+    // never resolve a tenantId from the subdomain.
+    const tenantSubdomain = data.customSubdomain ? normalizeSubdomain(data.customSubdomain) : null;
+
     const tenant = new Tenant({
       name: data.name,
       packageId: data.packageId,
+      ...(tenantSubdomain && { subdomain: tenantSubdomain }),
       aiCredits: pkg.freeAiCredits || 0,
       setupFeeAmount: pkg.setupFeeINR || 0,
       setupFeeCurrency: 'INR',
@@ -185,6 +196,20 @@ export const createCompanyDraft = async (req: AuthRequest, res: Response) => {
     });
     await company.save();
 
+    // Points the tenant's "career-site" integration at the website they gave for this
+    // company, so job-sync works out of the box instead of needing a one-off manual
+    // setup (see scripts/setupCareerSiteIntegration.ts) per tenant.
+    const careerSiteBaseUrl = data.website && normalizeWebsiteBaseUrl(data.website);
+    if (careerSiteBaseUrl) {
+      await Integration.create({
+        tenantId: tenant._id,
+        provider: 'career-site',
+        isActive: true,
+        credentials: { baseUrl: careerSiteBaseUrl, jobsPath: '/api/careers/jobs' },
+        ...(req.user?._id && { createdBy: req.user._id }),
+      } as any);
+    }
+
     await WhiteLabel.create({
       tenantId: tenant._id,
       logoUrl: data.logoUrl,
@@ -226,6 +251,7 @@ export const createCompanyDraft = async (req: AuthRequest, res: Response) => {
         Company.deleteMany({ tenantId: createdTenantId }),
         WhiteLabel.deleteMany({ tenantId: createdTenantId }),
         CompanyLifecycleEvent.deleteMany({ tenantId: createdTenantId }),
+        Integration.deleteMany({ tenantId: createdTenantId, provider: 'career-site' }),
       ]).catch((rollbackErr) => console.error('Rollback failed:', rollbackErr));
     }
     res.status(500).json({ message: 'Internal server error while creating company draft' });

@@ -48,7 +48,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
 
     const filter: any = {
       tenantId,
-      publishChannels: 'Career Portal', // Must have 'Career Portal' selected
+      publishChannels: { $in: ['Career Portal', 'Website'] }, // 'Website' is the current label; 'Career Portal' kept for jobs created before the rename
       status: 'Approved' // Only show approved jobs
     };
 
@@ -97,7 +97,7 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
     const job = await ManpowerRequest.findOne({
       _id: req.params.id,
       tenantId,
-      publishChannels: 'Career Portal',
+      publishChannels: { $in: ['Career Portal', 'Website'] },
       status: 'Approved',
     })
       .populate('departmentId', 'name')
@@ -127,7 +127,7 @@ router.post('/jobs/:id/apply', apiLimiter, resumeUpload.single('resume'), async 
 
     const job = await ManpowerRequest.findOne({
       _id: req.params.id,
-      publishChannels: 'Career Portal',
+      publishChannels: { $in: ['Career Portal', 'Website'] },
       status: 'Approved',
     }).lean();
     if (!job) return res.status(404).json({ message: 'Job not found or no longer accepting applications' });
