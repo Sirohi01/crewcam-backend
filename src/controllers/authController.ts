@@ -80,10 +80,19 @@ const issueSession = async (user: any, req: Request, res: Response, portal: unkn
   res.cookie(cookieNames.token, token, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/', maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_MS });
   res.cookie(cookieNames.refreshToken, refreshToken, { httpOnly: true, secure: isProduction, sameSite: 'strict', path: '/', maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_MS });
 
-  // The access token is only ever set as an httpOnly cookie above — it must never
-  // also go out in the JSON body, or httpOnly buys nothing (XSS / response logging
-  // could just read it from here instead). No caller reads this return value's
-  // token field; it's intentionally not returned.
+  // Employer portal (crewcam-frontend) is httpOnly-cookie-only by design — the access
+  // token is never returned here, so httpOnly actually buys something (XSS / response
+  // logging can't read it from the body instead).
+  //
+  // hrcrm-superadmin is a separate app/codebase that was built around holding its own
+  // access token (stored via zustand persist → localStorage) and sending it as an
+  // `Authorization: Bearer` header; it doesn't read the cookie at all. With no token in
+  // this response it silently got `undefined`, so every request relied solely on the
+  // cross-port httpOnly cookie actually reaching the backend — fragile under stricter
+  // browser cookie-blocking, and the real cause of "login works, next request 401s and
+  // logs out" for that portal. Since that app already persists the token to localStorage
+  // itself, returning it here for `portal === 'super-admin'` doesn't weaken anything
+  // beyond what that app's own design already does.
   return {
     user: {
       id: user._id,
@@ -93,6 +102,7 @@ const issueSession = async (user: any, req: Request, res: Response, portal: unkn
       profilePictureUrl: user.profilePictureUrl,
       tenantId: user.tenantId,
     },
+    ...(portal === 'super-admin' && { token }),
   };
 };
 

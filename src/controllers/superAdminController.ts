@@ -25,6 +25,7 @@ import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, sendMail } from '../services/mailer';
 import { Otp } from '../models/Otp';
+import { seedDefaultTenantRoles, syncSidebarDefaults } from '../utils/seedSync';
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 const hashOtp = (userId: unknown, otp: string) => hashToken(`${userId}:${otp}`);
 
@@ -427,15 +428,14 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const adminRole = new Role({
-      name: 'Company Admin',
-      description: 'Full access to company operations',
-      permissions: ['*'], // Wildcard for all permissions
-      category: 'company_admin', // sees every sidebar item — docs/03_ROLES_DASHBOARDS_PERMISSIONS.md
-      tenantId: tenant._id,
-      createdBy: req.user?._id
-    });
-    await adminRole.save();
+    // Seeds Company Admin + HR Manager + Employee together so every new tenant starts
+    // with its full baseline role set, not just the one role this flow strictly needs.
+    const defaultRoles = await seedDefaultTenantRoles(String(tenant._id), req.user?._id);
+    const adminRole = defaultRoles['Company Admin'];
+
+    // Seeds the sidebar up front too, so it's already populated the moment this tenant's
+    // admin logs in for the first time instead of waiting on getMySidebar's lazy sync.
+    await syncSidebarDefaults(String(tenant._id));
 
     // Create Admin User
     const salt = await bcrypt.genSalt(10);

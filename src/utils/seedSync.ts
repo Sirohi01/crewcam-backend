@@ -2,6 +2,39 @@ import { SidebarConfig } from '../models/SidebarConfig';
 import { DashboardWidgetConfig } from '../models/DashboardWidgetConfig';
 import { DEFAULT_SIDEBAR_ITEMS, SECTION_ORDER } from './sidebarDefaults';
 import { DEFAULT_DASHBOARD_WIDGETS } from './dashboardWidgetDefaults';
+import { Role, RoleScope, RoleLoginType } from '../models/Role';
+
+/** Every tenant's baseline role set — created once per tenant so a fresh company never
+ * starts with only "Company Admin" and has to invent HR Manager / Employee by hand. */
+const DEFAULT_TENANT_ROLES: Array<{ name: string; description: string; permissions: string[]; scope: RoleScope; loginType: RoleLoginType }> = [
+  { name: 'Company Admin', description: 'Full access to company operations', permissions: ['*'], scope: 'company', loginType: 'employer' },
+  {
+    name: 'HR Manager', description: 'Manages recruitment, employee records, attendance and leave for the company',
+    permissions: [
+      'ATS_READ', 'ATS_WRITE', 'EMPLOYEE_READ', 'EMPLOYEE_WRITE', 'ORG_READ',
+      'ATTENDANCE_SECTION_HR_OVERRIDE_READ', 'ATTENDANCE_SECTION_HR_OVERRIDE_WRITE',
+      'ATTENDANCE_SECTION_LEAVES_READ', 'ATTENDANCE_SECTION_LEAVES_WRITE',
+      'SUPPORT_READ', 'MASTER_READ',
+    ],
+    scope: 'company', loginType: 'employer',
+  },
+  { name: 'Employee', description: 'Standard employee self-service access', permissions: ['profile_read', 'attendance_read'], scope: 'self', loginType: 'employee' },
+];
+
+/** Idempotent — upserts each role by (tenantId, name) via $setOnInsert, so re-running this
+ * for an existing tenant never overwrites permissions an admin has since customized. */
+export const seedDefaultTenantRoles = async (tenantId: string, createdBy?: unknown) => {
+  const roles: Record<string, any> = {};
+  for (const def of DEFAULT_TENANT_ROLES) {
+    const role = await Role.findOneAndUpdate(
+      { tenantId: String(tenantId), name: def.name } as any,
+      { $setOnInsert: { ...def, tenantId: String(tenantId), ...(createdBy ? { createdBy } : {}) } },
+      { upsert: true, new: true }
+    );
+    roles[def.name] = role;
+  }
+  return roles;
+};
 export const syncSidebarDefaults = async (tenantId: string) => {
   const rawExisting = await SidebarConfig.find({ tenantId }, { section: 1, label: 1, sectionOrder: 1, href: 1, order: 1 });
 

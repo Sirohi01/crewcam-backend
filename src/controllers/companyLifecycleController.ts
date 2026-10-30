@@ -11,6 +11,7 @@ import { Invoice } from '../models/Invoice';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { buildCompanyWelcomeEmail, sendMail } from '../services/mailer';
+import { seedDefaultTenantRoles, syncSidebarDefaults } from '../utils/seedSync';
 
 function generateTempPassword(): string {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -42,14 +43,14 @@ async function maybeProvisionAdminAccount(tenant: any, changedBy?: any): Promise
   const company = await Company.findOne({ tenantId: String(tenant._id) });
   if (!company?.pendingAdminEmail) return null;
 
-  const adminRole = existingRole || await new Role({
-    name: 'Company Admin',
-    description: 'Full access to company operations',
-    permissions: ['*'],
-    category: 'company_admin',
-    tenantId: tenant._id,
-    ...(changedBy && { createdBy: changedBy }),
-  }).save();
+  // Seeds Company Admin + HR Manager + Employee together so every tenant ends up with
+  // its full baseline role set, not just the one role this flow strictly needs.
+  const defaultRoles = await seedDefaultTenantRoles(String(tenant._id), changedBy);
+  const adminRole = existingRole || defaultRoles['Company Admin'];
+
+  // Seeds the sidebar up front too, so it's already populated the moment this tenant's
+  // admin logs in for the first time instead of waiting on getMySidebar's lazy sync.
+  await syncSidebarDefaults(String(tenant._id));
 
   const password = generateTempPassword();
   const salt = await bcrypt.genSalt(10);
