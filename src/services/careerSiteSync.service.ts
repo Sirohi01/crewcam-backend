@@ -29,6 +29,18 @@ interface CareerSite {
   apiKey?: string;
 }
 
+/** "https://www.namogangewellness.com/careers" -> "namogangewellness.com" — a short, readable
+ * fallback for sites where no Site Label was ever set, instead of the integration's own
+ * (meaningless-to-a-human) _id. Used for both display (Career page's source badge) and as the
+ * `sourceSite` tag that keeps multiple connected sites' data apart. */
+function shortSiteName(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).hostname.replace(/^www\./i, '');
+  } catch {
+    return baseUrl;
+  }
+}
+
 async function getActiveCareerSites(tenantId: string): Promise<CareerSite[]> {
   const integrations = await Integration.find({ tenantId, provider: 'career-site', isActive: true } as any);
   const sites: CareerSite[] = [];
@@ -37,7 +49,7 @@ async function getActiveCareerSites(tenantId: string): Promise<CareerSite[]> {
     if (!creds.baseUrl) continue;
     sites.push({
       integrationId: String(integration._id),
-      siteKey: creds.siteKey || String(integration._id),
+      siteKey: creds.siteKey || shortSiteName(creds.baseUrl),
       baseUrl: creds.baseUrl,
       jobsPath: creds.jobsPath || '/api/careers/jobs',
       applicationsPath: creds.applicationsPath || '/api/careers/integrations/applications',
@@ -293,12 +305,36 @@ export async function syncCareerSiteJobs(tenantId: string): Promise<CareerSiteSy
     for (const job of jobs) {
       if (!job._id || !job.title) { skipped++; continue; }
 
-      const result = await ManpowerRequest.findOneAndUpdate(
+      const mapped = mapRemoteJobToManpowerRequest(tenantId, job, site.siteKey);
+
+      // Already tagged with this exact remote job? Plain update, as before.
+      const alreadyLinked = await ManpowerRequest.findOneAndUpdate(
         { tenantId, sourceSite: site.siteKey, externalJobId: String(job._id) } as any,
-        { $set: mapRemoteJobToManpowerRequest(tenantId, job, site.siteKey) },
-        { upsert: true, new: false, setDefaultsOnInsert: true } as any
+        { $set: mapped },
+        { new: false } as any
       );
-      if (result) updated++; else created++;
+      if (alreadyLinked) { updated++; continue; }
+
+      // Not yet tagged with this remote job — before inserting a new row (which would
+      // duplicate it on every future pull), check for a requisition authored locally in
+      // HR-CRM with the same title that was never linked to any site. If one exists, adopt
+      // it instead of creating a sibling "mirror" row for the job HR already has here.
+      const orphanMatch = await ManpowerRequest.findOneAndUpdate(
+        {
+          tenantId,
+          jobTitle: { $regex: `^${job.title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+          $or: [{ sourceSite: { $exists: false } }, { sourceSite: null }],
+          // Only adopt a requisition HR actually published — never silently fold an unrelated,
+          // never-posted draft that just happens to share this job's title into it.
+          recruitmentStatus: 'Posted',
+        } as any,
+        { $set: mapped },
+        { new: false } as any
+      );
+      if (orphanMatch) { updated++; continue; }
+
+      await ManpowerRequest.create({ ...mapped, tenantId });
+      created++;
     }
   }
 
@@ -321,6 +357,7 @@ export interface RemoteApplication {
     email?: string;
     phone?: string;
     location?: string;
+    photo?: string;
     resumeUrl?: string;
     resumeFileName?: string;
     skills?: string[];
@@ -346,7 +383,9 @@ const APPLICATION_STATUS_TO_CANDIDATE_STATUS: Record<string, string> = {
   WITHDRAWN: 'Rejected',
 };
 
-function mapRemoteApplicationToCandidate(tenantId: string, siteKey: string, app: RemoteApplication) {
+/** Fields refreshed on every sync — contact details, resume, profile — but never `status`,
+ * which belongs to HR-CRM once the candidate exists here (see syncCareerSiteApplicants). */
+function mapRemoteApplicationToCandidate(tenantId: string, site: CareerSite, app: RemoteApplication) {
   const name = (app.candidate.name || '').trim();
   const [firstName, ...rest] = name ? name.split(/\s+/) : ['Candidate'];
 
@@ -354,16 +393,17 @@ function mapRemoteApplicationToCandidate(tenantId: string, siteKey: string, app:
     tenantId,
     externalApplicationId: String(app._id),
     externalJobId: app.jobId ? String(app.jobId) : undefined,
-    sourceSite: siteKey,
+    sourceSite: site.siteKey,
+    sourceUrl: site.baseUrl,
     firstName: firstName || 'Candidate',
     lastName: rest.join(' ') || '-',
     email: app.candidate.email || '',
     phone: app.candidate.phone || '',
     jobRole: app.jobTitle || '',
+    profileImageUrl: app.candidate.photo || '',
     resumeUrl: app.candidate.resumeUrl,
     resumeUpdatedAt: new Date(),
     source: 'Career Website',
-    status: APPLICATION_STATUS_TO_CANDIDATE_STATUS[String(app.status).toUpperCase()] || 'Applied',
     applicationDetails: {
       applicationId: app.applicationId,
       submittedAt: app.submittedAt,
@@ -380,9 +420,19 @@ function mapRemoteApplicationToCandidate(tenantId: string, siteKey: string, app:
       expectedCTC: app.candidate.expectedCTC,
       linkedin: app.candidate.linkedin,
       appliedVia: 'Career Website',
-      siteKey,
+      siteKey: site.siteKey,
     },
   };
+}
+
+/** Status a NEWLY-pulled candidate starts at in HR-CRM — computed once, at insert, never again
+ * (see syncCareerSiteApplicants's $setOnInsert). A matchScore present means the career site
+ * already ran its own AI screening on this application, so there's nothing left for HR-CRM's
+ * own screening stage to do — it goes straight to HOD evaluation instead of back to the front
+ * of the pipeline. Without a score, it falls back to whatever stage the site's own status implies. */
+function initialCandidateStatus(app: RemoteApplication): string {
+  if (typeof app.matchScore === 'number' && !Number.isNaN(app.matchScore)) return 'HOD_APPROVAL';
+  return APPLICATION_STATUS_TO_CANDIDATE_STATUS[String(app.status).toUpperCase()] || 'Applied';
 }
 
 export interface CareerSiteApplicantSyncResult {
@@ -419,12 +469,73 @@ export async function syncCareerSiteApplicants(tenantId: string): Promise<Career
 
       const result = await Candidate.findOneAndUpdate(
         { tenantId, externalApplicationId: String(app._id) } as any,
-        { $set: mapRemoteApplicationToCandidate(tenantId, site.siteKey, app) },
+        {
+          $set: mapRemoteApplicationToCandidate(tenantId, site, app),
+          $setOnInsert: { status: initialCandidateStatus(app) },
+        },
         { upsert: true, new: false, setDefaultsOnInsert: true } as any
       );
       if (result) updated++; else created++;
+
+      // Candidates synced in before the HOD-skip rule above existed are stuck at 'Applied'
+      // even though their matchScore shows AI screening was already done — this catches them
+      // up on the next sync. Scoped to status still being the untouched default so it never
+      // overrides real progress made inside HR-CRM (nobody manually sets a candidate back to
+      // 'Applied' once it's moved on).
+      if (typeof app.matchScore === 'number' && !Number.isNaN(app.matchScore)) {
+        await Candidate.updateOne(
+          { tenantId, externalApplicationId: String(app._id), status: 'Applied' } as any,
+          { $set: { status: 'HOD_APPROVAL' } }
+        );
+      }
     }
   }
 
   return { tenantId, fetched, created, updated, skipped, sites: sites.length };
+}
+
+/** HR-CRM's own recruitment stage -> the career site's `hrStatus` vocabulary (On Hold,
+ * Shortlisted, Interview, Selected, Rejected, …) — the HR-decision field, never the
+ * candidate's own self-service `status`. A stage with no sensible HR decision yet
+ * (e.g. still 'Applied') maps to nothing, and the push is simply skipped. */
+const CANDIDATE_STATUS_TO_HR_STATUS: Record<string, string> = {
+  Applied: 'Sent to HR',
+  AI_SCREENING: 'Under Review',
+  Screening: 'Under Review',
+  HOD_APPROVAL: 'Under Review',
+  INTERVIEW_SCHEDULED: 'Interview',
+  Interviewing: 'Interview',
+  SHORTLISTED: 'Shortlisted',
+  Offered: 'Selected',
+  Hired: 'Selected',
+  Hold: 'On Hold',
+  Rejected: 'Rejected',
+};
+
+/** Pushes a candidate's new HR-CRM status back to the career site it was pulled in from (if
+ * any), so a recruiter working from HR-CRM doesn't have to separately update the same
+ * application in the tenant's own admin panel. Mirrors the pull direction's site lookup, and
+ * never throws — a site being unreachable must not fail the status update that triggered it. */
+export async function pushCandidateStatusToCareerSite(
+  tenantId: string,
+  candidate: { sourceSite?: string; externalApplicationId?: string; status?: string }
+): Promise<void> {
+  if (!candidate.sourceSite || !candidate.externalApplicationId || !candidate.status) return;
+  const hrStatus = CANDIDATE_STATUS_TO_HR_STATUS[candidate.status];
+  if (!hrStatus) return;
+
+  const sites = await getActiveCareerSites(tenantId);
+  const site = sites.find((s) => s.siteKey === candidate.sourceSite);
+  if (!site) return;
+
+  const headers = site.apiKey ? { 'x-api-key': site.apiKey } : undefined;
+  try {
+    await axios.patch(
+      `${site.baseUrl}${site.applicationsPath}/${candidate.externalApplicationId}/status`,
+      { hrStatus },
+      { timeout: 15000, headers }
+    );
+  } catch (error: any) {
+    console.error(`[careerSiteSync] Failed to push candidate status to ${site.baseUrl}:`, error?.response?.data || error.message);
+  }
 }

@@ -84,6 +84,20 @@ async function publishRequestToChannels(tenantId: string, request: any, publishC
   if (publishChannels.includes('Website')) {
     await request.populate('departmentId', 'name');
     publishResults.website = await postJobToCareerSites(tenantId, request);
+
+    // Tag this requisition with the remote job it now mirrors on the connected site, so the
+    // next pull-sync (syncCareerSiteJobs) matches and updates THIS row instead of creating a
+    // second "mirror" ManpowerRequest for the same job — previously this tag was never saved,
+    // so every sync after a website post created a duplicate requisition.
+    if (!request.sourceSite || !request.externalJobId) {
+      const posted = (publishResults.website?.sites || []).find((s: any) => s.success && s.externalId && s.siteKey);
+      if (posted) {
+        request.sourceSystem = 'career-site';
+        request.sourceSite = posted.siteKey;
+        request.externalJobId = String(posted.externalId);
+        await request.save();
+      }
+    }
   }
   return publishResults;
 }

@@ -88,7 +88,7 @@ async function seedCandidate(candidate: any, actor: any, employee: any) {
 
   await runStep('Step 0/2 - Interview + Evaluation', async () => {
     const interview = await Interview.create({
-      tenantId, candidateId, interviewerId: actor._id, roundType: 'Technical',
+      tenantId, candidateId, interviewerId: actor._id, roundType: 'Technical Interview',
       scheduledDate: days(-7), status: 'Completed', rating: 4, feedback: 'Strong technical round.', mode: 'Video',
     });
     await advanceStep(req, tenantId, candidateId, 'interview', 'completed', interview._id as any);

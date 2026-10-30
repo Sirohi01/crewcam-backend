@@ -648,13 +648,11 @@ const INTERVIEW_QUESTIONS_JSON_SCHEMA: JsonSchemaDef = {
 
 /** What each round should actually probe for — shapes question depth/focus, not just topic. */
 const ROUND_GUIDANCE: Record<string, string> = {
-  'Walk-In': 'Basic screening: confirm background accuracy, availability, and immediate fit. Keep questions simple and quick to answer.',
-  Telephonic: 'First-call screening: communication clarity, motivation, notice period, and a few high-level skill-check questions.',
-  Technical: 'Deep technical assessment: probe hands-on depth in the listed technical skills, problem-solving, and real scenarios from the responsibilities.',
-  HR: 'Behavioral and culture fit: past conduct, teamwork, conflict handling, and soft-skill scenarios.',
-  'HR & HOD': 'Combined behavioral + role fit: culture fit alongside whether their experience matches the qualification/experience requirements.',
-  Managerial: 'Ownership and leadership: decision-making, prioritization, stakeholder handling, and how they would approach the key responsibilities.',
-  Final: 'Closing round: career goals, compensation expectations, long-term fit, and any open concerns before an offer.',
+  'AI Screening Interview': 'First-pass screening: confirm background accuracy, communication clarity, motivation, notice period, and a few high-level skill-check questions.',
+  'Technical Interview': 'Deep technical assessment: probe hands-on depth in the listed technical skills, problem-solving, and real scenarios from the responsibilities.',
+  'Managerial Interview': 'Ownership and leadership: decision-making, prioritization, stakeholder handling, and how they would approach the key responsibilities.',
+  'Written Assessment': 'Structured, scenario-based questions answerable in writing, assessing applied knowledge and judgment rather than conversation.',
+  'Offer (HR Round)': 'Closing round: career goals, compensation expectations, culture fit, and any open concerns before an offer.',
 };
 
 

@@ -29,7 +29,7 @@ export interface IInterview extends Document {
   tenantId: Types.ObjectId;
   candidateId: Types.ObjectId;
   interviewerId: Types.ObjectId;
-  roundType: 'Written' | 'Walk-In' | 'Telephonic' | 'Technical' | 'HR' | 'HR & HOD' | 'Managerial' | 'Final';
+  roundType: 'AI Screening Interview' | 'Technical Interview' | 'Managerial Interview' | 'Written Assessment' | 'Offer (HR Round)';
   scheduledDate?: Date;
   status: 'Pending_Scheduling' | 'Scheduled' | 'In_Progress' | 'Completed' | 'Cancelled' | 'No_Show';
   rating?: number;
@@ -51,7 +51,7 @@ const interviewSchema = new Schema<IInterview>({
   interviewerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   roundType: {
     type: String,
-    enum: ['Written', 'Walk-In', 'Telephonic', 'Technical', 'HR', 'HR & HOD', 'Managerial', 'Final'],
+    enum: ['AI Screening Interview', 'Technical Interview', 'Managerial Interview', 'Written Assessment', 'Offer (HR Round)'],
     required: true
   },
   scheduledDate: { type: Date },

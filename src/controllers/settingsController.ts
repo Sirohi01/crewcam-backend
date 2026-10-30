@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import axios from 'axios';
 import { AuthRequest } from '../middleware/auth';
 import { Session } from '../models/Session';
 import { WhiteLabel } from '../models/WhiteLabel';
@@ -238,6 +239,42 @@ export const deleteIntegrationById = async (req: AuthRequest, res: Response) => 
     res.status(500).json({ message: 'Error deleting integration', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
 };
+
+// Real reachability check for a connected integration (e.g. a career-site's jobsPath),
+// replacing a client-side Math.random() fake ping with an actual timed HTTP call.
+export const pingIntegrationById = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const tenantId = (req.tenantId || req.user.tenantId) as any;
+
+    const integration = await Integration.findOne({ _id: req.params.id, tenantId });
+    if (!integration) return res.status(404).json({ message: 'Integration not found' });
+
+    const creds = integration.getDecryptedCredentials();
+    if (!creds.baseUrl) {
+      return res.status(400).json({ message: 'This integration has no baseUrl configured to ping' });
+    }
+    const path = creds.jobsPath || creds.applicationsPath || '';
+    const url = `${creds.baseUrl}${path}`;
+    const headers = creds.apiKey ? { 'x-api-key': creds.apiKey } : undefined;
+
+    const startedAt = Date.now();
+    try {
+      const response = await axios.get(url, { timeout: 10000, headers, validateStatus: () => true });
+      res.status(200).json({ status: response.status, latency: Date.now() - startedAt, url });
+    } catch (error: any) {
+      res.status(200).json({
+        status: 0,
+        latency: Date.now() - startedAt,
+        url,
+        error: error.code === 'ECONNABORTED' ? 'Timed out' : (error.message || 'Unreachable'),
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error pinging integration', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
+
 export const getTenantAiProviderOptions = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });

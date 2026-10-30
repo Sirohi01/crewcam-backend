@@ -13,6 +13,7 @@ import { User } from '../models/User';
 import { notificationService } from '../services/notificationService';
 import { Tenant } from '../models/Tenant';
 import { Branch } from '../models/Branch';
+import { pushCandidateStatusToCareerSite } from '../services/careerSiteSync.service';
 // Candidate Controllers
 export const createCandidate = async (req: AuthRequest, res: Response) => {
   try {
@@ -350,6 +351,18 @@ export const updateCandidateStatus = async (req: AuthRequest, res: Response) => 
         return res.status(200).json({ success: true, fake: true, status });
       }
       return res.status(404).json({ message: 'Candidate not found' });
+    }
+
+    // Mirror the new status back to the career site this candidate was pulled in from (if
+    // any) — never blocks or fails this request if that site is unreachable. Uses `status`
+    // (the value just requested) rather than trusting what the update returned, regardless of
+    // whether that reflects the pre- or post-update document.
+    if (status) {
+      pushCandidateStatusToCareerSite(String(tenantId), {
+        sourceSite: candidate.sourceSite,
+        externalApplicationId: candidate.externalApplicationId,
+        status,
+      }).catch(() => {});
     }
 
     await AuditLog.create({
@@ -828,14 +841,22 @@ export const submitInterviewFeedback = async (req: AuthRequest, res: Response) =
     if (status === 'Completed') {
       await advanceStep(req, String(tenantId), String(interview.candidateId), 'interview', 'completed', (interview as any)._id);
 
-      // Automatic status update for final/HR round
-      if (interview.roundType === 'Final' || interview.roundType === 'HR') {
+      // The interview's own rating previously never reached the candidate record, so Selected
+      // Candidates (which reads candidate.rating) always showed a hardcoded 80% placeholder
+      // regardless of how the interview actually went.
+      const candidateUpdate: any = {};
+      if (rating !== undefined) candidateUpdate.rating = rating;
+
+      // Automatic status update once the decisive, final round is completed
+      if (interview.roundType === 'Offer (HR Round)') {
         const passCriteria = 3; // Out of 5
-        const newStatus = (rating !== undefined && rating > passCriteria) ? 'Offered' : 'Rejected';
-        
+        candidateUpdate.status = (rating !== undefined && rating > passCriteria) ? 'Offered' : 'Rejected';
+      }
+
+      if (Object.keys(candidateUpdate).length > 0) {
         await Candidate.findOneAndUpdate(
           { _id: interview.candidateId, tenantId } as any,
-          { $set: { status: newStatus } }
+          { $set: candidateUpdate }
         );
       }
     }

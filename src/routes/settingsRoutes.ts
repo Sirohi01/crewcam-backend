@@ -13,6 +13,7 @@ import {
   createIntegration,
   updateIntegrationById,
   deleteIntegrationById,
+  pingIntegrationById,
   getTenantAiProviderOptions,
   setTenantAiProvider,
   getOrganizationSetupStatus
@@ -46,6 +47,7 @@ router.put('/integrations', configureIntegration);
 router.post('/integrations', createIntegration);
 router.put('/integrations/:id', updateIntegrationById);
 router.delete('/integrations/:id', deleteIntegrationById);
+router.get('/integrations/:id/ping', pingIntegrationById);
 
 // AI Provider (tenant-side switch — no keys exposed)
 router.get('/ai-provider', getTenantAiProviderOptions);

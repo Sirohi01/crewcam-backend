@@ -26,6 +26,10 @@ export interface ICandidate extends Document {
   externalApplicationId?: string;
   externalJobId?: string;
   sourceSite?: string;
+  // The connected site's own base URL at the time it was synced — shown as a hover tooltip on
+  // the source badge so a tenant with multiple career websites can tell which one a candidate
+  // actually came from without opening Settings → Integrations.
+  sourceUrl?: string;
 }
 
 const candidateSchema = new Schema<ICandidate>({
@@ -55,6 +59,7 @@ const candidateSchema = new Schema<ICandidate>({
   , externalApplicationId: { type: String, index: true }
   , externalJobId: { type: String }
   , sourceSite: { type: String }
+  , sourceUrl: { type: String }
 }, {
   timestamps: true
 });
