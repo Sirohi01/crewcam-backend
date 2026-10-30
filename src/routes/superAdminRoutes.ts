@@ -4,7 +4,7 @@ import {
   getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
   resendCompanyCredentials, getNextCorporateId,
-  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp, scheduleGoLive
+  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp, scheduleGoLive, getCompanyInsights
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
@@ -47,6 +47,7 @@ router.get('/tickets', getPlatformTickets);
 router.get('/reports/summary', getReportsSummary);
 
 router.get('/next-corporate-id', getNextCorporateId);
+router.get('/companies/insights', getCompanyInsights);
 router.get('/tenants', getAllTenants);
 router.get('/tenants/:id', getTenantById);
 router.get('/tenants/:id/dashboard-stats', getTenantDashboardStats);

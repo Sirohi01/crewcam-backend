@@ -15,6 +15,8 @@ import { LeaveRequest } from '../models/LeaveRequest';
 import { Ticket } from '../models/Ticket';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
 import { Integration } from '../models/Integration';
+import { Session } from '../models/Session';
+import { Invoice } from '../models/Invoice';
 import { normalizeWebsiteBaseUrl } from '../services/careerSiteSync.service';
 import { Counter } from '../models/Counter';
 import { AuthToken } from '../models/AuthToken';
@@ -811,6 +813,106 @@ export const scheduleGoLive = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error scheduling go-live:', error);
     res.status(500).json({ message: 'Internal server error while scheduling go-live' });
+  }
+};
+
+// Powers the Companies dashboard's "AI Health Alert", "Top Performing Companies" and
+// "Upgrade & Expansion Opportunities" cards — all derived from live tenant/user/session/
+// invoice data rather than hardcoded figures.
+export const getCompanyInsights = async (req: AuthRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const inactivityCutoff = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+
+    const [tenants, packages] = await Promise.all([
+      Tenant.find().populate('packageId').lean(),
+      Package.find({ isActive: true }).sort({ displayOrder: 1 }).lean(),
+    ]);
+
+    const liveTenants = (tenants as any[]).filter((t) => t.lifecycleStatus === 'LIVE');
+    const liveTenantIds = liveTenants.map((t) => String(t._id));
+
+    const [employeeCounts, lastActiveRows, overdueAgg] = await Promise.all([
+      User.aggregate([
+        { $match: { tenantId: { $in: liveTenantIds }, isActive: true } },
+        { $group: { _id: '$tenantId', count: { $sum: 1 } } },
+      ]).exec(),
+      Session.aggregate([
+        { $match: { tenantId: { $in: liveTenantIds } } },
+        { $group: { _id: '$tenantId', lastActive: { $max: '$lastActive' } } },
+      ]).exec(),
+      Invoice.aggregate([
+        { $match: { status: { $in: ['PENDING', 'PARTIAL'] }, dueDate: { $lt: now } } },
+        { $group: { _id: null, count: { $sum: 1 }, totalOutstanding: { $sum: { $subtract: ['$totalAmount', '$amountPaid'] } } } },
+      ]).exec(),
+    ]);
+
+    const employeeCountByTenant = new Map<string, number>(employeeCounts.map((r: any) => [r._id, r.count]));
+    const lastActiveByTenant = new Map<string, Date>(lastActiveRows.map((r: any) => [r._id, r.lastActive]));
+
+    let churnRisk = 0;
+    let lowAdoption = 0;
+    let inactive = 0;
+    const scored: { _id: string; name: string; score: number; employees: number }[] = [];
+    const upgradeCandidates: { packageDisplayOrder: number; pricePerUserMonthlyINR: number; employees: number }[] = [];
+
+    for (const t of liveTenants) {
+      const id = String(t._id);
+      const employees = employeeCountByTenant.get(id) || 0;
+      const pkg: any = t.packageId;
+      const lastActive = lastActiveByTenant.get(id);
+
+      if (t.subscriptionStatus === 'PAST_DUE') churnRisk++;
+
+      const modules: any[] = t.modules || [];
+      const enabledCount = modules.filter((m) => m.enabled).length;
+      const adoptionPct = modules.length > 0 ? (enabledCount / modules.length) * 100 : 0;
+      if (modules.length > 0 && adoptionPct < 40) lowAdoption++;
+
+      if (!lastActive || lastActive < inactivityCutoff) inactive++;
+
+      let score = Math.round(adoptionPct * 0.7);
+      if (t.subscriptionStatus === 'ACTIVE') score += 20;
+      if (lastActive && lastActive >= inactivityCutoff) score += 10;
+      score = Math.max(0, Math.min(100, score));
+      scored.push({ _id: id, name: t.name, score, employees });
+
+      if (pkg && t.subscriptionStatus === 'ACTIVE' && pkg.maxUsers > 0 && employees >= pkg.maxUsers * 0.8) {
+        upgradeCandidates.push({ packageDisplayOrder: pkg.displayOrder, pricePerUserMonthlyINR: pkg.pricePerUserMonthlyINR || 0, employees });
+      }
+    }
+
+    let upgradeCount = 0;
+    let potentialRevenueMonthly = 0;
+    for (const candidate of upgradeCandidates) {
+      const nextPkg = packages.find((p: any) => p.displayOrder > candidate.packageDisplayOrder);
+      if (!nextPkg) continue;
+      const uplift = (nextPkg.pricePerUserMonthlyINR || 0) - candidate.pricePerUserMonthlyINR;
+      if (uplift <= 0) continue;
+      upgradeCount++;
+      potentialRevenueMonthly += uplift * candidate.employees;
+    }
+
+    const topPerformers = scored.sort((a, b) => b.score - a.score).slice(0, 5);
+    const overdue = overdueAgg[0] || { count: 0, totalOutstanding: 0 };
+
+    res.status(200).json({
+      healthAlerts: {
+        churnRisk,
+        lowAdoption,
+        inactive,
+        overdueInvoiceCount: overdue.count,
+        overdueInvoiceAmount: Math.round(overdue.totalOutstanding || 0),
+      },
+      topPerformers,
+      upgradeOpportunities: {
+        count: upgradeCount,
+        potentialRevenueMonthly: Math.round(potentialRevenueMonthly),
+      },
+    });
+  } catch (error) {
+    console.error('Error computing company insights:', error);
+    res.status(500).json({ message: 'Internal server error while computing company insights' });
   }
 };
 
