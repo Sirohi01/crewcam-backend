@@ -23,7 +23,7 @@ import { notificationService } from '../services/notificationService';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
-import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, sendMail } from '../services/mailer';
+import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, buildCompanyGoLiveEmail, sendMail } from '../services/mailer';
 import { Otp } from '../models/Otp';
 import { seedDefaultTenantRoles, syncSidebarDefaults } from '../utils/seedSync';
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
@@ -116,6 +116,13 @@ const createTenantSchema = z.object({
 });
 
 const updateTenantSchema = createTenantSchema.partial().extend({
+  aiCredits: z.coerce.number().min(0).optional(),
+  country: z.string().trim().min(1).optional(),
+  setupFeeAmount: z.coerce.number().min(0).optional(),
+  setupFeeCurrency: z.enum(['INR', 'USD']).optional(),
+  billingCycle: z.enum(['MONTHLY', 'YEARLY']).optional(),
+  subscriptionAmount: z.coerce.number().min(0).optional(),
+  subscriptionCurrency: z.enum(['INR', 'USD']).optional(),
   isActive: z.coerce.boolean().optional(),
   setupFeeStatus: z.enum(['PENDING', 'PAID', 'WAIVED']).optional(),
   subscriptionStatus: z.enum(['ACTIVE', 'PENDING', 'PAST_DUE', 'CANCELLED']).optional(),
@@ -736,6 +743,21 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Notify the Company Admin whenever this update takes the workspace live — both the
+    // very first "Go Live" (onboarding complete) and any later re-publish from the
+    // onboarding pages in edit mode after the company is already live.
+    if (lifecycleStatus === 'LIVE' && adminUser?.email) {
+      const liveCompany = await Company.findOne({ tenantId: id as string }).select('corporateId').lean();
+      const { subject, html } = buildCompanyGoLiveEmail({
+        companyName: tenant.name,
+        adminFirstName: adminUser.firstName || 'there',
+        loginUrl: getLoginUrl(),
+        isFirstGoLive: existingTenant.lifecycleStatus !== 'LIVE',
+        corporateId: liveCompany?.corporateId,
+      });
+      sendMail({ to: adminUser.email, subject, html }).catch((e) => console.error('[go-live] notification email failed:', e));
+    }
+
     await writeAuditLog({
       tenantId: id,
       userId: req.user?._id,
@@ -748,6 +770,47 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error updating tenant:', error);
     res.status(500).json({ message: 'Internal server error while updating tenant', error: error.message, stack: error.stack });
+  }
+};
+
+const scheduleGoLiveSchema = z.object({
+  // Omit/null cancels a pending schedule. Future-date check happens below, at parse time —
+  // a static z.date().min(new Date()) bound would freeze "now" to module-load time instead.
+  goLiveAt: z.coerce.date().nullable().optional(),
+});
+
+export const scheduleGoLive = async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = scheduleGoLiveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid input' });
+    }
+    if (parsed.data.goLiveAt && parsed.data.goLiveAt.getTime() <= Date.now()) {
+      return res.status(400).json({ message: 'Scheduled go-live time must be in the future' });
+    }
+    const id = req.params.id as string;
+    const tenant = await Tenant.findById(id);
+    if (!tenant) return res.status(404).json({ message: 'Company not found' });
+
+    if (tenant.lifecycleStatus === 'LIVE') {
+      return res.status(400).json({ message: 'This company is already live.' });
+    }
+
+    tenant.scheduledGoLiveAt = parsed.data.goLiveAt || undefined;
+    await tenant.save();
+
+    await writeAuditLog({
+      tenantId: id,
+      userId: req.user?._id,
+      action: tenant.scheduledGoLiveAt ? 'SCHEDULE_GO_LIVE' : 'CANCEL_SCHEDULED_GO_LIVE',
+      status: 'SUCCESS',
+      details: { scheduledGoLiveAt: tenant.scheduledGoLiveAt },
+    });
+
+    res.status(200).json({ scheduledGoLiveAt: tenant.scheduledGoLiveAt || null });
+  } catch (error: any) {
+    console.error('Error scheduling go-live:', error);
+    res.status(500).json({ message: 'Internal server error while scheduling go-live' });
   }
 };
 

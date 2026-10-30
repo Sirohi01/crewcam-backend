@@ -25,6 +25,7 @@ export interface ITenant extends Document, IAuditable {
 
   lifecycleStatus: LifecycleStatus;
   lifecycleUpdatedAt?: Date;
+  scheduledGoLiveAt?: Date;
 
   setupFeeStatus: 'PENDING' | 'PAID' | 'WAIVED';
   setupFeePaidAt?: Date;
@@ -75,6 +76,7 @@ const TenantSchema = new Schema<ITenant>({
 
   lifecycleStatus: { type: String, enum: LIFECYCLE_STATUSES, default: 'LEAD', index: true },
   lifecycleUpdatedAt: { type: Date },
+  scheduledGoLiveAt: { type: Date, index: true },
 
   setupFeeStatus: { type: String, enum: ['PENDING', 'PAID', 'WAIVED'], default: 'PENDING' },
   setupFeePaidAt: { type: Date },

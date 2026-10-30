@@ -4,7 +4,7 @@ import {
   getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
   resendCompanyCredentials, getNextCorporateId,
-  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp
+  getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp, scheduleGoLive
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
 import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
@@ -52,6 +52,7 @@ router.get('/tenants/:id', getTenantById);
 router.get('/tenants/:id/dashboard-stats', getTenantDashboardStats);
 router.post('/tenants', createTenant);
 router.put('/tenants/:id', updateTenant);
+router.put('/tenants/:id/schedule-go-live', scheduleGoLive);
 router.get('/tenants/:id/roles', getTenantRoles);
 router.get('/tenants/:id/admins', getTenantAdmins);
 router.get('/tenants/:id/employees', getTenantEmployees);

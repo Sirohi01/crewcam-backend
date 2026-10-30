@@ -38,6 +38,7 @@ import path from 'path';
 import { startRetentionJobs } from './utils/retentionJobs';
 import { startCronJobs } from './utils/cronJobs';
 import { startAutomationJobs } from './utils/automationJobs';
+import { startGoLiveJobs } from './utils/goLiveJobs';
 import helmet from 'helmet';
 import cors from 'cors';
 
@@ -149,6 +150,7 @@ mongoose.connect(MONGODB_URI, { maxPoolSize: 20 })
     startRetentionJobs();
     startCronJobs();
     startAutomationJobs();
+    startGoLiveJobs();
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });

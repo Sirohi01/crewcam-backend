@@ -206,6 +206,107 @@ export function buildCompanyWelcomeEmail(params: {
   };
 }
 
+export function buildCompanyGoLiveEmail(params: {
+  companyName: string;
+  adminFirstName: string;
+  loginUrl: string;
+  isFirstGoLive: boolean;
+  corporateId?: string;
+}): { subject: string; html: string } {
+  const { companyName, adminFirstName, loginUrl, isFirstGoLive, corporateId } = params;
+  const subject = isFirstGoLive
+    ? `${companyName} is now live on Crewcam`
+    : `New changes are live for ${companyName} on Crewcam`;
+  const headline = isFirstGoLive ? 'Your workspace is live!' : 'New changes are live';
+  const introLine = isFirstGoLive
+    ? `Your company workspace for <strong>${companyName}</strong> has gone live on Crewcam. Your team can now log in and start using the system.`
+    : `There are new changes to your <strong>${companyName}</strong> workspace on Crewcam, and those changes are now live.`;
+  const statusLabel = isFirstGoLive ? 'Live' : 'Updated & Live';
+  const loginHost = (() => { try { return new URL(loginUrl).host; } catch { return loginUrl; } })();
+  const effectiveAt = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+
+  return {
+    subject,
+    html: `
+  <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #18181b; line-height: 1.6; border: 1px solid #e4e4e7; border-radius: 10px; overflow: hidden;">
+
+    <div style="padding: 24px 24px 10px; text-align: center;">
+      <h1 style="margin: 0; font-size: 22px; letter-spacing: 0.5px; color: #0b1638;">Crewcam</h1>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="border-top: 2px solid #166534; padding: 8px 24px; font-size: 11px; color: #71717a;">${loginHost}</td>
+        <td style="border-top: 2px solid #166534; padding: 8px 24px; font-size: 11px; color: #166534; text-align: right; font-weight: 700;">CREWCAM</td>
+      </tr>
+    </table>
+
+    <div style="padding: 20px 24px;">
+      <p style="color: #52525b;">Dear ${adminFirstName},</p>
+      <p style="font-weight: 700; font-size: 14px; color: #166534; margin: 12px 0 4px;">${headline}</p>
+      <p style="color: #52525b;">${introLine}</p>
+
+      <table style="width: 100%; margin: 20px 0; border-collapse: collapse; background: #f0fdf4; border: 1px solid #dcfce7; border-radius: 8px;">
+        <tr>
+          <td style="padding: 10px 12px; color: #71717a; width: 140px;">Company</td>
+          <td style="padding: 10px 12px;"><strong>${companyName}</strong></td>
+        </tr>
+        ${corporateId ? `
+        <tr>
+          <td style="padding: 10px 12px; color: #71717a;">Corporate ID</td>
+          <td style="padding: 10px 12px;"><strong style="font-family: monospace;">${corporateId}</strong></td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding: 10px 12px; color: #71717a;">Status</td>
+          <td style="padding: 10px 12px;"><strong style="color: #166534;">${statusLabel}</strong></td>
+        </tr>
+        <tr>
+          <td style="padding: 10px 12px; color: #71717a;">Effective</td>
+          <td style="padding: 10px 12px;">${effectiveAt}</td>
+        </tr>
+        <tr>
+          <td style="padding: 10px 12px; color: #71717a;">Login URL</td>
+          <td style="padding: 10px 12px;">
+            <a href="${loginUrl}" style="color: #166534; font-weight: 600; text-decoration: none;">${loginUrl}</a>
+          </td>
+        </tr>
+      </table>
+      ${corporateId ? `<p style="color: #71717a; font-size: 11.5px; margin-top: -8px;">Keep your Corporate ID handy — you'll need it to log in.</p>` : ''}
+
+      <div style="background: #fafafa; border: 1px solid #e4e4e7; border-radius: 8px; padding: 12px 14px; margin: 16px 0;">
+        <p style="margin: 0 0 6px; font-weight: 700; font-size: 12px; color: #18181b;">📌 Important Note</p>
+        <ul style="margin: 0; padding-left: 18px; color: #52525b; font-size: 12.5px; line-height: 1.8;">
+          <li>This confirms your workspace changes are now visible to your team.</li>
+          <li>If you did not expect this change, contact your Crewcam administrator immediately.</li>
+          <li>You can review the latest configuration anytime from your dashboard.</li>
+        </ul>
+      </div>
+
+      <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px 14px; margin: 16px 0;">
+        <p style="margin: 0 0 4px; font-weight: 700; font-size: 12px; color: #3730a3;">SUPPORT</p>
+        <p style="margin: 0; font-size: 12px; color: #4338ca;">
+          Need help with anything? Reach us anytime at
+          <a href="mailto:support@crewcam.com" style="color: #3730a3; font-weight: 600; text-decoration: none;">support@crewcam.com</a>
+        </p>
+      </div>
+
+      <p style="color: #52525b; margin-top: 24px;">
+        Warm Regards,<br>
+        <strong>Team Crewcam</strong>
+      </p>
+    </div>
+
+    <div style="background: #fafafa; padding: 14px 24px; text-align: center; border-top: 1px solid #e4e4e7;">
+      <p style="margin: 0; font-size: 11px; color: #a1a1aa;">
+        © 2026 Crewcam. All Rights Reserved.<br>
+        Powered by Namo Gange Wellness Pvt. Ltd.
+      </p>
+    </div>
+  </div>
+`,
+  };
+}
+
 export function buildCredentialsResetEmail(params: {
   companyName: string;
   adminFirstName: string;

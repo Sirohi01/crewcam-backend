@@ -165,6 +165,15 @@ export const createSidebarConfigItem = async (req: AuthRequest, res: Response) =
   }
 };
 
+// Fields safe to fan out to every tenant's own copy of a sidebar item. roleIds is
+// deliberately excluded — it holds Role ObjectIds from the SUPER_ADMIN pseudo-tenant, which
+// don't correspond to any real role in another tenant, so copying it would silently break
+// role-based visibility there instead of just toggling the item on/off.
+const GLOBAL_PROPAGATABLE_SIDEBAR_FIELDS = [
+  'isActive', 'label', 'href', 'icon', 'order', 'parent', 'section', 'sectionOrder',
+  'requiredPermission', 'requiredFeature', 'itemType',
+] as const;
+
 export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
@@ -182,6 +191,30 @@ export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) =
     );
     if (!item) return res.status(404).json({ message: 'Sidebar item not found' });
 
+    // The Super Admin's Sidebar Management page is the global template editor — every other
+    // tenant has its own separate SidebarConfig documents (seeded per-tenant from
+    // DEFAULT_SIDEBAR_ITEMS), so without this an edit made here — e.g. disabling an item —
+    // only ever touched the SUPER_ADMIN pseudo-tenant's own copy and never reached anyone
+    // else's sidebar. Match the same logical item (section+label, plus href for real links)
+    // across every tenant and apply the same safe fields there.
+    let propagatedCount = 0;
+    if (tenantId === 'SUPER_ADMIN') {
+      const propagateFields: Record<string, any> = {};
+      for (const key of GLOBAL_PROPAGATABLE_SIDEBAR_FIELDS) {
+        if (key in updateData) propagateFields[key] = updateData[key];
+      }
+      if (Object.keys(propagateFields).length > 0) {
+        const matchQuery: Record<string, any> = {
+          tenantId: { $ne: 'SUPER_ADMIN' },
+          section: item.section,
+          label: item.label,
+        };
+        if (item.href) matchQuery.href = item.href;
+        const result = await SidebarConfig.updateMany(matchQuery as any, { $set: propagateFields });
+        propagatedCount = result.modifiedCount || 0;
+      }
+    }
+
     await AuditLog.create({
       tenantId,
       userId: req.user!._id as any,
@@ -189,7 +222,7 @@ export const updateSidebarConfigItem = async (req: AuthRequest, res: Response) =
       module: 'Platform Admin',
       status: 'SUCCESS',
       ipAddress: req.ip as string,
-      details: { itemId: id },
+      details: { itemId: id, propagatedToTenants: propagatedCount },
     });
 
     res.status(200).json(item);
