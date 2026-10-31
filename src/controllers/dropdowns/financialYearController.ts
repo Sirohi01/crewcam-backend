@@ -1,6 +1,10 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { FinancialYear } from '../../models/dropdowns/FinancialYear';
+import { writeAuditLog, diffFields } from '../../utils/auditLog';
+
+const MODULE = 'Financial Year Management';
+const DIFF_FIELDS = ['name', 'code', 'description', 'isActive'];
 
 export const getAllFinancialYears = async (req: AuthRequest, res: Response) => {
   try {
@@ -17,6 +21,8 @@ export const getAllFinancialYears = async (req: AuthRequest, res: Response) => {
 export const createFinancialYear = async (req: AuthRequest, res: Response) => {
   try {
     const data = await FinancialYear.create({ ...req.body, createdBy: req.user?._id });
+    const changes = diffFields(null, data.toObject(), DIFF_FIELDS);
+    await writeAuditLog({ userId: req.user?._id, action: 'CREATE_FINANCIAL_YEAR', module: MODULE, details: { name: data.name, changes } });
     res.status(201).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -28,7 +34,12 @@ export const createFinancialYear = async (req: AuthRequest, res: Response) => {
 
 export const updateFinancialYear = async (req: AuthRequest, res: Response) => {
   try {
+    const before = await FinancialYear.findById(req.params.id).lean();
     const data = await FinancialYear.findByIdAndUpdate(req.params.id, { ...req.body, updatedBy: req.user?._id }, { new: true });
+    if (data) {
+      const changes = diffFields(before, data.toObject(), DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'UPDATE_FINANCIAL_YEAR', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -40,7 +51,11 @@ export const updateFinancialYear = async (req: AuthRequest, res: Response) => {
 
 export const deleteFinancialYear = async (req: AuthRequest, res: Response) => {
   try {
-    await FinancialYear.findByIdAndDelete(req.params.id);
+    const data = await FinancialYear.findByIdAndDelete(req.params.id);
+    if (data) {
+      const changes = diffFields(data.toObject(), null, DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'DELETE_FINANCIAL_YEAR', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ message: 'Financial Year deleted successfully' });
   } catch (error) {
     if ((error as any).code === 11000) {

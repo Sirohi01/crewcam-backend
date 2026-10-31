@@ -217,22 +217,37 @@ export const getNextCorporateId = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Batches the per-tenant admin/company lookups into 3 queries total instead of up to 3N
+// (previously one Role.findOne + one User.findOne + one Company.findOne per tenant, in a
+// map(async ...)) — with tiny per-tenant data, round-trip count (not row size) dominated
+// load time, so this is what actually speeds the Companies page up.
 export const getAllTenants = async (req: AuthRequest, res: Response) => {
   try {
     const tenants = await Tenant.find().populate('packageId').lean();
-    const tenantsWithAdmin = await Promise.all(tenants.map(async (tenant) => {
-      const adminRole = await Role.findOne({ tenantId: tenant._id.toString(), name: 'Company Admin' }).lean();
-      let admin = null;
-      if (adminRole) {
-        admin = await User.findOne({ tenantId: tenant._id.toString(), roleId: adminRole._id }).select('firstName lastName email profilePictureUrl').lean();
-      }
-      const company = await Company.findOne({ tenantId: tenant._id.toString() }).lean();
+    const tenantIds = tenants.map((t) => t._id.toString());
+
+    const [adminRoles, companies] = await Promise.all([
+      Role.find({ tenantId: { $in: tenantIds }, name: 'Company Admin' }).lean(),
+      Company.find({ tenantId: { $in: tenantIds } }).lean(),
+    ]);
+    const companyByTenant = new Map(companies.map((c: any) => [c.tenantId, c]));
+
+    const roleIds = adminRoles.map((r) => r._id);
+    const admins = roleIds.length
+      ? await User.find({ tenantId: { $in: tenantIds }, roleId: { $in: roleIds } })
+          .select('firstName lastName email profilePictureUrl tenantId roleId')
+          .lean()
+      : [];
+    const adminByTenant = new Map(admins.map((a: any) => [a.tenantId, a]));
+
+    const tenantsWithAdmin = tenants.map((tenant) => {
+      const id = tenant._id.toString();
       return {
         ...tenant,
-        admin,
-        company
+        admin: adminByTenant.get(id) || null,
+        company: companyByTenant.get(id) || null,
       };
-    }));
+    });
 
     res.status(200).json(tenantsWithAdmin);
   } catch (error) {
@@ -1746,7 +1761,11 @@ export const updateTenantEmployee = async (req: AuthRequest, res: Response) => {
 
 export const getSuperAdminActivityLogs = async (req: AuthRequest, res: Response) => {
   try {
-    const logs = await AuditLog.find({ action: { $in: ['CREATE_COMPANY', 'UPDATE_COMPANY', 'DELETE_COMPANY'] } })
+    const moduleFilter = req.query.module as string | undefined;
+    const query = moduleFilter
+      ? { module: moduleFilter }
+      : { action: { $in: ['CREATE_COMPANY', 'UPDATE_COMPANY', 'DELETE_COMPANY'] } };
+    const logs = await AuditLog.find(query)
       .setOptions({ bypassTenantIsolation: true })
       .populate('userId', 'firstName lastName email')
       .sort({ createdAt: -1 })

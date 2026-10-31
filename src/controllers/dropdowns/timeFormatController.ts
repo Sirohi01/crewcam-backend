@@ -1,6 +1,10 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { TimeFormat } from '../../models/dropdowns/TimeFormat';
+import { writeAuditLog, diffFields } from '../../utils/auditLog';
+
+const MODULE = 'Time Format Management';
+const DIFF_FIELDS = ['name', 'code', 'description', 'isActive'];
 
 export const getAllTimeFormats = async (req: AuthRequest, res: Response) => {
   try {
@@ -17,6 +21,8 @@ export const getAllTimeFormats = async (req: AuthRequest, res: Response) => {
 export const createTimeFormat = async (req: AuthRequest, res: Response) => {
   try {
     const data = await TimeFormat.create({ ...req.body, createdBy: req.user?._id });
+    const changes = diffFields(null, data.toObject(), DIFF_FIELDS);
+    await writeAuditLog({ userId: req.user?._id, action: 'CREATE_TIME_FORMAT', module: MODULE, details: { name: data.name, changes } });
     res.status(201).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -28,7 +34,12 @@ export const createTimeFormat = async (req: AuthRequest, res: Response) => {
 
 export const updateTimeFormat = async (req: AuthRequest, res: Response) => {
   try {
+    const before = await TimeFormat.findById(req.params.id).lean();
     const data = await TimeFormat.findByIdAndUpdate(req.params.id, { ...req.body, updatedBy: req.user?._id }, { new: true });
+    if (data) {
+      const changes = diffFields(before, data.toObject(), DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'UPDATE_TIME_FORMAT', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -40,7 +51,11 @@ export const updateTimeFormat = async (req: AuthRequest, res: Response) => {
 
 export const deleteTimeFormat = async (req: AuthRequest, res: Response) => {
   try {
-    await TimeFormat.findByIdAndDelete(req.params.id);
+    const data = await TimeFormat.findByIdAndDelete(req.params.id);
+    if (data) {
+      const changes = diffFields(data.toObject(), null, DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'DELETE_TIME_FORMAT', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ message: 'Time Format deleted successfully' });
   } catch (error) {
     if ((error as any).code === 11000) {

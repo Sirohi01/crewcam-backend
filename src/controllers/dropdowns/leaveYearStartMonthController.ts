@@ -1,6 +1,10 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { LeaveYearStartMonth } from '../../models/dropdowns/LeaveYearStartMonth';
+import { writeAuditLog, diffFields } from '../../utils/auditLog';
+
+const MODULE = 'Leave Year Start Month Management';
+const DIFF_FIELDS = ['name', 'code', 'description', 'isActive'];
 
 export const getAllLeaveYearStartMonths = async (req: AuthRequest, res: Response) => {
   try {
@@ -17,6 +21,8 @@ export const getAllLeaveYearStartMonths = async (req: AuthRequest, res: Response
 export const createLeaveYearStartMonth = async (req: AuthRequest, res: Response) => {
   try {
     const data = await LeaveYearStartMonth.create({ ...req.body, createdBy: req.user?._id });
+    const changes = diffFields(null, data.toObject(), DIFF_FIELDS);
+    await writeAuditLog({ userId: req.user?._id, action: 'CREATE_LEAVE_YEAR_START_MONTH', module: MODULE, details: { name: data.name, changes } });
     res.status(201).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -28,7 +34,12 @@ export const createLeaveYearStartMonth = async (req: AuthRequest, res: Response)
 
 export const updateLeaveYearStartMonth = async (req: AuthRequest, res: Response) => {
   try {
+    const before = await LeaveYearStartMonth.findById(req.params.id).lean();
     const data = await LeaveYearStartMonth.findByIdAndUpdate(req.params.id, { ...req.body, updatedBy: req.user?._id }, { new: true });
+    if (data) {
+      const changes = diffFields(before, data.toObject(), DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'UPDATE_LEAVE_YEAR_START_MONTH', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -40,7 +51,11 @@ export const updateLeaveYearStartMonth = async (req: AuthRequest, res: Response)
 
 export const deleteLeaveYearStartMonth = async (req: AuthRequest, res: Response) => {
   try {
-    await LeaveYearStartMonth.findByIdAndDelete(req.params.id);
+    const data = await LeaveYearStartMonth.findByIdAndDelete(req.params.id);
+    if (data) {
+      const changes = diffFields(data.toObject(), null, DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'DELETE_LEAVE_YEAR_START_MONTH', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ message: 'Leave Year Start Month deleted successfully' });
   } catch (error) {
     if ((error as any).code === 11000) {

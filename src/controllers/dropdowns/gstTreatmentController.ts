@@ -1,6 +1,10 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { GSTTreatment } from '../../models/dropdowns/GSTTreatment';
+import { writeAuditLog, diffFields } from '../../utils/auditLog';
+
+const MODULE = 'GST Treatment Management';
+const DIFF_FIELDS = ['name', 'code', 'description', 'isActive'];
 
 export const getAllGSTTreatments = async (req: AuthRequest, res: Response) => {
   try {
@@ -17,6 +21,8 @@ export const getAllGSTTreatments = async (req: AuthRequest, res: Response) => {
 export const createGSTTreatment = async (req: AuthRequest, res: Response) => {
   try {
     const data = await GSTTreatment.create({ ...req.body, createdBy: req.user?._id });
+    const changes = diffFields(null, data.toObject(), DIFF_FIELDS);
+    await writeAuditLog({ userId: req.user?._id, action: 'CREATE_GST_TREATMENT', module: MODULE, details: { name: data.name, changes } });
     res.status(201).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -28,7 +34,12 @@ export const createGSTTreatment = async (req: AuthRequest, res: Response) => {
 
 export const updateGSTTreatment = async (req: AuthRequest, res: Response) => {
   try {
+    const before = await GSTTreatment.findById(req.params.id).lean();
     const data = await GSTTreatment.findByIdAndUpdate(req.params.id, { ...req.body, updatedBy: req.user?._id }, { new: true });
+    if (data) {
+      const changes = diffFields(before, data.toObject(), DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'UPDATE_GST_TREATMENT', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -40,7 +51,11 @@ export const updateGSTTreatment = async (req: AuthRequest, res: Response) => {
 
 export const deleteGSTTreatment = async (req: AuthRequest, res: Response) => {
   try {
-    await GSTTreatment.findByIdAndDelete(req.params.id);
+    const data = await GSTTreatment.findByIdAndDelete(req.params.id);
+    if (data) {
+      const changes = diffFields(data.toObject(), null, DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'DELETE_GST_TREATMENT', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ message: 'GST Treatment deleted successfully' });
   } catch (error) {
     if ((error as any).code === 11000) {

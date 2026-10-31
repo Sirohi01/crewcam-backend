@@ -1,6 +1,10 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { FirstDayOfMonth } from '../../models/dropdowns/FirstDayOfMonth';
+import { writeAuditLog, diffFields } from '../../utils/auditLog';
+
+const MODULE = 'First Day of Month Management';
+const DIFF_FIELDS = ['name', 'code', 'description', 'isActive'];
 
 export const getAllFirstDayOfMonths = async (req: AuthRequest, res: Response) => {
   try {
@@ -17,6 +21,8 @@ export const getAllFirstDayOfMonths = async (req: AuthRequest, res: Response) =>
 export const createFirstDayOfMonth = async (req: AuthRequest, res: Response) => {
   try {
     const data = await FirstDayOfMonth.create({ ...req.body, createdBy: req.user?._id });
+    const changes = diffFields(null, data.toObject(), DIFF_FIELDS);
+    await writeAuditLog({ userId: req.user?._id, action: 'CREATE_FIRST_DAY_OF_MONTH', module: MODULE, details: { name: data.name, changes } });
     res.status(201).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -28,7 +34,12 @@ export const createFirstDayOfMonth = async (req: AuthRequest, res: Response) => 
 
 export const updateFirstDayOfMonth = async (req: AuthRequest, res: Response) => {
   try {
+    const before = await FirstDayOfMonth.findById(req.params.id).lean();
     const data = await FirstDayOfMonth.findByIdAndUpdate(req.params.id, { ...req.body, updatedBy: req.user?._id }, { new: true });
+    if (data) {
+      const changes = diffFields(before, data.toObject(), DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'UPDATE_FIRST_DAY_OF_MONTH', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ data });
   } catch (error) {
     if ((error as any).code === 11000) {
@@ -40,7 +51,11 @@ export const updateFirstDayOfMonth = async (req: AuthRequest, res: Response) => 
 
 export const deleteFirstDayOfMonth = async (req: AuthRequest, res: Response) => {
   try {
-    await FirstDayOfMonth.findByIdAndDelete(req.params.id);
+    const data = await FirstDayOfMonth.findByIdAndDelete(req.params.id);
+    if (data) {
+      const changes = diffFields(data.toObject(), null, DIFF_FIELDS);
+      await writeAuditLog({ userId: req.user?._id, action: 'DELETE_FIRST_DAY_OF_MONTH', module: MODULE, details: { name: data.name, changes } });
+    }
     res.status(200).json({ message: 'First Day of Month deleted successfully' });
   } catch (error) {
     if ((error as any).code === 11000) {
