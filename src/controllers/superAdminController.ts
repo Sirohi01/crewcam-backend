@@ -28,6 +28,13 @@ import { z } from 'zod';
 import { buildCompanyWelcomeEmail, buildCredentialsResetEmail, buildCompanyGoLiveEmail, sendMail } from '../services/mailer';
 import { Otp } from '../models/Otp';
 import { seedDefaultTenantRoles, syncSidebarDefaults } from '../utils/seedSync';
+import { diffFields } from '../utils/auditLog';
+
+// Surfaced as before/after "changes" on CREATE_COMPANY/UPDATE_COMPANY/DELETE_COMPANY audit
+// log entries — the Tenant + Company fields an admin actually cares about seeing change,
+// not every column across both collections (documents, compliance numbers, etc.).
+const TENANT_DIFF_FIELDS = ['name', 'isActive', 'packageId', 'aiCredits', 'lifecycleStatus', 'setupFeeStatus', 'billingCycle', 'subscriptionAmount', 'subscriptionCurrency', 'subscriptionStatus', 'estimatedEmployees'];
+const COMPANY_DIFF_FIELDS = ['tradeName', 'industry', 'companyType', 'website', 'email', 'phone', 'country', 'city', 'state', 'companySize'];
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 const hashOtp = (userId: unknown, otp: string) => hashToken(`${userId}:${otp}`);
 
@@ -494,12 +501,13 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     if (!emailResult.sent && emailResult.error) tenant.credentialsEmailError = emailResult.error;
     await tenant.save();
 
+    const createChanges = diffFields(null, { ...tenant.toObject(), ...company.toObject() }, [...TENANT_DIFF_FIELDS, ...COMPANY_DIFF_FIELDS]);
     await writeAuditLog({
       tenantId: String(tenant._id),
       userId: req.user?._id,
       action: 'CREATE_COMPANY',
       status: 'SUCCESS',
-      details: { name, adminEmail, packageId, credentialsEmailSent: emailResult.sent },
+      details: { name, adminEmail, packageId, credentialsEmailSent: emailResult.sent, changes: createChanges },
     });
 
     // Quick-create already performs implementation/provisioning/configuration/QA/credential-issuing
@@ -622,6 +630,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
 
     const existingTenant = await Tenant.findById(id);
     if (!existingTenant) return res.status(404).json({ message: 'Company not found' });
+    const existingCompany = await Company.findOne({ tenantId: id as string }).lean();
 
     const billingUpdate: any = {};
     if (setupFeeAmount !== undefined) billingUpdate.setupFeeAmount = setupFeeAmount;
@@ -775,12 +784,18 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       sendMail({ to: adminUser.email, subject, html }).catch((e) => console.error('[go-live] notification email failed:', e));
     }
 
+    const updatedCompany = await Company.findOne({ tenantId: id as string }).lean();
+    const updateChanges = diffFields(
+      { ...existingTenant.toObject(), ...(existingCompany || {}) },
+      { ...tenant.toObject(), ...(updatedCompany || {}) },
+      [...TENANT_DIFF_FIELDS, ...COMPANY_DIFF_FIELDS]
+    );
     await writeAuditLog({
       tenantId: id,
       userId: req.user?._id,
       action: 'UPDATE_COMPANY',
       status: 'SUCCESS',
-      details: { name, isActive, setupFeeStatus, billingCycle, subscriptionStatus },
+      details: { name: tenant.name, isActive, setupFeeStatus, billingCycle, subscriptionStatus, changes: updateChanges },
     });
 
     res.status(200).json(tenant);
@@ -1005,6 +1020,7 @@ export const deleteTenant = async (req: AuthRequest, res: Response) => {
 
     const tenant = await Tenant.findByIdAndDelete(id);
     if (!tenant) return res.status(404).json({ message: 'Company not found' });
+    const deletedCompany = await Company.findOne({ tenantId: id }).lean();
 
     // Revoke OTP to prevent reuse
     tokenDoc.revokedAt = new Date();
@@ -1015,13 +1031,17 @@ export const deleteTenant = async (req: AuthRequest, res: Response) => {
     await User.deleteMany({ tenantId: id });
     await Role.deleteMany({ tenantId: id });
 
-    // @ts-ignore (assuming writeAuditLog is defined locally in the file)
+    const deleteChanges = diffFields(
+      { ...tenant.toObject(), ...(deletedCompany || {}) },
+      null,
+      [...TENANT_DIFF_FIELDS, ...COMPANY_DIFF_FIELDS]
+    );
     await writeAuditLog({
       tenantId: id,
       userId: req.user?._id,
       action: 'DELETE_COMPANY',
       status: 'SUCCESS',
-      details: { name: tenant.name, reason: reason || 'N/A' },
+      details: { name: tenant.name, reason: reason || 'N/A', changes: deleteChanges },
     });
 
     res.status(200).json({ message: 'Company and associated data deleted successfully' });

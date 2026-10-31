@@ -5,8 +5,8 @@ export interface ICompanySize extends IAuditable {
   name: string;
   rangeFrom: number;
   rangeTo: number;
-  code?: string;
-  description?: string;
+  code: string;
+  description: string;
   isActive: boolean;
 }
 
@@ -14,8 +14,8 @@ const companySizeSchema = new Schema<ICompanySize>({
   name: { type: String, required: true, trim: true, unique: true },
   rangeFrom: { type: Number, required: true },
   rangeTo: { type: Number, required: true },
-  code: { type: String, trim: true },
-  description: { type: String },
+  code: { type: String, required: true, trim: true },
+  description: { type: String, required: true },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
