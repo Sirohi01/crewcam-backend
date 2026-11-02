@@ -8,6 +8,7 @@ export interface IPackage extends Document, IAuditable {
   name: string;
   tier: PackageTier;
   description: string;
+  imageUrl?: string;
   maxCompanies: number;
   maxBranches: number;
   maxDepartments: number;
@@ -37,6 +38,7 @@ const PackageSchema = new Schema<IPackage>({
   name: { type: String, required: true },
   tier: { type: String, enum: PACKAGE_TIERS, default: 'CUSTOM' },
   description: { type: String },
+  imageUrl: { type: String },
   maxCompanies: { type: Number, required: true, default: 1 },
   maxBranches: { type: Number, required: true, default: 1 },
   maxDepartments: { type: Number, required: true, default: 5 },

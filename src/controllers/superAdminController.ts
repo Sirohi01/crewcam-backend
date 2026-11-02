@@ -35,6 +35,23 @@ import { diffFields } from '../utils/auditLog';
 // not every column across both collections (documents, compliance numbers, etc.).
 const TENANT_DIFF_FIELDS = ['name', 'isActive', 'packageId', 'aiCredits', 'lifecycleStatus', 'setupFeeStatus', 'billingCycle', 'subscriptionAmount', 'subscriptionCurrency', 'subscriptionStatus', 'estimatedEmployees'];
 const COMPANY_DIFF_FIELDS = ['tradeName', 'industry', 'companyType', 'website', 'email', 'phone', 'country', 'city', 'state', 'companySize'];
+
+// diffFields captures packageId as the raw ObjectId — swap it for the plan's actual name
+// so the activity log reads "Starter" / "Professional" instead of a Mongo id.
+async function resolvePackageNameInChanges(changes: Record<string, { before: any; after: any }>) {
+  if (!changes.packageId) return changes;
+  const { before, after } = changes.packageId;
+  const [beforePkg, afterPkg] = await Promise.all([
+    before ? Package.findById(before).select('name').lean() : null,
+    after ? Package.findById(after).select('name').lean() : null,
+  ]);
+  changes.packageId = {
+    before: beforePkg?.name || (before ? String(before) : null),
+    after: afterPkg?.name || (after ? String(after) : null),
+  };
+  return changes;
+}
+
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 const hashOtp = (userId: unknown, otp: string) => hashToken(`${userId}:${otp}`);
 
@@ -501,7 +518,7 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
     if (!emailResult.sent && emailResult.error) tenant.credentialsEmailError = emailResult.error;
     await tenant.save();
 
-    const createChanges = diffFields(null, { ...tenant.toObject(), ...company.toObject() }, [...TENANT_DIFF_FIELDS, ...COMPANY_DIFF_FIELDS]);
+    const createChanges = await resolvePackageNameInChanges(diffFields(null, { ...tenant.toObject(), ...company.toObject() }, [...TENANT_DIFF_FIELDS, ...COMPANY_DIFF_FIELDS]));
     await writeAuditLog({
       tenantId: String(tenant._id),
       userId: req.user?._id,
@@ -785,11 +802,11 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     }
 
     const updatedCompany = await Company.findOne({ tenantId: id as string }).lean();
-    const updateChanges = diffFields(
+    const updateChanges = await resolvePackageNameInChanges(diffFields(
       { ...existingTenant.toObject(), ...(existingCompany || {}) },
       { ...tenant.toObject(), ...(updatedCompany || {}) },
       [...TENANT_DIFF_FIELDS, ...COMPANY_DIFF_FIELDS]
-    );
+    ));
     await writeAuditLog({
       tenantId: id,
       userId: req.user?._id,
@@ -1031,11 +1048,11 @@ export const deleteTenant = async (req: AuthRequest, res: Response) => {
     await User.deleteMany({ tenantId: id });
     await Role.deleteMany({ tenantId: id });
 
-    const deleteChanges = diffFields(
+    const deleteChanges = await resolvePackageNameInChanges(diffFields(
       { ...tenant.toObject(), ...(deletedCompany || {}) },
       null,
       [...TENANT_DIFF_FIELDS, ...COMPANY_DIFF_FIELDS]
-    );
+    ));
     await writeAuditLog({
       tenantId: id,
       userId: req.user?._id,

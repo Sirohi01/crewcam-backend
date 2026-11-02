@@ -4,7 +4,7 @@ import { BillingCycle } from '../../models/dropdowns/BillingCycle';
 import { writeAuditLog, diffFields } from '../../utils/auditLog';
 
 const MODULE = 'Billing Cycle Management';
-const DIFF_FIELDS = ['name', 'code', 'period', 'description', 'isActive'];
+const DIFF_FIELDS = ['name', 'code', 'period', 'description', 'discountPercent', 'isActive'];
 
 export const getAllBillingCycles = async (req: AuthRequest, res: Response) => {
   try {

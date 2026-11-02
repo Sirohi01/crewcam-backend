@@ -6,6 +6,10 @@ export interface IBillingCycle extends IAuditable {
   code: string;
   period: string;
   description: string;
+  // Percentage knocked off the subtotal when this cycle is billed — e.g. 10 for
+  // Quarterly's "Save 10%", 0 for Monthly. Feeds straight into the plan builder's
+  // pricing calculation, not just the display label.
+  discountPercent: number;
   isActive: boolean;
 }
 
@@ -14,6 +18,7 @@ const schema = new Schema<IBillingCycle>({
   code: { type: String, required: true, trim: true },
   period: { type: String, required: true, trim: true },
   description: { type: String, required: true },
+  discountPercent: { type: Number, required: true, min: 0, max: 100, default: 0 },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
