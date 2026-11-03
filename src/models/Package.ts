@@ -31,6 +31,14 @@ export interface IPackage extends Document, IAuditable {
   freeAiCredits: number;
   aiCreditTopUpPriceINR: number;
   aiCreditTopUpPriceUSD: number;
+  aiFeaturesIncluded?: string[];
+  geoTrackingEnabled?: boolean;
+  maxGeofenceRadiusMeters?: number;
+  faceAttendance?: boolean;
+  monthlyOtpPerUser?: number;
+  monthlyWhatsappAlertsPerUser?: number;
+  storageLimitGB?: number;
+  auditLogRetentionDays?: number;
   isActive: boolean;
 }
 
@@ -62,6 +70,14 @@ const PackageSchema = new Schema<IPackage>({
   freeAiCredits: { type: Number, default: 0 },
   aiCreditTopUpPriceINR: { type: Number, default: 0 },
   aiCreditTopUpPriceUSD: { type: Number, default: 0 },
+  aiFeaturesIncluded: [{ type: String }],
+  geoTrackingEnabled: { type: Boolean, default: false },
+  maxGeofenceRadiusMeters: { type: Number, default: 200 },
+  faceAttendance: { type: Boolean, default: false },
+  monthlyOtpPerUser: { type: Number, default: 5 },
+  monthlyWhatsappAlertsPerUser: { type: Number, default: 10 },
+  storageLimitGB: { type: Number, default: 10 },
+  auditLogRetentionDays: { type: Number, default: 90 },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 

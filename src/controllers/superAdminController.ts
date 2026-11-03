@@ -1200,15 +1200,18 @@ export const getAllPackages = async (req: AuthRequest, res: Response) => {
 export const createPackage = async (req: AuthRequest, res: Response) => {
   try {
     const {
-      name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
+      name, description, imageUrl, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
       planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD,
+      aiFeaturesIncluded, geoTrackingEnabled, maxGeofenceRadiusMeters, faceAttendance,
+      monthlyOtpPerUser, monthlyWhatsappAlertsPerUser, storageLimitGB, auditLogRetentionDays,
     } = req.body;
     const newPackage = new Package({
       name,
       tier: tier || 'CUSTOM',
       description,
+      imageUrl,
       maxCompanies,
       maxBranches,
       maxDepartments,
@@ -1231,6 +1234,14 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
       freeAiCredits,
       aiCreditTopUpPriceINR,
       aiCreditTopUpPriceUSD,
+      aiFeaturesIncluded,
+      geoTrackingEnabled,
+      maxGeofenceRadiusMeters,
+      faceAttendance,
+      monthlyOtpPerUser,
+      monthlyWhatsappAlertsPerUser,
+      storageLimitGB,
+      auditLogRetentionDays,
       createdBy: req.user?._id
     });
     await newPackage.save();
@@ -1245,10 +1256,12 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      name, description, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
+      name, description, imageUrl, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
       planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD, isActive,
+      aiFeaturesIncluded, geoTrackingEnabled, maxGeofenceRadiusMeters, faceAttendance,
+      monthlyOtpPerUser, monthlyWhatsappAlertsPerUser, storageLimitGB, auditLogRetentionDays,
     } = req.body;
 
     const updated = await Package.findByIdAndUpdate(
@@ -1257,6 +1270,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(name !== undefined && { name }),
         ...(tier !== undefined && { tier }),
         ...(description !== undefined && { description }),
+        ...(imageUrl !== undefined && { imageUrl }),
         ...(maxCompanies !== undefined && { maxCompanies }),
         ...(maxBranches !== undefined && { maxBranches }),
         ...(maxDepartments !== undefined && { maxDepartments }),
@@ -1279,6 +1293,14 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(freeAiCredits !== undefined && { freeAiCredits }),
         ...(aiCreditTopUpPriceINR !== undefined && { aiCreditTopUpPriceINR }),
         ...(aiCreditTopUpPriceUSD !== undefined && { aiCreditTopUpPriceUSD }),
+        ...(aiFeaturesIncluded !== undefined && { aiFeaturesIncluded }),
+        ...(geoTrackingEnabled !== undefined && { geoTrackingEnabled }),
+        ...(maxGeofenceRadiusMeters !== undefined && { maxGeofenceRadiusMeters }),
+        ...(faceAttendance !== undefined && { faceAttendance }),
+        ...(monthlyOtpPerUser !== undefined && { monthlyOtpPerUser }),
+        ...(monthlyWhatsappAlertsPerUser !== undefined && { monthlyWhatsappAlertsPerUser }),
+        ...(storageLimitGB !== undefined && { storageLimitGB }),
+        ...(auditLogRetentionDays !== undefined && { auditLogRetentionDays }),
         ...(isActive !== undefined && { isActive }),
         updatedBy: req.user?._id,
       },
