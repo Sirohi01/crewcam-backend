@@ -21,6 +21,8 @@ import { getAutomationRules, updateAutomationRule, getAutomationLogs, runAutomat
 import { getAllIndustries, createIndustry, updateIndustry, deleteIndustry } from '../controllers/dropdowns/industryController';
 import { getAllAddOnModules, createAddOnModule, updateAddOnModule, deleteAddOnModule } from '../controllers/dropdowns/addOnModuleController';
 import { getAllCoreFeatures, createCoreFeature, updateCoreFeature, deleteCoreFeature } from '../controllers/dropdowns/coreFeatureController';
+import { getAllModules, createModule, updateModule, deleteModule } from '../controllers/dropdowns/moduleController';
+import { getAllModuleFeatures, createModuleFeature, updateModuleFeature, deleteModuleFeature } from '../controllers/dropdowns/moduleFeatureController';
 import { getAllCompanySizes, createCompanySize, updateCompanySize, deleteCompanySize } from '../controllers/dropdowns/companySizeController';
 import { getAllTimeZones, createTimeZone, updateTimeZone, deleteTimeZone } from '../controllers/dropdowns/timeZoneController';
 import { getAllCurrencys, createCurrency, updateCurrency, deleteCurrency } from '../controllers/dropdowns/currencyController';
@@ -167,6 +169,16 @@ router.get('/core-features', getAllCoreFeatures);
 router.post('/core-features', createCoreFeature);
 router.put('/core-features/:id', updateCoreFeature);
 router.delete('/core-features/:id', deleteCoreFeature);
+
+router.get('/modules', getAllModules);
+router.post('/modules', createModule);
+router.put('/modules/:id', updateModule);
+router.delete('/modules/:id', deleteModule);
+
+router.get('/module-features', getAllModuleFeatures);
+router.post('/module-features', createModuleFeature);
+router.put('/module-features/:id', updateModuleFeature);
+router.delete('/module-features/:id', deleteModuleFeature);
 
 router.get('/company-sizes', getAllCompanySizes);
 router.post('/company-sizes', createCompanySize);

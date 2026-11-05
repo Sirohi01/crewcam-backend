@@ -4,7 +4,7 @@ import { CoreFeature } from '../../models/dropdowns/CoreFeature';
 import { writeAuditLog, diffFields } from '../../utils/auditLog';
 
 const MODULE = 'Core Feature Management';
-const DIFF_FIELDS = ['name', 'code', 'description', 'isActive'];
+const DIFF_FIELDS = ['name', 'code', 'description', 'category', 'isActive'];
 
 export const getAllCoreFeatures = async (req: AuthRequest, res: Response) => {
   try {

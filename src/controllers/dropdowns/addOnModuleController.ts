@@ -4,7 +4,7 @@ import { AddOnModule } from '../../models/dropdowns/AddOnModule';
 import { writeAuditLog, diffFields } from '../../utils/auditLog';
 
 const MODULE = 'Add-on Module Management';
-const DIFF_FIELDS = ['name', 'code', 'description', 'price', 'pricingUnit', 'badge', 'isActive'];
+const DIFF_FIELDS = ['name', 'code', 'description', 'price', 'pricingUnit', 'badge', 'category', 'isActive'];
 
 export const getAllAddOnModules = async (req: AuthRequest, res: Response) => {
   try {

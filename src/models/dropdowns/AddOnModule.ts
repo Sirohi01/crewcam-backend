@@ -1,5 +1,6 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import { auditPlugin, IAuditable } from '../plugins/auditPlugin';
+import { MODULE_CATEGORIES } from './CoreFeature';
 
 export interface IAddOnModule extends IAuditable {
   name: string;
@@ -8,6 +9,7 @@ export interface IAddOnModule extends IAuditable {
   price: number;
   pricingUnit: string; // e.g. "Per Employee / Month", "Per Company / Month", "Flat / Month"
   badge?: string; // e.g. "Popular" — shown as a small callout on the plan-builder row
+  category: string;
   isActive: boolean;
 }
 
@@ -18,6 +20,7 @@ const addOnModuleSchema = new Schema<IAddOnModule>({
   price: { type: Number, required: true, min: 0 },
   pricingUnit: { type: String, required: true, default: 'Per Employee / Month' },
   badge: { type: String, trim: true },
+  category: { type: String, required: true, enum: MODULE_CATEGORIES },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
