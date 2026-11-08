@@ -299,7 +299,7 @@ export const login = async (req: Request, res: Response) => {
 export const login2FA = async (req: Request, res: Response) => {
   try {
     const { email, password, token: totpToken } = req.body;
-    const user = await User.findOne({ email }).setOptions({ bypassTenantIsolation: true });
+    const user = await User.findOne({ email }).select('+twoFactorSecret').setOptions({ bypassTenantIsolation: true });
 
     if (!user || !user.isActive || !user.twoFactorEnabled || !user.twoFactorSecret) {
       return res.status(401).json({ message: 'Invalid 2FA request' });
@@ -721,7 +721,7 @@ export const setup2FA = async (req: any, res: Response) => {
 export const verifyAndEnable2FA = async (req: any, res: Response) => {
   try {
     const { token } = req.body;
-    const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any);
+    const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any).select('+twoFactorSecret');
 
     if (!user || !user.twoFactorSecret) {
       return res.status(400).json({ message: '2FA setup not initialized' });
@@ -749,7 +749,7 @@ export const verifyAndEnable2FA = async (req: any, res: Response) => {
 export const disable2FA = async (req: any, res: Response) => {
   try {
     const { token } = req.body;
-    const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any);
+    const user = await User.findOne({ _id: req.user._id, tenantId: req.user.tenantId } as any).select('+twoFactorSecret');
 
     if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
       return res.status(400).json({ message: '2FA is not enabled' });

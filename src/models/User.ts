@@ -101,7 +101,9 @@ const UserSchema = new Schema<IUser>({
   employmentStatus: { type: String, enum: ['active', 'ex'], default: 'active', index: true },
   isActive: { type: Boolean, default: true, index: true },
   twoFactorEnabled: { type: Boolean, default: false },
-  twoFactorSecret: { type: String },
+  // Never returned by default: only the 2FA verify/disable handlers opt in with
+  // .select('+twoFactorSecret'). Leaking it lets anyone generate the user's codes.
+  twoFactorSecret: { type: String, select: false },
   failedLoginAttempts: { type: Number, default: 0 },
   lockoutUntil: { type: Date },
 }, { timestamps: true });

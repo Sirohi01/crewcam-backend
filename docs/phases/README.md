@@ -6,7 +6,7 @@ All phases are developed on branch **`agent_changes`** in each repo (crewcam-bac
 |---|---|---|---|
 | 0 | Security & tenant-isolation hardening | ✅ Done (commits `8e7d02b` backend, `d214628` frontend) | [PHASE-0-hardening.md](PHASE-0-hardening.md), frontend `docs/phases/PHASE-0-hardening.md` |
 | 7A | Payment Obligations add-on switch (+ add-on gating fix for all modules) | ✅ Done | [PHASE-7A-payment-obligations-toggle.md](PHASE-7A-payment-obligations-toggle.md) |
-| 1 | Employee self-service: wire the static `(workspace)` pages to real APIs | 🚧 In progress | `PHASE-1-employee-self-service.md` (both repos) |
+| 1 | Employee self-service: wire the static `(workspace)` pages to real APIs | 🚧 In progress (1A done: `/me` API + 2FA-secret leak fix) | [PHASE-1-employee-self-service.md](PHASE-1-employee-self-service.md) |
 | 2 | Org-setup static sub-pages (structure, budgets, cost centres, audit trail…) | Planned | |
 | 3 | Lifecycle port from legacy: disciplinary, exit / F&F, letters | Planned | |
 | 5 | Super admin completion (technical access, activity log, terms, catalogue consolidation) | Planned | |
