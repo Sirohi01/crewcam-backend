@@ -14,6 +14,7 @@ import { notificationService } from '../services/notificationService';
 import { Tenant } from '../models/Tenant';
 import { Branch } from '../models/Branch';
 import { pushCandidateStatusToCareerSite } from '../services/careerSiteSync.service';
+import { toSearchPattern } from '../utils/regex';
 // Candidate Controllers
 export const createCandidate = async (req: AuthRequest, res: Response) => {
   try {
@@ -201,7 +202,7 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
     }
 
     if (search && String(search).trim()) {
-      const term = String(search).trim();
+      const term = toSearchPattern(search);
       filter.$or = [
         { firstName: { $regex: term, $options: 'i' } },
         { lastName: { $regex: term, $options: 'i' } },
@@ -598,7 +599,7 @@ export const getAllInterviews = async (req: AuthRequest, res: Response) => {
     if (status) filter.status = status;
     if (roundType) filter.roundType = roundType;
     if (search && String(search).trim()) {
-      const term = String(search).trim();
+      const term = toSearchPattern(search);
       filter.$or = [
         { roundType: { $regex: term, $options: 'i' } },
         { status: { $regex: term, $options: 'i' } },

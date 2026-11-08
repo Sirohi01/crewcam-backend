@@ -8,6 +8,7 @@ import { Payment } from '../models/Payment';
 import { AuditLog } from '../models/AuditLog';
 import { Ticket } from '../models/Ticket';
 import mongoose from 'mongoose';
+import { toSearchPattern } from '../utils/regex';
 
 function toINR(amount: number, currency: 'INR' | 'USD'): number {
   if (currency === 'USD') {
@@ -159,7 +160,7 @@ export const getPlatformAuditLogs = async (req: AuthRequest, res: Response) => {
     if (req.query.module) query.module = req.query.module;
     if (req.query.status) query.status = req.query.status;
     if (req.query.search) {
-      const search = new RegExp(String(req.query.search), 'i');
+      const search = new RegExp(toSearchPattern(req.query.search), 'i');
       query.$or = [{ action: search }, { module: search }];
     }
 
@@ -199,7 +200,7 @@ export const getPlatformTickets = async (req: AuthRequest, res: Response) => {
     const query: any = {};
     if (req.query.status) query.status = req.query.status;
     if (req.query.search) {
-      const search = new RegExp(String(req.query.search), 'i');
+      const search = new RegExp(toSearchPattern(req.query.search), 'i');
       query.$or = [{ subject: search }, { department: search }];
     }
 

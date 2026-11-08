@@ -21,6 +21,8 @@ export interface IBudgetAllocation extends Document {
     notes?: string;
     budgetHeads: IBudgetHead[];
     status: 'Draft' | 'Approved' | 'Rejected';
+    approvedBy?: Types.ObjectId;
+    approvedOn?: Date;
     createdBy?: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -46,12 +48,14 @@ const BudgetAllocationSchema = new Schema<IBudgetAllocation>(
         budgetType: { type: String, required: true, default: 'Department Budget' },
         currency: { type: String, required: true, default: 'INR - Indian Rupee (₹)' },
         allocationDate: { type: Date, required: true, default: Date.now },
-        budgetOwnerId: { type: Schema.Types.ObjectId, ref: 'Employee' },
-        preparedById: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        budgetOwnerId: { type: Schema.Types.ObjectId, ref: 'User' },
+        preparedById: { type: Schema.Types.ObjectId, ref: 'User' },
         notes: { type: String, trim: true },
         budgetHeads: { type: [BudgetHeadSchema], default: [] },
         status: { type: String, enum: ['Draft', 'Approved', 'Rejected'], default: 'Draft' },
-        createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+        approvedOn: { type: Date },
+        createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
     },
     { timestamps: true }
 );

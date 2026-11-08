@@ -91,7 +91,7 @@ export const getBusinessUnitById = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ message: 'Unauthorized: Tenant ID missing' });
     }
 
-    const businessUnit = await BusinessUnit.findById(id)
+    const businessUnit = await BusinessUnit.findOne({ _id: id, tenantId })
       .populate('head', 'firstName lastName email')
       .populate('financialOwner', 'firstName lastName email');
 
@@ -124,9 +124,12 @@ export const updateBusinessUnit = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const updatedBusinessUnit = await BusinessUnit.findByIdAndUpdate(
-      id,
-      { $set: req.body },
+    // Never let the request body re-home the record to another tenant.
+    const { tenantId: _ignoredTenantId, _id: _ignoredId, ...updates } = req.body;
+
+    const updatedBusinessUnit = await BusinessUnit.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: updates },
       { returnDocument: 'after', runValidators: true }
     );
 
@@ -150,7 +153,7 @@ export const deleteBusinessUnit = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ message: 'Unauthorized: Tenant ID missing' });
     }
 
-    const deletedBusinessUnit = await BusinessUnit.findByIdAndDelete(id);
+    const deletedBusinessUnit = await BusinessUnit.findOneAndDelete({ _id: id, tenantId });
 
     if (!deletedBusinessUnit) {
       return res.status(404).json({ message: 'Business Unit not found' });

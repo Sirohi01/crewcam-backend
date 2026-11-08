@@ -42,4 +42,35 @@ export const tenantPlugin = (schema: Schema) => {
   schema.pre('deleteMany' as any, enforceTenantId);
   schema.pre('deleteOne' as any, enforceTenantId);
   schema.pre('countDocuments' as any, enforceTenantId);
+
+  // Controllers often forward req.body into an update; a body carrying `tenantId` would
+  // otherwise re-home the record into another company. Upserts still get the right
+  // tenantId, because MongoDB copies equality fields from the (tenant-scoped) filter.
+  const stripTenantReassignment = function (this: any) {
+    if (this.getOptions()?.bypassTenantIsolation) return;
+    const update = this.getUpdate();
+    if (!update || Array.isArray(update)) return;
+    delete update.tenantId;
+    for (const operator of ['$set', '$unset', '$rename']) {
+      if (update[operator]) delete update[operator].tenantId;
+    }
+  };
+
+  schema.pre('findOneAndUpdate' as any, stripTenantReassignment);
+  schema.pre('updateOne' as any, stripTenantReassignment);
+  schema.pre('updateMany' as any, stripTenantReassignment);
+
+  // Aggregations bypass query middleware, so they need their own guard: the pipeline
+  // must open with a $match that constrains tenantId, otherwise one tenant's report or
+  // dashboard could read every tenant's rows.
+  schema.pre('aggregate', function (this: any) {
+    if (this.options?.bypassTenantIsolation) {
+      delete this.options.bypassTenantIsolation;
+      return;
+    }
+    const firstStage = this.pipeline()[0];
+    if (!firstStage?.$match || firstStage.$match.tenantId === undefined) {
+      throw new Error(`Tenant isolation violation: aggregate on ${this._model?.modelName || 'scoped model'} must start with a $match on tenantId. Use .option({ bypassTenantIsolation: true }) if this is intentional.`);
+    }
+  });
 };

@@ -6,6 +6,7 @@ import { Branch } from '../models/Branch';
 import { Counter } from '../models/Counter';
 import { ManpowerRequest } from '../models/ManpowerRequest';
 import { HiringPipelineState } from '../models/HiringPipelineState';
+import { escapeRegex } from './regex';
 
 /**
  * Extracts a concise short-form code from a company name (e.g., "CrewCam Technologies" -> "CCT", "CrewCam" -> "CC").
@@ -37,10 +38,10 @@ export const getBranchShortCode = async (tenantId: any, locationHint?: string): 
     const branchMatch = await Branch.findOne({
       tenantId,
       $or: [
-        { name: new RegExp(locationHint, 'i') },
-        { location: new RegExp(locationHint, 'i') },
-        { city: new RegExp(locationHint, 'i') },
-        { code: new RegExp(locationHint, 'i') }
+        { name: new RegExp(escapeRegex(locationHint), 'i') },
+        { location: new RegExp(escapeRegex(locationHint), 'i') },
+        { city: new RegExp(escapeRegex(locationHint), 'i') },
+        { code: new RegExp(escapeRegex(locationHint), 'i') }
       ],
       isActive: true
     } as any).lean();

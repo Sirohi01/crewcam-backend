@@ -9,6 +9,9 @@ export interface AuthRequest extends Request {
 }
 
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  // Already authenticated earlier in the chain (e.g. by the bare '/api/v1' router in
+  // app.ts): routers declare authenticate explicitly without paying for a second lookup.
+  if (req.user) return next();
   try {
     // Employer and super-admin portals now use differently-named cookies (see
     // sessionCookieNames in authController.ts) so logging out of one can't touch the

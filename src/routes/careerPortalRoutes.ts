@@ -6,6 +6,7 @@ import { Tenant } from '../models/Tenant';
 import { normalizeSubdomain } from '../utils/subdomain';
 import { storeBuffer } from '../utils/fileStorage';
 import { apiLimiter } from '../middleware/rateLimiter';
+import { toSearchPattern } from '../utils/regex';
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
     };
 
     if (search && String(search).trim()) {
-      filter.jobTitle = { $regex: String(search).trim(), $options: 'i' };
+      filter.jobTitle = { $regex: toSearchPattern(search), $options: 'i' };
     }
 
     const query = ManpowerRequest.find(filter)
@@ -281,7 +282,7 @@ router.get('/bharat-organic/jobs', async (req: Request, res: Response) => {
     };
 
     if (search && String(search).trim()) {
-      filter.jobTitle = { $regex: String(search).trim(), $options: 'i' };
+      filter.jobTitle = { $regex: toSearchPattern(search), $options: 'i' };
     }
 
     const jobs = await ManpowerRequest.find(filter)

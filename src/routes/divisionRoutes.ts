@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth';
+import { checkPermission } from '../middleware/rbac';
 import {
   getDivisions,
   getDivisionById,
@@ -14,11 +15,11 @@ router.use(authenticate);
 
 router.route('/')
   .get(getDivisions)
-  .post(createDivision);
+  .post(checkPermission('ORG_WRITE'), createDivision);
 
 router.route('/:id')
   .get(getDivisionById)
-  .put(updateDivision)
-  .delete(deleteDivision);
+  .put(checkPermission('ORG_WRITE'), updateDivision)
+  .delete(checkPermission('ORG_WRITE'), deleteDivision);
 
 export default router;

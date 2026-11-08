@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { TEST_PUBLISH_KEY_HEADER, getTestPublishKey } from '../middleware/testPublishGuard';
 
 export interface PublishPayload {
   jobTitle: string;
@@ -33,7 +34,11 @@ export async function publishToLinkedIn(payload: PublishPayload, organizationUrn
       visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" }
     };
     const response = await axios.post(url, requestBody, {
-      headers: { 'Authorization': `Bearer ${accessToken || 'test-token'}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' }
+      headers: {
+        'Authorization': `Bearer ${accessToken || 'test-token'}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json',
+        // Only the self-hosted mock gets the key; it must never be sent to the real API.
+        ...(useTestEndpoint && { [TEST_PUBLISH_KEY_HEADER]: getTestPublishKey() }),
+      }
     });
     return { success: true, externalId: response.data.id };
   } catch (error: any) {
@@ -61,7 +66,10 @@ export async function publishToNaukri(payload: PublishPayload): Promise<{ succes
       description: payload.jobDescription,
       applyUrl: payload.applyUrl
     }, {
-      headers: { 'Authorization': `Bearer ${apiKey || 'test-key'}` }
+      headers: {
+        'Authorization': `Bearer ${apiKey || 'test-key'}`,
+        ...(useTestEndpoint && { [TEST_PUBLISH_KEY_HEADER]: getTestPublishKey() }),
+      }
     });
     return { success: true, externalId: response.data.jobId };
   } catch (error: any) {

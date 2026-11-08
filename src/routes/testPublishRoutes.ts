@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import { requireTestPublishKey } from '../middleware/testPublishGuard';
 import { createNaukriTestJob, createLinkedInTestPost, listTestPostings } from '../controllers/testPublishController';
 
 const router = Router();
+
+router.use(requireTestPublishKey);
 
 // Mock endpoints standing in for Naukri's and LinkedIn's real job-posting APIs — same
 // request/response shape publishService.ts already builds for the real ones — so posting

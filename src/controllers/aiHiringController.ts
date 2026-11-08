@@ -6,6 +6,7 @@ import { Candidate } from '../models/Candidate';
 import { AuditLog } from '../models/AuditLog';
 import { User } from '../models/User';
 import { screenResume, extractCandidateProfile, AiFeatureError } from '../services/aiService';
+import { toSearchPattern } from '../utils/regex';
 
 export const triggerResumeScreening = async (req: AuthRequest, res: Response) => {
   const tenantId = (req.tenantId || req.user!.tenantId) as string;
@@ -81,7 +82,7 @@ export const getResumeScreeningQueue = async (req: AuthRequest, res: Response) =
   const tenantId = (req.tenantId || req.user!.tenantId) as string;
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
-  const search = String(req.query.search || '').trim();
+  const search = toSearchPattern(req.query.search);
   const screeningStatus = String(req.query.screeningStatus || ''); // 'pending' | 'screened' | '' (all)
   const applicationStatus = String(req.query.applicationStatus || '');
   const experienceMatch = String(req.query.experienceMatch || ''); // 'under' | 'match' | 'over' | ''

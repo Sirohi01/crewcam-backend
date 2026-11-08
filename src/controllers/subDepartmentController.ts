@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { SubDepartment } from '../models/SubDepartment';
 import { AuthRequest } from '../middleware/auth';
 import { Department } from '../models/Department';
+import { toSearchPattern } from '../utils/regex';
 
 const tenantIdOf = (req: AuthRequest) => req.tenantId || req.user?.tenantId?.toString();
 const requireTenantId = (req: AuthRequest) => {
@@ -17,11 +18,12 @@ export const getSubDepartments = async (req: AuthRequest, res: Response) => {
     
     const query: any = { tenantId: requireTenantId(req), isActive: true };
     if (parentDepartmentId) query.parentDepartmentId = parentDepartmentId;
-    if (search) {
+    const searchPattern = toSearchPattern(search);
+    if (searchPattern) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: searchPattern, $options: 'i' } },
+        { code: { $regex: searchPattern, $options: 'i' } },
+        { description: { $regex: searchPattern, $options: 'i' } }
       ];
     }
 

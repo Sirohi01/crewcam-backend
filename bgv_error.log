@@ -1,5 +1,0 @@
-{
-  "message": "BGVRequest validation failed: status: `active` is not a valid enum value for path `status`.",
-  "errors": {},
-  "_message": "BGVRequest validation failed"
-}

@@ -16,8 +16,7 @@ dotenv.config();
  * rows (matched by externalJobId) — nothing here is a one-off hack to the schema.
  */
 const TENANT_ID = '6aad1d313af647fb250a8066'; // Namogange Wellness Pvt Ltd
-const ORGANIC_URI = process.env.ORGANIC_MONGODB_URI ||
-  'mongodb://organic:organic@ac-purk3nf-shard-00-00.ewln5jk.mongodb.net:27017,ac-purk3nf-shard-00-01.ewln5jk.mongodb.net:27017,ac-purk3nf-shard-00-02.ewln5jk.mongodb.net:27017/organic_db?ssl=true&replicaSet=atlas-oumrp6-shard-0&authSource=admin&appName=Cluster0';
+const ORGANIC_URI = process.env.ORGANIC_MONGODB_URI as string;
 
 async function main() {
   await mongoose.connect(process.env.MONGODB_URI as string);

@@ -1,16 +1,17 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
 import TeamMember from '../models/TeamMember';
+import { escapeRegex } from '../utils/regex';
 
 /**
- * Escape user-supplied text before dropping it into a $regex filter.
- * Without this, characters like `.`, `(`, `)`, `+`, `*` in the
- * `:subDepartment` URL param or the `search` query string are interpreted
- * as regex metacharacters — which can silently match the wrong records,
- * throw on invalid patterns, or open the door to a ReDoS via crafted input.
+ * TeamMember is keyed by sub-department *name*, which is not unique across companies,
+ * so every query must also be constrained to the caller's tenant.
  */
-const escapeRegex = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const tenantIdOf = (req: AuthRequest) => req.tenantId || req.user?.tenantId;
+
+const missingTenant = (res: Response) =>
+  res.status(401).json({ success: false, message: 'Unauthorized: tenant context missing' });
 
 const buildSubDepartmentMatch = (subDepartment: string) => ({
   $regex: `^${escapeRegex(subDepartment)}$`,
@@ -38,10 +39,12 @@ const isValidEmploymentType = (v: any): v is MemberEmploymentType =>
  * /sub-departments/interior-design/team-members
  */
 export const getTeamMembers = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const tenantId = tenantIdOf(req);
+    if (!tenantId) return missingTenant(res);
     const subDepartment = req.params.subDepartment as string;
 
     const {
@@ -57,6 +60,7 @@ export const getTeamMembers = async (
     const limitNumber = Math.min(100, Math.max(1, Number(limit) || 50));
 
     const filter: any = {
+      tenantId,
       subDepartment: buildSubDepartmentMatch(subDepartment),
     };
 
@@ -119,6 +123,7 @@ export const getTeamMembers = async (
       TeamMember.countDocuments(filter),
 
       TeamMember.countDocuments({
+        tenantId,
         subDepartment: buildSubDepartmentMatch(subDepartment),
         status: 'Active',
       }),
@@ -158,8 +163,10 @@ export const getTeamMembers = async (
  * GET
  * /sub-departments/:subDepartment/team-members/:id
  */
-export const getTeamMemberById = async (req: Request, res: Response) => {
+export const getTeamMemberById = async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = tenantIdOf(req);
+    if (!tenantId) return missingTenant(res);
     const subDepartment = req.params.subDepartment as string;
     const id = req.params.id as string;
 
@@ -172,6 +179,7 @@ export const getTeamMemberById = async (req: Request, res: Response) => {
 
     const member = await TeamMember.findOne({
       _id: id,
+      tenantId,
       subDepartment: buildSubDepartmentMatch(subDepartment),
     }).lean();
 
@@ -202,8 +210,10 @@ export const getTeamMemberById = async (req: Request, res: Response) => {
  *
  * /sub-departments/:subDepartment/team-members
  */
-export const createTeamMember = async (req: Request, res: Response) => {
+export const createTeamMember = async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = tenantIdOf(req);
+    if (!tenantId) return missingTenant(res);
     const subDepartment = req.params.subDepartment as string;
 
     const {
@@ -283,6 +293,7 @@ export const createTeamMember = async (req: Request, res: Response) => {
     }
 
     const existing = await TeamMember.findOne({
+      tenantId,
       $or: [
         { employeeId: normalizedEmployeeId },
         { email: normalizedEmail },
@@ -302,6 +313,7 @@ export const createTeamMember = async (req: Request, res: Response) => {
       : 'Full-Time';
 
     const member = await TeamMember.create({
+      tenantId,
       firstName: String(firstName).trim(),
       lastName: String(lastName).trim(),
       employeeId: normalizedEmployeeId,
@@ -355,8 +367,10 @@ export const createTeamMember = async (req: Request, res: Response) => {
  *
  * /sub-departments/:subDepartment/team-members/:id
  */
-export const updateTeamMember = async (req: Request, res: Response) => {
+export const updateTeamMember = async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = tenantIdOf(req);
+    if (!tenantId) return missingTenant(res);
     const subDepartment = req.params.subDepartment as string;
     const id = req.params.id as string;
 
@@ -418,6 +432,7 @@ export const updateTeamMember = async (req: Request, res: Response) => {
     if (update.email) {
       update.email = String(update.email).trim().toLowerCase();
       const emailClash = await TeamMember.findOne({
+        tenantId,
         email: update.email,
         _id: { $ne: id },
       });
@@ -436,6 +451,7 @@ export const updateTeamMember = async (req: Request, res: Response) => {
     const member = await TeamMember.findOneAndUpdate(
       {
         _id: id,
+        tenantId,
         subDepartment: buildSubDepartmentMatch(subDepartment),
       },
       { $set: update },
@@ -485,8 +501,10 @@ export const updateTeamMember = async (req: Request, res: Response) => {
  *
  * /sub-departments/:subDepartment/team-members/:id
  */
-export const deleteTeamMember = async (req: Request, res: Response) => {
+export const deleteTeamMember = async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = tenantIdOf(req);
+    if (!tenantId) return missingTenant(res);
     const subDepartment = req.params.subDepartment as string;
     const id = req.params.id as string;
 
@@ -499,6 +517,7 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
 
     const member = await TeamMember.findOneAndDelete({
       _id: id,
+      tenantId,
       subDepartment: buildSubDepartmentMatch(subDepartment),
     });
 

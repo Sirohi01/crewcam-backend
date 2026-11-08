@@ -1,3 +1,4 @@
+import { tenantPlugin } from './plugins/tenantPlugin';
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IDepartmentDocument extends Document {
@@ -26,5 +27,8 @@ const DepartmentDocumentSchema: Schema = new Schema(
 );
 
 DepartmentDocumentSchema.index({ tenantId: 1, departmentId: 1, code: 1 }, { unique: true });
+
+// Enforce tenantId on every query; see plugins/tenantPlugin.ts.
+DepartmentDocumentSchema.plugin(tenantPlugin);
 
 export default mongoose.models.DepartmentDocument || mongoose.model<IDepartmentDocument>('DepartmentDocument', DepartmentDocumentSchema);

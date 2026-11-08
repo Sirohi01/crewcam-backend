@@ -1,3 +1,4 @@
+import { tenantPlugin } from './plugins/tenantPlugin';
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IDepartmentCustomField extends Document {
@@ -30,5 +31,8 @@ const DepartmentCustomFieldSchema: Schema = new Schema(
 );
 
 DepartmentCustomFieldSchema.index({ tenantId: 1, departmentId: 1, code: 1 }, { unique: true });
+
+// Enforce tenantId on every query; see plugins/tenantPlugin.ts.
+DepartmentCustomFieldSchema.plugin(tenantPlugin);
 
 export default mongoose.models.DepartmentCustomField || mongoose.model<IDepartmentCustomField>('DepartmentCustomField', DepartmentCustomFieldSchema);

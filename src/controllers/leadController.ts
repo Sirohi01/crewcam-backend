@@ -11,6 +11,7 @@ import { generateProposalNumber, buildProposalPdf } from '../services/billingDoc
 import { sendMail } from '../services/mailer';
 import { calculateLeadScore } from '../utils/leadScore';
 import { z } from 'zod';
+import { toSearchPattern } from '../utils/regex';
 
 const leadSchema = z.object({
   companyName: z.string().trim().min(2, 'Company name must be at least 2 characters'),
@@ -98,7 +99,7 @@ export const getAllLeads = async (req: AuthRequest, res: Response) => {
       else if (req.query.followUpStatus === 'month') query.followUpDate = { ...query.followUpDate, $gte: now, $lt: endOfMonth };
     }
     if (req.query.search) {
-      const search = new RegExp(String(req.query.search), 'i');
+      const search = new RegExp(toSearchPattern(req.query.search), 'i');
       query.$or = [{ companyName: search }, { contactName: search }, { contactEmail: search }];
     }
 

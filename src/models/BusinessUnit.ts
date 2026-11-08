@@ -1,3 +1,4 @@
+import { tenantPlugin } from './plugins/tenantPlugin';
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IBusinessUnit extends Document {
@@ -47,5 +48,8 @@ const BusinessUnitSchema: Schema = new Schema(
 
 // Compound index for uniqueness within a tenant
 BusinessUnitSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+
+// Enforce tenantId on every query; see plugins/tenantPlugin.ts.
+BusinessUnitSchema.plugin(tenantPlugin);
 
 export default mongoose.model<IBusinessUnit>('BusinessUnit', BusinessUnitSchema);

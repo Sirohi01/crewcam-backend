@@ -1,3 +1,4 @@
+import { tenantPlugin } from './plugins/tenantPlugin';
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IDivision extends Document {
@@ -40,5 +41,8 @@ const DivisionSchema: Schema = new Schema(
 );
 
 DivisionSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+
+// Enforce tenantId on every query; see plugins/tenantPlugin.ts.
+DivisionSchema.plugin(tenantPlugin);
 
 export default mongoose.models.Division || mongoose.model<IDivision>('Division', DivisionSchema);

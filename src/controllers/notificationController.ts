@@ -5,7 +5,7 @@ import { Otp } from '../models/Otp';
 
 export const sendWhatsAppOTP = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = (req.tenantId || req.user?.tenantId || req.body.tenantId) as string;
+    const tenantId = (req.tenantId || req.user?.tenantId) as string;
     const { phone } = req.body;
 
     if (!phone) {
@@ -61,7 +61,7 @@ export const verifyWhatsAppOTP = async (req: AuthRequest, res: Response) => {
 
 export const sendWhatsAppMessage = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = (req.tenantId || req.user?.tenantId || req.body.tenantId) as string;
+    const tenantId = (req.tenantId || req.user?.tenantId) as string;
     const { phone, message } = req.body;
 
     if (!phone || !message) {

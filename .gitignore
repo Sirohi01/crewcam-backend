@@ -8,3 +8,6 @@ uploads/*
 coverage
 .nyc_output
 package-lock.json
+
+# Local run logs (never commit: may capture tokens or personal data)
+*.log

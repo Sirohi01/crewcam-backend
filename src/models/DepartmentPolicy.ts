@@ -1,3 +1,4 @@
+import { tenantPlugin } from './plugins/tenantPlugin';
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IDepartmentPolicy extends Document {
@@ -26,5 +27,8 @@ const DepartmentPolicySchema: Schema = new Schema(
 );
 
 DepartmentPolicySchema.index({ tenantId: 1, departmentId: 1, code: 1 }, { unique: true });
+
+// Enforce tenantId on every query; see plugins/tenantPlugin.ts.
+DepartmentPolicySchema.plugin(tenantPlugin);
 
 export default mongoose.models.DepartmentPolicy || mongoose.model<IDepartmentPolicy>('DepartmentPolicy', DepartmentPolicySchema);

@@ -24,6 +24,7 @@ import { UtilityProvider } from '../models/UtilityProvider';
 import { QuestionPaper } from '../models/QuestionPaper';
 import { OptionQuestion } from '../models/OptionQuestion';
 import { ShiftTiming } from '../models/ShiftTiming';
+import { toSearchPattern } from '../utils/regex';
 
 type MasterModel = Model<any>;
 
@@ -52,7 +53,7 @@ const makeHandlers = (ModelRef: MasterModel, label: string) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const search = req.query.search as string || '';
+      const search = toSearchPattern(req.query.search);
 
       const query: any = { tenantId: requireTenantId(req), isActive: true };
       if (search) {

@@ -1,3 +1,4 @@
+import { tenantPlugin } from './plugins/tenantPlugin';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface ICompanyPolicy extends Document {
@@ -65,5 +66,8 @@ const companyPolicySchema = new Schema<ICompanyPolicy>(
 
 // Ensure unique code per tenant
 companyPolicySchema.index({ tenantId: 1, code: 1 }, { unique: true });
+
+// Enforce tenantId on every query; see plugins/tenantPlugin.ts.
+companyPolicySchema.plugin(tenantPlugin);
 
 export const CompanyPolicy = mongoose.model<ICompanyPolicy>('CompanyPolicy', companyPolicySchema);

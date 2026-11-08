@@ -52,6 +52,7 @@ export const streamHiringPdf = async (req: AuthRequest, res: Response) => {
 };
 
 import { publishToLinkedIn, publishToNaukri, publishToIndeed } from '../services/publishService';
+import { toSearchPattern } from '../utils/regex';
 
 /** Pushes one manpower request out to whichever channels are ticked, shared by both the
  * one-shot "create + publish" path and the explicit "publish an existing, already-approved
@@ -214,7 +215,7 @@ export const getManpowerRequests = async (req: AuthRequest, res: Response) => {
       if (dateTo) filter.requestDate.$lte = new Date(String(dateTo));
     }
     if (search && String(search).trim()) {
-      const term = String(search).trim();
+      const term = toSearchPattern(search);
       filter.$or = [
         { jobTitle: { $regex: term, $options: 'i' } },
         { designation: { $regex: term, $options: 'i' } },

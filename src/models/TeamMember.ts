@@ -1,3 +1,4 @@
+import { tenantPlugin } from './plugins/tenantPlugin';
 import mongoose, {
   Schema,
   Document,
@@ -168,6 +169,9 @@ TeamMemberSchema.index(
 TeamMemberSchema.index({ subDepartment: 1, status: 1 });
 TeamMemberSchema.index({ subDepartment: 1, role: 1 });
 TeamMemberSchema.index({ firstName: 'text', lastName: 'text', employeeId: 'text', email: 'text' });
+
+// Enforce tenantId on every query; see plugins/tenantPlugin.ts.
+TeamMemberSchema.plugin(tenantPlugin);
 
 export default mongoose.model<ITeamMember>(
   'TeamMember',

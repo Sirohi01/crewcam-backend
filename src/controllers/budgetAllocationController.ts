@@ -1,8 +1,29 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import mongoose from 'mongoose';
 import BudgetAllocation from '../models/BudgetAllocation';
+import { Department } from '../models/Department';
+import { AuthRequest } from '../middleware/auth';
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
+
+/**
+ * BudgetAllocation has no tenantId of its own — it belongs to a tenant through its
+ * department. Every query is therefore constrained to the caller's departments, so
+ * an allocation ID or department ID from another company resolves to "not found".
+ * Returns null when the request carries no tenant context.
+ */
+const tenantDepartmentIds = async (req: AuthRequest): Promise<mongoose.Types.ObjectId[] | null> => {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId) return null;
+    const departments = await Department.find({ tenantId }).select('_id').lean();
+    return departments.map((d) => d._id as mongoose.Types.ObjectId);
+};
+
+const ownsDepartment = (departmentIds: mongoose.Types.ObjectId[], departmentId: string) =>
+    departmentIds.some((id) => String(id) === String(departmentId));
+
+const missingTenant = (res: Response) =>
+    res.status(401).json({ success: false, message: 'Unauthorized: tenant context missing' });
 
 const computeTotals = (budgetHeads: any[] = []) =>
     budgetHeads.reduce(
@@ -19,7 +40,7 @@ const computeTotals = (budgetHeads: any[] = []) =>
 /**
  * GET /companies/departments/:departmentId/budget-allocations?financialYear=...&subDepartmentId=...
  */
-export const getBudgetAllocationByDepartment = async (req: Request, res: Response) => {
+export const getBudgetAllocationByDepartment = async (req: AuthRequest, res: Response) => {
     try {
         const departmentId = req.params.departmentId as string;
         const financialYear = req.query.financialYear as string | undefined;
@@ -33,6 +54,12 @@ export const getBudgetAllocationByDepartment = async (req: Request, res: Respons
         }
         if (subDepartmentId && !isValidId(subDepartmentId)) {
             return res.status(400).json({ success: false, message: 'Invalid subDepartmentId' });
+        }
+
+        const departmentIds = await tenantDepartmentIds(req);
+        if (!departmentIds) return missingTenant(res);
+        if (!ownsDepartment(departmentIds, departmentId)) {
+            return res.status(404).json({ success: false, message: 'Department not found' });
         }
 
         const query: any = { departmentId, financialYear };
@@ -56,7 +83,7 @@ export const getBudgetAllocationByDepartment = async (req: Request, res: Respons
 /**
  * GET /companies/departments/budget-allocations - list all (with optional filters)
  */
-export const getAllBudgetAllocations = async (req: Request, res: Response) => {
+export const getAllBudgetAllocations = async (req: AuthRequest, res: Response) => {
     try {
         const departmentId = req.query.departmentId as string | undefined;
         const subDepartmentId = req.query.subDepartmentId as string | undefined;
@@ -65,10 +92,16 @@ export const getAllBudgetAllocations = async (req: Request, res: Response) => {
         const page = req.query.page ? Number(req.query.page) : 1;
         const limit = req.query.limit ? Number(req.query.limit) : 50;
 
-        const filter: any = {};
+        const departmentIds = await tenantDepartmentIds(req);
+        if (!departmentIds) return missingTenant(res);
+
+        const filter: any = { departmentId: { $in: departmentIds } };
         if (departmentId) {
             if (!isValidId(departmentId)) {
                 return res.status(400).json({ success: false, message: 'Invalid departmentId' });
+            }
+            if (!ownsDepartment(departmentIds, departmentId)) {
+                return res.status(404).json({ success: false, message: 'Department not found' });
             }
             filter.departmentId = departmentId;
         }
@@ -113,14 +146,18 @@ export const getAllBudgetAllocations = async (req: Request, res: Response) => {
 /**
  * GET /companies/departments/budget-allocations/:id
  */
-export const getBudgetAllocationById = async (req: Request, res: Response) => {
+export const getBudgetAllocationById = async (req: AuthRequest, res: Response) => {
     try {
         const id = req.params.id as string;
         if (!isValidId(id)) {
             return res.status(400).json({ success: false, message: 'Invalid allocation ID' });
         }
 
-        const allocation = await BudgetAllocation.findById(id)
+        const departmentIds = await tenantDepartmentIds(req);
+        if (!departmentIds) return missingTenant(res);
+        const scopedById = { _id: id, departmentId: { $in: departmentIds } };
+
+        const allocation = await BudgetAllocation.findOne(scopedById)
             .populate('departmentId', 'name code')
             .populate('subDepartmentId', 'name code')
             .populate('budgetOwnerId', 'firstName lastName email')
@@ -140,7 +177,7 @@ export const getBudgetAllocationById = async (req: Request, res: Response) => {
 /**
  * POST /companies/departments/budget-allocations - create or update (upsert)
  */
-export const createBudgetAllocation = async (req: Request, res: Response) => {
+export const createBudgetAllocation = async (req: AuthRequest, res: Response) => {
     try {
         const {
             departmentId,
@@ -164,6 +201,11 @@ export const createBudgetAllocation = async (req: Request, res: Response) => {
         if (!financialYear) {
             return res.status(400).json({ success: false, message: 'financialYear is required' });
         }
+        const departmentIds = await tenantDepartmentIds(req);
+        if (!departmentIds) return missingTenant(res);
+        if (!ownsDepartment(departmentIds, departmentId)) {
+            return res.status(404).json({ success: false, message: 'Department not found' });
+        }
         if (!Array.isArray(budgetHeads) || budgetHeads.length === 0) {
             return res.status(400).json({ success: false, message: 'At least one budget head is required' });
         }
@@ -182,7 +224,7 @@ export const createBudgetAllocation = async (req: Request, res: Response) => {
             preparedById: preparedById || undefined,
             notes,
             budgetHeads,
-            createdBy: (req as any).user?._id,
+            createdBy: req.user?._id,
         };
 
         const matchQuery: any = { departmentId, financialYear };
@@ -206,12 +248,16 @@ export const createBudgetAllocation = async (req: Request, res: Response) => {
 /**
  * PUT /companies/departments/budget-allocations/:id
  */
-export const updateBudgetAllocation = async (req: Request, res: Response) => {
+export const updateBudgetAllocation = async (req: AuthRequest, res: Response) => {
     try {
         const id = req.params.id as string;
         if (!isValidId(id)) {
             return res.status(400).json({ success: false, message: 'Invalid allocation ID' });
         }
+
+        const departmentIds = await tenantDepartmentIds(req);
+        if (!departmentIds) return missingTenant(res);
+        const scopedById = { _id: id, departmentId: { $in: departmentIds } };
 
         // Whitelist fields — don't let the client blindly overwrite departmentId,
         // subDepartmentId, approvedBy, etc. through this endpoint.
@@ -241,8 +287,8 @@ export const updateBudgetAllocation = async (req: Request, res: Response) => {
             update.allocationDate = new Date(update.allocationDate);
         }
 
-        const allocation = await BudgetAllocation.findByIdAndUpdate(
-            id,
+        const allocation = await BudgetAllocation.findOneAndUpdate(
+            scopedById,
             { $set: update },
             { returnDocument: 'after', runValidators: true }
         );
@@ -260,12 +306,16 @@ export const updateBudgetAllocation = async (req: Request, res: Response) => {
 /**
  * PATCH /companies/departments/budget-allocations/:id/approve
  */
-export const approveBudgetAllocation = async (req: Request, res: Response) => {
+export const approveBudgetAllocation = async (req: AuthRequest, res: Response) => {
     try {
         const id = req.params.id as string;
         if (!isValidId(id)) {
             return res.status(400).json({ success: false, message: 'Invalid allocation ID' });
         }
+
+        const departmentIds = await tenantDepartmentIds(req);
+        if (!departmentIds) return missingTenant(res);
+        const scopedById = { _id: id, departmentId: { $in: departmentIds } };
 
         const { approvedBy, decision } = req.body; // decision: 'Approved' | 'Rejected'
         if (!['Approved', 'Rejected'].includes(decision)) {
@@ -275,12 +325,12 @@ export const approveBudgetAllocation = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Invalid approvedBy' });
         }
 
-        const allocation = await BudgetAllocation.findByIdAndUpdate(
-            id,
+        const allocation = await BudgetAllocation.findOneAndUpdate(
+            scopedById,
             {
                 $set: {
                     status: decision,
-                    approvedBy: approvedBy || (req as any).user?._id,
+                    approvedBy: approvedBy || req.user?._id,
                     approvedOn: new Date(),
                 },
             },
@@ -300,14 +350,18 @@ export const approveBudgetAllocation = async (req: Request, res: Response) => {
 /**
  * DELETE /companies/departments/budget-allocations/:id
  */
-export const deleteBudgetAllocation = async (req: Request, res: Response) => {
+export const deleteBudgetAllocation = async (req: AuthRequest, res: Response) => {
     try {
         const id = req.params.id as string;
         if (!isValidId(id)) {
             return res.status(400).json({ success: false, message: 'Invalid allocation ID' });
         }
 
-        const allocation = await BudgetAllocation.findByIdAndDelete(id);
+        const departmentIds = await tenantDepartmentIds(req);
+        if (!departmentIds) return missingTenant(res);
+        const scopedById = { _id: id, departmentId: { $in: departmentIds } };
+
+        const allocation = await BudgetAllocation.findOneAndDelete(scopedById);
         if (!allocation) {
             return res.status(404).json({ success: false, message: 'Budget allocation not found' });
         }

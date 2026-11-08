@@ -5,6 +5,7 @@ import { Designation } from '../models/Designation';
 import { Tenant } from '../models/Tenant';
 import { AuthRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
+import { toSearchPattern } from '../utils/regex';
 
 // Helper to check limits
 const checkPackageLimit = async (tenantId: string, type: 'branches' | 'departments' | 'designations') => {
@@ -103,19 +104,20 @@ export const getBranches = async (req: AuthRequest, res: Response) => {
     const skip = (Number(page) - 1) * Number(limit);
     
     const query: any = { tenantId: requireTenantId(req), isActive: true };
-    if (search) {
+    const searchPattern = toSearchPattern(search);
+    if (searchPattern) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } },
-        { location: { $regex: search, $options: 'i' } },
-        { address: { $regex: search, $options: 'i' } },
-        { pincode: { $regex: search, $options: 'i' } },
-        { city: { $regex: search, $options: 'i' } },
-        { state: { $regex: search, $options: 'i' } },
-        { country: { $regex: search, $options: 'i' } },
-        { contactPerson: { $regex: search, $options: 'i' } },
-        { contactPhone: { $regex: search, $options: 'i' } },
-        { contactEmail: { $regex: search, $options: 'i' } }
+        { name: { $regex: searchPattern, $options: 'i' } },
+        { code: { $regex: searchPattern, $options: 'i' } },
+        { location: { $regex: searchPattern, $options: 'i' } },
+        { address: { $regex: searchPattern, $options: 'i' } },
+        { pincode: { $regex: searchPattern, $options: 'i' } },
+        { city: { $regex: searchPattern, $options: 'i' } },
+        { state: { $regex: searchPattern, $options: 'i' } },
+        { country: { $regex: searchPattern, $options: 'i' } },
+        { contactPerson: { $regex: searchPattern, $options: 'i' } },
+        { contactPhone: { $regex: searchPattern, $options: 'i' } },
+        { contactEmail: { $regex: searchPattern, $options: 'i' } }
       ];
     }
 
@@ -214,11 +216,12 @@ export const getDepartments = async (req: AuthRequest, res: Response) => {
     
     const query: any = { tenantId: requireTenantId(req), isActive: true };
     if (branchId) query.branchId = branchId;
-    if (search) {
+    const searchPattern = toSearchPattern(search);
+    if (searchPattern) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: searchPattern, $options: 'i' } },
+        { code: { $regex: searchPattern, $options: 'i' } },
+        { description: { $regex: searchPattern, $options: 'i' } }
       ];
     }
 
@@ -368,10 +371,11 @@ export const getDesignations = async (req: AuthRequest, res: Response) => {
     
     const query: any = { tenantId: requireTenantId(req), isActive: true };
     if (departmentId) query.departmentId = departmentId;
-    if (search) {
+    const searchPattern = toSearchPattern(search);
+    if (searchPattern) {
       const orConditions: any[] = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } }
+        { name: { $regex: searchPattern, $options: 'i' } },
+        { code: { $regex: searchPattern, $options: 'i' } }
       ];
       if (!isNaN(Number(search))) {
         orConditions.push({ level: Number(search) });
