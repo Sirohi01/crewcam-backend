@@ -162,6 +162,35 @@ test('employee self-service', async (t) => {
     assert.equal(await EmployeeProfileDetail.countDocuments({ tenantId: TENANT_A }), 1);
   });
 
+  await t.test('accepts the exact payloads the profile dialogs send (blank optional fields)', async () => {
+    const { token } = await createEmployee(TENANT_A, 'hank');
+
+    const info = await request(app)
+      .put('/api/v1/me/details/familyInfo')
+      .set('Authorization', authHeader(token))
+      .send({ familyInfo: { familyStatus: 'Nuclear Family', spouseName: '', marriageAnniversary: '', nomineeName: 'Raj', nomineeRelationship: 'Father', familyAddress: '', medicalHistory: '' } });
+    assert.equal(info.status, 200, JSON.stringify(info.body));
+    assert.equal(info.body.data.familyInfo.nomineeName, 'Raj');
+
+    const edu = await request(app)
+      .put('/api/v1/me/details/education')
+      .set('Authorization', authHeader(token))
+      .send({ education: [{ qualification: 'B.Tech', institution: 'IIT Delhi', board: '', score: '', mode: '', specialization: '' }] });
+    assert.equal(edu.status, 200, JSON.stringify(edu.body));
+
+    // Re-saving rows as returned by the server (with _id and ISO dates) must round-trip.
+    const first = await request(app)
+      .put('/api/v1/me/details/familyMembers')
+      .set('Authorization', authHeader(token))
+      .send({ familyMembers: [{ name: 'Neha', relationship: 'Sister', dateOfBirth: '1993-02-18', gender: '', mobile: '', isDependent: false }] });
+    const roundTrip = await request(app)
+      .put('/api/v1/me/details/familyMembers')
+      .set('Authorization', authHeader(token))
+      .send({ familyMembers: [...first.body.data.familyMembers, { name: 'Raj', relationship: 'Father', isDependent: true }] });
+    assert.equal(roundTrip.status, 200, JSON.stringify(roundTrip.body));
+    assert.equal(roundTrip.body.data.familyMembers.length, 2);
+  });
+
   await t.test('onboarding emergency contact is shown until the employee edits the list', async () => {
     const { token } = await createEmployee(TENANT_B, 'gina', {
       emergencyContactName: 'Rajesh',

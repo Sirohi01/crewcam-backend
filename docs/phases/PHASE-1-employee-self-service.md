@@ -12,8 +12,8 @@
 | Slice | Scope | Status |
 |---|---|---|
 | **1A** | `/api/v1/me` API: profile, family, emergency, education, certifications, courses, experience, skills, bank (read-only); **2FA-secret leak fix** | ✅ Done |
-| 1B | Frontend: wire My Profile, Family, Emergency, Education, Bank Details to `/me` | Next |
-| 1C | Leave, attendance, payslip, reimbursement pages; move webcam/attachment uploads off base64 JSON | Planned |
+| 1B | Frontend: wire Family, Emergency, Education, Bank Details to `/me` (see frontend doc) | ✅ Done |
+| 1C | Personal Info (`my-profile`), Experience, Skills tabs; leave, attendance, payslip, reimbursement; move webcam/attachment uploads off base64 JSON | Next |
 | 1D | My Requests, My Tasks, Policies, Helpdesk, Notifications, Assets, Training | Planned |
 | 1E | HR approval flow for HR-owned profile fields (name, DOB, PAN, bank…) | Proposed |
 
@@ -81,11 +81,12 @@ One document per employee (`{ tenantId, userId }` unique), holding the sections 
 | Check | Result |
 |---|---|
 | `tsc --noEmit` | Pass |
-| New suite `src/tests/selfService/me.test.ts` | **8/8 pass** |
+| New suite `src/tests/selfService/me.test.ts` | **9/9 pass** (one test added with slice 1B) |
 | Full backend suite (clean build, SMTP blanked) | 250/258; the same **8 pre-existing** failures as Phase 0. No regressions |
 
 The suite covers:
 
+- dialog payloads with blank optional fields, and re-saving rows returned by the server
 - secret absent on 5 endpoints
 - 2FA login with good and bad codes
 - PAN masking
