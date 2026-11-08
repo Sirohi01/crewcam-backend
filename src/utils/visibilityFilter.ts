@@ -1,8 +1,7 @@
 import { Tenant } from '../models/Tenant';
 import { Company } from '../models/Company';
 import { RoleScope, SCOPE_RANK } from '../models/Role';
-
-const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+import { expandFeatureEntries, FEATURE_SECTIONS, normalizeFeatureKey as normalize } from './featureKeys';
 
 const MODULE_MAP: Record<string, string> = {
   'employeemgmt': 'employee',
@@ -35,7 +34,7 @@ export const getTenantFeatures = async (tenantId: string): Promise<{ features: s
   
   const [tenant, company] = await Promise.all([
     Tenant.findById(tenantId).populate('packageId').lean(),
-    Company.findOne({ tenantId }).select('selectedModules').lean()
+    Company.findOne({ tenantId }).select('selectedModules addonModules').lean()
   ]);
   
   const pkg: any = (tenant as any)?.packageId;
@@ -56,7 +55,8 @@ export const getTenantFeatures = async (tenantId: string): Promise<{ features: s
 
   if (!pkg || !pkg.isActive) return { features: [], allowedSections };
   
-  let features: string[] = pkg.features || [];
+  // The v2 plan builder stores catalogue IDs; expand them to module names/codes.
+  let features: string[] = await expandFeatureEntries(pkg.features);
   
   if (company && company.selectedModules && company.selectedModules.length > 0) {
     features = features.filter((f: string) => {
@@ -69,6 +69,21 @@ export const getTenantFeatures = async (tenantId: string): Promise<{ features: s
     });
   }
   
+  // Add-ons bought on the package or switched on for the company. requireFeature()
+  // has always honoured these; the sidebar now does too, so the two agree.
+  const addOns = [
+    ...(await expandFeatureEntries(pkg.addOnModules)),
+    ...(await expandFeatureEntries((company as any)?.addonModules)),
+    ...((tenantModules || []) as any[]).filter((m) => m.enabled && m.key).map((m) => String(m.key)),
+  ];
+  features = Array.from(new Set([...features, ...addOns]));
+
+  // An add-on's own sidebar section must survive an allowedSections restriction.
+  if (allowedSections.length > 0) {
+    const addOnSections = features.flatMap((f) => FEATURE_SECTIONS[normalize(f)] || []);
+    allowedSections = Array.from(new Set([...allowedSections, ...addOnSections]));
+  }
+
   return { features, allowedSections };
 };
 

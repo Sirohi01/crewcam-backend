@@ -1,3 +1,5 @@
+import { PAYMENT_OBLIGATIONS_FEATURE } from './featureKeys';
+
 export interface SidebarDefaultItem {
   section: string;
   label: string;
@@ -249,6 +251,13 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // ---- Finance & Legal (overview pages, kept from the existing build) ----
   { section: 'Finance & Legal', label: 'Payroll & Slips', href: '/dashboard/finance/payroll', icon: 'IndianRupee', order: 0 },
   { section: 'Finance & Legal', label: 'Expenses', href: '/dashboard/finance/expenses', icon: 'Receipt', order: 1, requiredPermission: 'FINANCE_READ' },
+
+  // ---- Payment Obligations (optional add-on: only shown when switched on for the
+  // tenant's package or company in super admin; pages arrive in Phase 7) ----
+  { section: 'Payment Obligations', label: 'Monthly Obligations', href: comingSoon('Monthly Obligations', 'Payment Obligations'), icon: 'Calendar', order: 0, requiredPermission: 'OBLIGATIONS_READ', requiredFeature: PAYMENT_OBLIGATIONS_FEATURE },
+  { section: 'Payment Obligations', label: 'Yearly Obligations', href: comingSoon('Yearly Obligations', 'Payment Obligations'), icon: 'Calendar', order: 1, requiredPermission: 'OBLIGATIONS_READ', requiredFeature: PAYMENT_OBLIGATIONS_FEATURE },
+  { section: 'Payment Obligations', label: 'Tax Obligations', href: comingSoon('Tax Obligations', 'Payment Obligations'), icon: 'Scale', order: 2, requiredPermission: 'OBLIGATIONS_READ', requiredFeature: PAYMENT_OBLIGATIONS_FEATURE },
+  { section: 'Payment Obligations', label: 'Payment Reminders', href: comingSoon('Payment Reminders', 'Payment Obligations'), icon: 'Wallet', order: 3, requiredPermission: 'OBLIGATIONS_READ', requiredFeature: PAYMENT_OBLIGATIONS_FEATURE },
 
   // ---- Admin UI ----
   { section: 'Admin UI', label: 'Integrations', href: '/dashboard/settings/integrations', icon: 'Plug', order: 0, requiredFeature: 'integrations' },

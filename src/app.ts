@@ -47,6 +47,7 @@ import teamMemberRoutes from './routes/teamMemberRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import divisionRoutes from './routes/divisionRoutes';
 import testPublishRoutes from './routes/testPublishRoutes';
+import paymentObligationRoutes from './routes/paymentObligationRoutes';
 
 export function createApp() {
   const app = express();
@@ -154,6 +155,7 @@ export function createApp() {
   app.use('/api/v1/sub-departments', teamMemberRoutes);
   app.use('/api/v1/notifications', notificationRoutes);
   app.use('/api/v1/divisions', divisionRoutes);
+  app.use('/api/v1/payment-obligations', paymentObligationRoutes);
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));

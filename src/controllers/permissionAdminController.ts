@@ -32,6 +32,8 @@ const PERMISSION_CATALOG = [
   { name: 'ATS_WRITE', module: 'Hiring & ATS' },
   { name: 'RECRUITMENT_APPROVE', module: 'Hiring & ATS' },
   { name: 'ROLE_ADMIN', module: 'Platform Admin' },
+  { name: 'OBLIGATIONS_READ', module: 'Payment Obligations' },
+  { name: 'OBLIGATIONS_WRITE', module: 'Payment Obligations' },
   // Employer-side (Owner/Director/CFO/...) concepts with no dedicated page/route yet — kept
   // in the catalog so they can already be assigned to a role, but nothing enforces them
   // server-side until the corresponding Subscription/Billing/Payroll-approval routes exist.
