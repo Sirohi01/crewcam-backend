@@ -18,7 +18,7 @@ import moment from 'moment';
 import crypto from 'crypto';
 import { sendMail, buildEmployeeWelcomeEmail, buildCredentialsResetEmail } from '../services/mailer';
 
-const daysInclusive = (start: Date, end: Date) => moment(end).diff(moment(start), 'days') + 1;
+import { leaveDays } from '../utils/leaveDays';
 
 const passwordSchema = z.string()
   .min(8, 'Password must be at least 8 characters long')
@@ -204,7 +204,7 @@ export const getEmployeeById = async (req: AuthRequest, res: Response) => {
     for (const request of approvedLeaveRequests) {
       if (new Date(request.startDate) < yearStart) continue;
       const key = String(request.leaveTypeId);
-      const days = daysInclusive(request.startDate, request.endDate);
+      const days = leaveDays(request);
       takenThisYearByLeaveType.set(key, (takenThisYearByLeaveType.get(key) || 0) + days);
     }
 

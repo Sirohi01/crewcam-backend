@@ -12,6 +12,10 @@ export interface ILeaveRequest extends Document {
   approvedBy?: Types.ObjectId;
   rejectionReason?: string;
   attachmentUrl?: string;
+  isHalfDay?: boolean;
+  halfDaySession?: 'first' | 'second';
+  contactNumber?: string;
+  contactEmail?: string;
 }
 
 const leaveRequestSchema = new Schema<ILeaveRequest>({
@@ -24,7 +28,11 @@ const leaveRequestSchema = new Schema<ILeaveRequest>({
   status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
   approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   rejectionReason: { type: String },
-  attachmentUrl: { type: String }
+  attachmentUrl: { type: String },
+  isHalfDay: { type: Boolean, default: false },
+  halfDaySession: { type: String, enum: ['first', 'second'] },
+  contactNumber: { type: String, trim: true },
+  contactEmail: { type: String, trim: true, lowercase: true }
 }, {
   timestamps: true
 });

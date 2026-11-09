@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { User } from '../models/User';
 import { EmployeeProfileDetail } from '../models/EmployeeProfileDetail';
 import { BankPayrollInfo } from '../models/BankPayrollInfo';
+import { SalaryStructure } from '../models/SalaryStructure';
 
 /**
  * Employee self-service ("My Profile"). Everything here is scoped to the caller: no
@@ -251,6 +252,33 @@ export const updateMyDetailsSection = async (req: AuthRequest, res: Response) =>
   } catch (error: any) {
     if (error.name === 'ValidationError') return res.status(400).json({ message: error.message });
     res.status(500).json({ message: 'Failed to save profile details' });
+  }
+};
+
+/**
+ * GET /me/salary-structure — the caller's own monthly salary components (read-only).
+ * The finance endpoint for this requires FINANCE_READ, so employees couldn't see their
+ * own pay. Totals are computed here so every screen shows the same numbers.
+ */
+export const getMySalaryStructure = async (req: AuthRequest, res: Response) => {
+  try {
+    const s = await SalaryStructure.findOne({ tenantId: tenantIdOf(req), employeeId: req.user!._id } as any).lean();
+    if (!s) return res.json({ data: null });
+    const monthlyGross = (s.basic || 0) + (s.hra || 0) + (s.conveyance || 0) + (s.specialAllowance || 0);
+    const monthlyDeductions = (s.pfDeduction || 0) + (s.esiDeduction || 0) + (s.taxDeduction || 0);
+    res.json({
+      data: {
+        earnings: { basic: s.basic, hra: s.hra, conveyance: s.conveyance, specialAllowance: s.specialAllowance },
+        deductions: { pf: s.pfDeduction, esi: s.esiDeduction, tax: s.taxDeduction },
+        monthlyGross,
+        monthlyDeductions,
+        monthlyNet: monthlyGross - monthlyDeductions,
+        annualGross: monthlyGross * 12,
+        updatedAt: (s as any).updatedAt,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Failed to load salary structure' });
   }
 };
 

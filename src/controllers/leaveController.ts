@@ -7,15 +7,17 @@ import { AuditLog } from '../models/AuditLog';
 import { Role, resolveRoleScope } from '../models/Role';
 import { canAccessUser } from '../utils/scopeHelpers';
 import moment from 'moment';
+import mongoose from 'mongoose';
 
-const daysInclusive = (start: Date, end: Date) => moment(end).diff(moment(start), 'days') + 1;
+import { leaveDays } from '../utils/leaveDays';
+import { isOwnUploadUrl } from '../utils/fileStorage';
 
 export const applyLeave = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
     
-    const { leaveTypeId, startDate, endDate, reason } = req.body;
+    const { leaveTypeId, startDate, endDate, reason, isHalfDay, halfDaySession, contactNumber, contactEmail, attachmentUrl } = req.body;
     
     if (!leaveTypeId || !startDate || !endDate || !reason) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -23,9 +25,51 @@ export const applyLeave = async (req: AuthRequest, res: Response) => {
 
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return res.status(400).json({ message: 'Invalid start or end date' });
+    }
     if (start > end) {
       return res.status(400).json({ message: 'Start date cannot be after end date' });
+    }
+    if (String(reason).trim().length > 1000) {
+      return res.status(400).json({ message: 'Reason must be 1000 characters or fewer' });
+    }
+    const halfDay = isHalfDay === true;
+    if (halfDay && !moment(start).isSame(end, 'day')) {
+      return res.status(400).json({ message: 'A half-day leave must start and end on the same day' });
+    }
+    if (halfDay && !['first', 'second'].includes(halfDaySession)) {
+      return res.status(400).json({ message: 'Choose the first or second half for a half-day leave' });
+    }
+    if (contactNumber && !/^[+\d][\d\s-]{5,19}$/.test(String(contactNumber))) {
+      return res.status(400).json({ message: 'Contact number is not valid' });
+    }
+    if (contactEmail && !/^\S+@\S+\.\S+$/.test(String(contactEmail))) {
+      return res.status(400).json({ message: 'Contact email is not valid' });
+    }
+    if (attachmentUrl && !isOwnUploadUrl(attachmentUrl)) {
+      return res.status(400).json({ message: 'Attachment must be uploaded through the app' });
+    }
+
+    // The leave type must be an active type of the caller's own company.
+    const leaveType = mongoose.isValidObjectId(leaveTypeId)
+      ? await LeaveType.findOne({ _id: leaveTypeId, tenantId, isActive: true } as any)
+      : null;
+    if (!leaveType) {
+      return res.status(400).json({ message: 'Unknown leave type' });
+    }
+
+    // One pending/approved request per day: block overlaps instead of double-booking.
+    const overlapping = await LeaveRequest.findOne({
+      tenantId,
+      userId: req.user!._id,
+      status: { $in: ['Pending', 'Approved'] },
+      startDate: { $lte: end },
+      endDate: { $gte: start },
+    } as any);
+    if (overlapping) {
+      return res.status(409).json({ message: 'You already have a leave request covering some of these dates' });
     }
 
     const leaveRequest = await LeaveRequest.create({
@@ -34,7 +78,12 @@ export const applyLeave = async (req: AuthRequest, res: Response) => {
       leaveTypeId,
       startDate: start,
       endDate: end,
-      reason,
+      reason: String(reason).trim(),
+      isHalfDay: halfDay,
+      ...(halfDay && { halfDaySession }),
+      ...(contactNumber && { contactNumber: String(contactNumber).trim() }),
+      ...(contactEmail && { contactEmail: String(contactEmail).trim() }),
+      ...(attachmentUrl && { attachmentUrl }),
       status: 'Pending'
     } as any);
 
@@ -165,8 +214,8 @@ export const getLeaveStatistics = async (req: AuthRequest, res: Response) => {
       const pending = typeRequests.filter((r: any) => r.status === 'Pending');
       const takenThisYear = approved
         .filter((r: any) => r.startDate >= yearStart)
-        .reduce((sum: number, r: any) => sum + daysInclusive(r.startDate, r.endDate), 0);
-      const pendingDays = pending.reduce((sum: number, r: any) => sum + daysInclusive(r.startDate, r.endDate), 0);
+        .reduce((sum: number, r: any) => sum + leaveDays(r), 0);
+      const pendingDays = pending.reduce((sum: number, r: any) => sum + leaveDays(r), 0);
       const creditedDays = credits
         .filter((c: any) => String(c.leaveTypeId) === typeId)
         .reduce((sum: number, c: any) => sum + c.days, 0);

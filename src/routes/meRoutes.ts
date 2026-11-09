@@ -7,6 +7,7 @@ import {
   getMyDetails,
   updateMyDetailsSection,
   getMyBankDetails,
+  getMySalaryStructure,
 } from '../controllers/meController';
 
 /**
@@ -24,5 +25,6 @@ router.patch('/profile', updateMyProfile);
 router.get('/details', getMyDetails);
 router.put('/details/:section', updateMyDetailsSection);
 router.get('/bank', getMyBankDetails);
+router.get('/salary-structure', getMySalaryStructure);
 
 export default router;

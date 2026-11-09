@@ -116,3 +116,67 @@ A blank `endDate` means the role is current. No migration: the fields are option
 **Tests:** `me.test.ts` saves a full experience row (blank end date, all new fields) and rejects an invalid reference email. 9/9 pass.
 
 The frontend side of this slice is the unified My Profile page; see the frontend Phase 1 doc.
+
+---
+
+## Slice 1C-2 — pay, expenses and leave
+
+### 1. Critical: every employee could read the whole company's payroll
+
+- **Problem:** `getSalarySlips` and `getExpenses` (`controllers/financeController.ts`) limited employees to their own records with `if (req.user.role === 'Employee')`. `User` has **no `role` field** (only `roleId`), so the condition was never true. Neither route has a permission check, so any logged-in employee could list **every colleague's salary slips and expense claims**.
+- **Fix:** a new `canViewAllFinance(req)` grants the full list only with `FINANCE_READ`, `*`, `SUPER_ADMIN` or the super-admin tenant. Everyone else gets their own records only. Employees also see only **issued** slips (`Generated` / `Paid`), never `Draft`.
+- **Test:** an employee without `FINANCE_READ` sees only their own slips and expenses; a finance user sees all.
+
+### 2. High: expense claims could be filed as already approved
+
+- **Problem:** `createExpense` spread `req.body`, so an employee could submit `status: 'Approved'`, set approver comments, or file under another `employeeId`.
+- **Fix:** whitelist only `type`, `amount`, `date`, `description` and `receiptUrl`. In addition:
+  - amount must be greater than 0;
+  - the date must be valid and not in the future;
+  - `receiptUrl` must point to our own storage (`isOwnUploadUrl`);
+  - an invalid type returns 400 instead of 500.
+
+### 3. Leave application hardening (`applyLeave`)
+
+**Rejected now (400 unless noted):**
+
+| Check | Before |
+|---|---|
+| Leave type must be an active type of **the caller's company** | Any ID accepted, including another company's |
+| Dates must be valid | `Invalid Date` was stored |
+| Reason at most 1000 characters | No limit |
+| No overlap with an existing pending/approved request (**409**) | Overlapping requests allowed |
+
+**New optional fields** (on `LeaveRequest`):
+
+- **Half day:** `isHalfDay` + `halfDaySession`. Start and end must be the same day, and the session is required. Counted as **0.5 days** in balances.
+- **Contact during leave:** `contactNumber` / `contactEmail`, validated.
+- **Attachment:** `attachmentUrl`, which must be one of our own uploads.
+
+**Day counting:** both controllers had a copy of the day-count helper. They now share one `leaveDays()` (`utils/leaveDays.ts`) that understands half days.
+
+**Deliberately not enforced:** leave balance. Many companies allow loss-of-pay beyond the balance; that is a policy setting for later. The form warns the employee instead.
+
+### 4. New: `GET /me/salary-structure`
+
+The finance endpoint requires `FINANCE_READ`, so employees couldn't see their own pay structure. The new route returns the caller's own monthly components plus monthly gross, deductions, net and annual gross.
+
+### 5. Uploads
+
+`isOwnUploadUrl()` (`utils/fileStorage.ts`) accepts only URLs this backend issued: Cloudinary under our cloud name, or `/uploads/`. Leave attachments and expense receipts are now uploaded as **multipart** through `/upload` (type allow-list, 5 MB, moderation), not as base64 inside JSON.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `src/tests/selfService/payAndLeave.test.ts` | **8/8 pass** |
+| `tsc --noEmit` | Pass |
+| Full backend suite (clean build, SMTP blanked) | 259/267; the same **8 pre-existing** failures. No regressions. (One earlier run also failed `super-admin platform endpoints` during setup under heavy machine load; it passes 10/10 alone and in the re-run.) |
+
+The suite covers:
+
+- payroll scoping (own vs. finance) and drafts hidden
+- own salary structure only
+- expense self-approval blocked, zero amount, bad type, future date, foreign receipt
+- leave: foreign/invalid type, bad dates, overlap (409), adjacent days allowed
+- half-day rules and **0.5-day balance**, contact validation, foreign attachment

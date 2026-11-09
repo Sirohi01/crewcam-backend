@@ -7,6 +7,19 @@ import { Agreement } from '../models/Agreement';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { PayrollApprovalRequest } from '../models/PayrollApprovalRequest';
+import { getEffectivePermissions } from '../middleware/rbac';
+import { isOwnUploadUrl } from '../utils/fileStorage';
+
+/**
+ * Whether the caller may list every employee's salary slips / expenses. Everyone else
+ * sees only their own. (Previously gated on `req.user.role === 'Employee'`, a field the
+ * User model doesn't have — so every employee could read the whole company's payroll.)
+ */
+const canViewAllFinance = async (req: AuthRequest) => {
+  if (req.user?.tenantId === 'SUPER_ADMIN') return true;
+  const permissions = await getEffectivePermissions(req);
+  return permissions.some((p) => p === '*' || p === 'SUPER_ADMIN' || p === 'FINANCE_READ');
+};
 
 const safeError = (message: string, error: any) => ({
   message,
@@ -219,9 +232,10 @@ export const getSalarySlips = async (req: AuthRequest, res: Response) => {
     if (month) query.month = month;
     if (year) query.year = year;
 
-    // For employees, they can only see their own
-    if ((req.user as any)?.role === 'Employee') {
+    if (!(await canViewAllFinance(req))) {
       query.employeeId = req.user!._id;
+      // Drafts aren't final until payroll generates them; employees see issued slips only.
+      query.status = { $in: ['Generated', 'Paid'] };
     }
 
     const slips = await SalarySlip.find(query)
@@ -240,8 +254,29 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
+    // Whitelist: the claimant must not be able to set status, approver comments or
+    // another employee's id — those belong to the approval step.
+    const { type, amount, date, description, receiptUrl } = req.body || {};
+    if (!type || amount === undefined || !date || !description) {
+      return res.status(400).json({ message: 'type, amount, date and description are required' });
+    }
+    if (!(Number(amount) > 0)) {
+      return res.status(400).json({ message: 'amount must be greater than zero' });
+    }
+    const expenseDate = new Date(date);
+    if (Number.isNaN(expenseDate.getTime()) || expenseDate.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ message: 'date must be a valid date, not in the future' });
+    }
+    if (receiptUrl && !isOwnUploadUrl(receiptUrl)) {
+      return res.status(400).json({ message: 'Receipt must be uploaded through the app' });
+    }
+
     const expense = await Expense.create({
-      ...req.body,
+      type,
+      amount: Number(amount),
+      date,
+      description,
+      receiptUrl,
       tenantId,
       employeeId: req.user!._id
     });
@@ -259,6 +294,9 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
 
     res.status(201).json(expense);
   } catch (error: any) {
+    if (error.name === 'ValidationError' || error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid expense: check type, amount and date' });
+    }
     res.status(500).json(safeError('Error creating expense', error));
   }
 };
@@ -268,7 +306,7 @@ export const getExpenses = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     const query: any = { tenantId };
 
-    if ((req.user as any)?.role === 'Employee') {
+    if (!(await canViewAllFinance(req))) {
       query.employeeId = req.user!._id;
     }
 

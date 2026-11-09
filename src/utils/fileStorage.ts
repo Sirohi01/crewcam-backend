@@ -49,3 +49,23 @@ export const storeBuffer = (buffer: Buffer, originalname: string, mimeType: stri
   hasCloudinaryConfig
     ? uploadBufferToCloudinary(buffer, originalname, mimeType, folder)
     : writeBufferToLocalDisk(buffer, originalname, req);
+
+/**
+ * True when a URL points at a file this backend stored (Cloudinary or the local
+ * /uploads folder). Used before saving client-supplied attachment URLs, so records
+ * can't link to arbitrary external files.
+ */
+export const isOwnUploadUrl = (url: unknown): boolean => {
+  if (typeof url !== 'string' || url.length > 2000) return false;
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (parsed.hostname === 'res.cloudinary.com') {
+      const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+      return !cloud || parsed.pathname.startsWith(`/${cloud}/`);
+    }
+    return parsed.pathname.startsWith('/uploads/');
+  } catch {
+    return false;
+  }
+};
