@@ -11,6 +11,10 @@ export interface IModule extends IAuditable {
   isActive: boolean;
   visibleInPackages: boolean; // selectable when building a subscription package
   isDefaultModule: boolean; // pre-selected (included by default) in the package builder
+  // Optional list price for selling the module as an add-on. Unset = "price on request",
+  // so a module can be offered before sales has fixed its price (e.g. Payment Obligations).
+  price?: number;
+  pricingUnit?: 'Per Employee / Month' | 'Per Company / Month';
 }
 
 const moduleSchema = new Schema<IModule>({
@@ -22,6 +26,8 @@ const moduleSchema = new Schema<IModule>({
   isActive: { type: Boolean, default: true },
   visibleInPackages: { type: Boolean, default: true },
   isDefaultModule: { type: Boolean, default: false },
+  price: { type: Number, min: 0 },
+  pricingUnit: { type: String, enum: ['Per Employee / Month', 'Per Company / Month'], default: 'Per Employee / Month' },
 }, { timestamps: true });
 
 moduleSchema.plugin(auditPlugin);

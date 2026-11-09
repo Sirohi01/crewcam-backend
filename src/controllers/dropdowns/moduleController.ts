@@ -5,7 +5,7 @@ import { ModuleFeature } from '../../models/dropdowns/ModuleFeature';
 import { writeAuditLog, diffFields } from '../../utils/auditLog';
 
 const MODULE = 'Modules Management';
-const DIFF_FIELDS = ['name', 'code', 'category', 'description', 'icon', 'isActive', 'visibleInPackages', 'isDefaultModule'];
+const DIFF_FIELDS = ['name', 'code', 'category', 'description', 'icon', 'isActive', 'visibleInPackages', 'isDefaultModule', 'price', 'pricingUnit'];
 
 export const getAllModules = async (req: AuthRequest, res: Response) => {
   try {
@@ -42,7 +42,7 @@ export const updateModule = async (req: AuthRequest, res: Response) => {
     const data = await PlatformModule.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedBy: req.user?._id },
-      { returnDocument: 'after' }
+      { returnDocument: 'after', runValidators: true }
     );
     if (!data) return res.status(404).json({ message: 'Module not found' });
     const changes = diffFields(before, data.toObject(), DIFF_FIELDS);

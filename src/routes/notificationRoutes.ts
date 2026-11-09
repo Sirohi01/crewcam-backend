@@ -2,6 +2,7 @@ import express from 'express';
 import { sendWhatsAppOTP, verifyWhatsAppOTP, sendWhatsAppMessage } from '../controllers/notificationController';
 import { authenticate } from '../middleware/auth';
 import { tenantResolver } from '../middleware/tenantResolver';
+import { checkPermission } from '../middleware/rbac';
 
 const router = express.Router();
 
@@ -15,6 +16,7 @@ router.post('/otp/send', sendWhatsAppOTP);
 router.post('/otp/verify', verifyWhatsAppOTP);
 
 // Message Route
-router.post('/whatsapp/send', sendWhatsAppMessage);
+// Sends from the company's WhatsApp account: NOTIFICATION_SEND only (Company Admin/Admin by default).
+router.post('/whatsapp/send', checkPermission('NOTIFICATION_SEND'), sendWhatsAppMessage);
 
 export default router;

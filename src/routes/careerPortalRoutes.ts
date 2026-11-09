@@ -7,6 +7,36 @@ import { normalizeSubdomain } from '../utils/subdomain';
 import { storeBuffer } from '../utils/fileStorage';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { toSearchPattern } from '../utils/regex';
+import { Company } from '../models/Company';
+import mongoose from 'mongoose';
+
+/**
+ * Which tenant the Bharat Organic Expo site belongs to. Resolved, not hard-coded:
+ *   1. BHARAT_ORGANIC_TENANT_ID, if set (explicit override), else
+ *   2. the company whose Website (Super Admin → company) is bharatorganicexpo.com —
+ *      the same convention the Bharat Organic scripts use.
+ * Today that is Namogange Wellness. Cached briefly so each public request doesn't
+ * re-query; returns null when nothing is configured.
+ */
+const BHARAT_ORGANIC_SITE = /bharatorganicexpo\.com/i;
+let bharatTenantCache: { id: string | null; at: number } | null = null;
+
+const resolveBharatOrganicTenantId = async (): Promise<string | null> => {
+  const override = process.env.BHARAT_ORGANIC_TENANT_ID;
+  if (override && mongoose.isValidObjectId(override)) return override;
+  if (bharatTenantCache && Date.now() - bharatTenantCache.at < 5 * 60 * 1000) return bharatTenantCache.id;
+  const company = await Company.findOne({ website: { $regex: BHARAT_ORGANIC_SITE } })
+    .setOptions({ bypassTenantIsolation: true })
+    .select('tenantId')
+    .lean();
+  const id = company?.tenantId ? String(company.tenantId) : null;
+  // Cache only a hit: once the website is set, the site must work immediately.
+  bharatTenantCache = id ? { id, at: Date.now() } : null;
+  return id;
+};
+
+const notConfigured = (res: Response) =>
+  res.status(503).json({ success: false, message: 'Bharat Organic careers are not configured' });
 
 const router = Router();
 
@@ -272,9 +302,12 @@ function mapToBharatOrganic(job: any) {
 router.get('/bharat-organic/jobs', async (req: Request, res: Response) => {
   try {
     const { search, location } = req.query;
+    const tenantId = await resolveBharatOrganicTenantId();
+    if (!tenantId) return notConfigured(res);
 
     // Filter strictly for Posted jobs (or fallback to approved jobs if explicitly requested)
     const filter: any = {
+      tenantId,
       $or: [
         { recruitmentStatus: 'Posted' },
         { status: 'Approved', publishChannels: { $in: ['Career Portal', 'Website', 'Bharat Organic'] } }
@@ -312,7 +345,7 @@ router.get('/bharat-organic/jobs', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching Bharat Organic jobs:', error);
-    res.status(500).json({ success: false, message: 'Error fetching jobs', error: error.message });
+    res.status(500).json({ success: false, message: 'Error fetching jobs', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
 });
 
@@ -322,7 +355,12 @@ router.get('/bharat-organic/jobs', async (req: Request, res: Response) => {
  */
 router.get('/bharat-organic/jobs/:id', async (req: Request, res: Response) => {
   try {
-    const job = await ManpowerRequest.findById(req.params.id)
+    const tenantId = await resolveBharatOrganicTenantId();
+    if (!tenantId) return notConfigured(res);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+    const job = await ManpowerRequest.findOne({ _id: req.params.id, tenantId })
       .populate('departmentId', 'name')
       .populate('locationBranchId', 'name city state')
       .populate('designationId', 'name')
@@ -339,7 +377,7 @@ router.get('/bharat-organic/jobs/:id', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching single Bharat Organic job:', error);
-    res.status(500).json({ success: false, message: 'Error fetching job', error: error.message });
+    res.status(500).json({ success: false, message: 'Error fetching job', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
 });
 
@@ -347,9 +385,10 @@ router.get('/bharat-organic/jobs/:id', async (req: Request, res: Response) => {
  * POST /api/v1/careers/bharat-organic/apply
  * Allows candidates applying on Bharat Organic to be submitted directly into the CRM pipeline.
  */
-router.post('/bharat-organic/apply', async (req: Request, res: Response) => {
+router.post('/bharat-organic/apply', apiLimiter, async (req: Request, res: Response) => {
   try {
-    const { Candidate } = require('../models/Candidate');
+    const tenantId = await resolveBharatOrganicTenantId();
+    if (!tenantId) return notConfigured(res);
     const {
       jobId, firstName, lastName, email, phone, resumeUrl,
       currentCTC, expectedCTC, totalExperience, currentLocation, linkedin
@@ -358,18 +397,30 @@ router.post('/bharat-organic/apply', async (req: Request, res: Response) => {
     if (!firstName || !email) {
       return res.status(400).json({ success: false, message: 'firstName and email are required' });
     }
+    if (!/^\S+@\S+\.\S+$/.test(String(email)) || String(email).length > 254) {
+      return res.status(400).json({ success: false, message: 'A valid email is required' });
+    }
+    // Candidate.phone is required; without this check a missing phone crashed with a 500.
+    if (!phone || !/^[+\d][\d\s-]{5,19}$/.test(String(phone))) {
+      return res.status(400).json({ success: false, message: 'A valid phone number is required' });
+    }
+    if (resumeUrl && !/^https?:\/\//i.test(String(resumeUrl))) {
+      return res.status(400).json({ success: false, message: 'resumeUrl must be an http(s) link' });
+    }
 
+    // The job, if given, must be one of this tenant's; never file under another company.
     let job: any = null;
     if (jobId) {
-      job = await ManpowerRequest.findById(jobId).lean();
+      job = mongoose.isValidObjectId(jobId) ? await ManpowerRequest.findOne({ _id: jobId, tenantId }).lean() : null;
+      if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
     }
 
     const candidate = await Candidate.create({
-      tenantId: job?.tenantId || (req as any).tenantId || new (require('mongoose').Types.ObjectId)(),
-      firstName,
-      lastName: lastName || '.',
-      email,
-      phone: phone || '',
+      tenantId,
+      firstName: String(firstName).trim().slice(0, 100),
+      lastName: lastName ? String(lastName).trim().slice(0, 100) : '.',
+      email: String(email).trim().toLowerCase(),
+      phone: String(phone).trim(),
       jobRole: job?.jobTitle || req.body.jobTitle || 'General Application',
       departmentId: job?.departmentId,
       resumeUrl: resumeUrl || '',
@@ -393,7 +444,7 @@ router.post('/bharat-organic/apply', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error submitting application from Bharat Organic:', error);
-    res.status(500).json({ success: false, message: 'Failed to submit application', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to submit application', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
 });
 
