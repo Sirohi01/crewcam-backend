@@ -94,7 +94,12 @@ const SECTION_SCHEMAS = {
     endDate: optionalDate,
     location: text(120),
     employmentType: text(60),
+    industry: text(80),
+    companyWebsite: text(200),
     responsibilities: text(2000),
+    referenceName: text(120),
+    referencePhone: optionalPhone,
+    referenceEmail: optionalEmail,
   }).refine((e) => !e.startDate || !e.endDate || e.endDate >= e.startDate, {
     message: 'endDate must be on or after startDate',
     path: ['endDate'],

@@ -73,7 +73,12 @@ export interface IExperienceEntry {
   endDate?: Date;
   location?: string;
   employmentType?: string;
-  responsibilities?: string;
+  industry?: string;
+  companyWebsite?: string;
+  responsibilities?: string; // one responsibility per line
+  referenceName?: string;
+  referencePhone?: string;
+  referenceEmail?: string;
 }
 
 export interface ISkillEntry {
@@ -151,7 +156,12 @@ const experienceSchema = new Schema<IExperienceEntry>({
   endDate: { type: Date },
   location: { type: String, trim: true },
   employmentType: { type: String, trim: true },
+  industry: { type: String, trim: true },
+  companyWebsite: { type: String, trim: true },
   responsibilities: { type: String, trim: true },
+  referenceName: { type: String, trim: true },
+  referencePhone: { type: String, trim: true },
+  referenceEmail: { type: String, trim: true, lowercase: true },
 });
 
 const skillSchema = new Schema<ISkillEntry>({

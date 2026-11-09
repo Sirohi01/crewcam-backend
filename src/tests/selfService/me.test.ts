@@ -142,6 +142,25 @@ test('employee self-service', async (t) => {
       .send({ experience: [{ company: 'Acme', designation: 'Dev', startDate: '2024-01-01', endDate: '2023-01-01' }] });
     assert.equal(badDates.status, 400);
 
+    const fullExperience = await request(app)
+      .put('/api/v1/me/details/experience')
+      .set('Authorization', authHeader(a.token))
+      .send({ experience: [{
+        company: 'Acme', designation: 'Dev', startDate: '2022-06-01', endDate: '',
+        industry: 'IT Services', companyWebsite: 'acme.test', responsibilities: 'Built APIs\nMentored juniors',
+        referenceName: 'Sam', referencePhone: '+91 98765 43210', referenceEmail: 'SAM@ACME.TEST',
+      }] });
+    assert.equal(fullExperience.status, 200, JSON.stringify(fullExperience.body));
+    assert.equal(fullExperience.body.data.experience[0].industry, 'IT Services');
+    assert.equal(fullExperience.body.data.experience[0].referenceEmail, 'sam@acme.test');
+    assert.equal(fullExperience.body.data.experience[0].endDate, undefined, 'blank end date = current role');
+
+    const badReference = await request(app)
+      .put('/api/v1/me/details/experience')
+      .set('Authorization', authHeader(a.token))
+      .send({ experience: [{ company: 'Acme', designation: 'Dev', referenceEmail: 'not-an-email' }] });
+    assert.equal(badReference.status, 400);
+
     const twoPrimaries = await request(app)
       .put('/api/v1/me/details/emergencyContacts')
       .set('Authorization', authHeader(a.token))

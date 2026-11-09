@@ -101,3 +101,18 @@ The suite covers:
 
 - **Deploy:** backend only; no migration.
 - **Rollback:** redeploy the previous build. `EmployeeProfileDetail` documents are ignored by old code. Rolling back **re-opens the 2FA-secret leak**, so roll forward instead if at all possible.
+
+---
+
+## Slice 1C — experience fields
+
+`EmployeeProfileDetail.experience[]` and its Zod schema (`controllers/meController.ts`) gained these fields, needed by the Experience tab design:
+
+- `industry`, `companyWebsite`
+- `referenceName`, `referencePhone`, `referenceEmail` (phone and email validated; email lower-cased)
+
+A blank `endDate` means the role is current. No migration: the fields are optional.
+
+**Tests:** `me.test.ts` saves a full experience row (blank end date, all new fields) and rejects an invalid reference email. 9/9 pass.
+
+The frontend side of this slice is the unified My Profile page; see the frontend Phase 1 doc.
