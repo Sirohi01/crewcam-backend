@@ -117,6 +117,8 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // ---- HR & Admin Department ----
   // "Current Employee List" used to duplicate People > Employees (same href) — removed,
   // per explicit user request to drop same-page-different-name sidebar entries.
+  // Phase 1E: HR approves employees' requests to change name, DOB, PAN, bank account…
+  { section: 'HR & Admin Department', label: 'Profile Change Requests', href: '/dashboard/change-requests', icon: 'ClipboardList', order: 0.5, requiredPermission: 'EMPLOYEE_WRITE' },
   { section: 'HR & Admin Department', label: 'Ex-Employees', href: comingSoon('Ex-Employees', 'HR & Admin Department'), icon: 'Users', order: 1 },
   { section: 'HR & Admin Department', label: 'Imprest Account', href: comingSoon('Imprest Account', 'HR & Admin Department'), icon: 'Wallet', order: 2 },
   { section: 'HR & Admin Department', label: 'Confirmation Letter', href: comingSoon('Confirmation Letter', 'HR & Admin Department'), icon: 'FileSignature', order: 3 },

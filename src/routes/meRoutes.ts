@@ -9,6 +9,7 @@ import {
   getMyBankDetails,
   getMySalaryStructure,
 } from '../controllers/meController';
+import { cancelMyChangeRequest, createChangeRequest, getMyChangeRequests } from '../controllers/profileChangeRequestController';
 
 /**
  * Employee self-service. Routes take no user ID: every handler acts on req.user, so
@@ -26,5 +27,9 @@ router.get('/details', getMyDetails);
 router.put('/details/:section', updateMyDetailsSection);
 router.get('/bank', getMyBankDetails);
 router.get('/salary-structure', getMySalaryStructure);
+// HR-owned fields (name, DOB, PAN, bank…) change only through an HR-approved request.
+router.get('/change-requests', getMyChangeRequests);
+router.post('/change-requests', createChangeRequest);
+router.post('/change-requests/:id/cancel', cancelMyChangeRequest);
 
 export default router;

@@ -15,7 +15,7 @@
 | 1B | Frontend: wire Family, Emergency, Education, Bank Details to `/me` (see frontend doc) | ✅ Done |
 | 1C | Personal Info (`my-profile`), Experience, Skills tabs; leave, attendance, payslip, reimbursement; move webcam/attachment uploads off base64 JSON | Next |
 | 1D | My Requests, My Tasks, Policies, Helpdesk, Notifications, Assets, Training | Planned |
-| 1E | HR approval flow for HR-owned profile fields (name, DOB, PAN, bank…) | Proposed |
+| 1E | HR approval flow for HR-owned profile fields (name, DOB, PAN, bank…) + encryption-key hardening | ✅ Done |
 
 ---
 
@@ -180,3 +180,87 @@ The suite covers:
 - expense self-approval blocked, zero amount, bad type, future date, foreign receipt
 - leave: foreign/invalid type, bad dates, overlap (409), adjacent days allowed
 - half-day rules and **0.5-day balance**, contact validation, foreign attachment
+
+---
+
+## Slice 1E — HR-approved profile changes (product decision: "HR approval for any changes")
+
+### How it works
+
+1. **Employee requests.** `POST /me/change-requests` with `{ kind, changes, comment?, attachmentUrl? }`:
+   - `kind: 'identity'`: first/last name, date of birth, gender, PAN, Aadhaar, UAN.
+   - `kind: 'bank'`: bank name, account holder, account number, IFSC, branch, account type, MICR.
+2. **HR reviews.** `GET /change-requests?status=…`, `GET /change-requests/:id` and `PUT /change-requests/:id/review` `{ decision, comment }`, on a new router that requires **`EMPLOYEE_WRITE`**.
+3. **Approval applies the change.**
+   - Identity changes update the `User` record.
+   - Bank changes update `BankPayrollInfo` through `save()`, so its encryption hook runs. The record is also marked **Verified**, with the reviewer's name and date.
+4. **The employee sees status and can cancel.** `GET /me/change-requests`, `POST /me/change-requests/:id/cancel` (own requests, pending only).
+
+### Rules (enforced server-side)
+
+**What can be requested:**
+
+- Formats are validated:
+  - PAN: `ABCDE1234F`
+  - Aadhaar and UAN: 12 digits
+  - IFSC: `ABCD0XXXXXX`
+  - account number: 6–18 digits
+  - MICR: 9 digits
+  - date of birth: 14–100 years ago
+- Any other field (e.g. login email) is rejected.
+- Only values that actually differ are recorded; a request that changes nothing → 400.
+- At most **one pending request per kind** per employee → 409.
+- A proof attachment must be one of our own uploads.
+
+**How data is protected:**
+
+- Proposed values are stored **encrypted** (`proposedEncrypted`, `select: false`).
+- Lists show masked values only (e.g. `XXXXXX222B`).
+- Only the reviewer's detail view decrypts them, so HR can check them against the proof; that access is audit-logged.
+
+**Review:**
+
+- **Nobody can review their own request** (403). A salary-account change always needs a second person.
+- Rejection requires a reason. A request can't be reviewed twice (409).
+- A bank change for an employee with no bank record → 409, and the request **stays pending**. That record needs a hiring candidate link, so HR creates it in payroll setup first.
+- Every step writes an audit log entry: requested, viewed, approved, rejected.
+
+### Security finding fixed: encryption fell back to a key in the source code
+
+`utils/encryption.ts` used `ENCRYPTION_KEY || 'default_secret_key_32_chars_long'`. The key isn't set in this environment's `.env` and wasn't in `.env.example`, so every encrypted value is readable by anyone with the repository:
+
+- bank account numbers, PAN and Aadhaar;
+- AI provider API keys and integration credentials;
+- resume text and AI summaries.
+
+**Fix** (a non-breaking migration path):
+
+- `ENCRYPTION_KEY` must be exactly 32 bytes when set.
+- Production logs a loud **[SECURITY]** error when it isn't set.
+- New values are encrypted with the configured key. Old values still **decrypt through a legacy fallback**, so nothing becomes unreadable.
+- `scripts/reencryptSensitiveData.ts` re-encrypts every legacy value on the new key. It covers `bankpayrollinfos`, `employeeaisummaries`, `platformaiproviders`, `resumescreenings`, `profilechangerequests` and integration credentials. It is idempotent, dry-run by default (`--apply` to write), and refuses to run without a key.
+- `.env.example` documents the variable and how to generate it.
+
+**Required action** (per environment):
+
+1. Generate a key: `node -e "console.log(require('crypto').randomBytes(16).toString('hex'))"`.
+2. Set it as `ENCRYPTION_KEY` and back up the database.
+3. Run `npx ts-node scripts/reencryptSensitiveData.ts`, check the counts, then run it again with `--apply`.
+
+**Never change the key again without re-running the script.**
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `src/tests/selfService/changeRequests.test.ts` | **5/5 pass** |
+| Full backend suite (clean build, SMTP blanked) | 274/282; the same **8 pre-existing** failures. No regressions. (An earlier run under heavy load showed extra suite-level setup failures; every one passed when re-run alone and in the full re-run.) |
+
+The suite covers:
+
+- encrypted at rest and masked in summaries; nothing applied before approval
+- one pending per kind; reviewer sees the full value; reject needs a reason; no double review
+- formats, disallowed fields, no-op requests, foreign attachments
+- self-review blocked; employees can't list; other company 404
+- bank: no record → 409 and still pending; approved account number stored encrypted and marked Verified
+- cancel own only

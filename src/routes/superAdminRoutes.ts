@@ -38,6 +38,7 @@ import { getAllNumberFormats, createNumberFormat, updateNumberFormat, deleteNumb
 import { getAllLeaveYearStartMonths, createLeaveYearStartMonth, updateLeaveYearStartMonth, deleteLeaveYearStartMonth } from '../controllers/dropdowns/leaveYearStartMonthController';
 import { getAllPreferredLanguages, createPreferredLanguage, updatePreferredLanguage, deletePreferredLanguage } from '../controllers/dropdowns/preferredLanguageController';
 import { authenticate } from '../middleware/auth';
+import { getAllPayrollCountries, createPayrollCountry, updatePayrollCountry, deletePayrollCountry } from '../controllers/dropdowns/payrollCountryController';
 import { checkPermission } from '../middleware/rbac';
 
 const router = Router();
@@ -195,6 +196,12 @@ router.get('/currencys', getAllCurrencys);
 router.post('/currencys', createCurrency);
 router.put('/currencys/:id', updateCurrency);
 router.delete('/currencys/:id', deleteCurrency);
+
+// Payroll countries: statutory components and tax slabs per country (India seeded).
+router.get('/payroll-countries', getAllPayrollCountries);
+router.post('/payroll-countries', createPayrollCountry);
+router.put('/payroll-countries/:id', updatePayrollCountry);
+router.delete('/payroll-countries/:id', deletePayrollCountry);
 
 router.get('/billing-cycles', getAllBillingCycles);
 router.post('/billing-cycles', createBillingCycle);

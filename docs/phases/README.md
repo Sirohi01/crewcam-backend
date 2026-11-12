@@ -8,8 +8,8 @@ All phases are developed on branch **`agent_changes`** in each repo (crewcam-bac
 | 7A | Payment Obligations add-on switch (+ add-on gating fix for all modules) | ✅ Done | [PHASE-7A-payment-obligations-toggle.md](PHASE-7A-payment-obligations-toggle.md) |
 | 1 | Employee self-service: wire the static `(workspace)` pages to real APIs | 🚧 In progress (1A `/me` API + 2FA-secret fix ✅, 1B profile pages ✅, 1C unified My Profile ✅, 1C-2 pay/leave/expenses + payroll leak fix ✅) | [PHASE-1-employee-self-service.md](PHASE-1-employee-self-service.md) |
 | D1 | Product decisions: WhatsApp/KPI permissions, Bharat Organic tenant, optional add-on prices | ✅ Done | [DECISIONS-1.md](DECISIONS-1.md) |
-| 1E | HR approval for HR-owned profile changes (name, DOB, PAN, bank…) | Next | |
-| 4-F | Payroll country catalogue (India seeded, others manageable from Super Admin) | Planned | |
+| 1E | HR approval for HR-owned profile changes (name, DOB, PAN, bank…) + encryption-key hardening | ✅ Done | [PHASE-1-employee-self-service.md](PHASE-1-employee-self-service.md) |
+| 4-F | Payroll country catalogue (India seeded, others manageable from Super Admin) | ✅ Done | [PHASE-4F-payroll-countries.md](PHASE-4F-payroll-countries.md) |
 | 2 | Org-setup static sub-pages (structure, budgets, cost centres, audit trail…) | Planned | |
 | 3 | Lifecycle port from legacy: disciplinary, exit / F&F, letters | Planned | |
 | 5 | Super admin completion (technical access, activity log, terms, catalogue consolidation) | Planned | |

@@ -49,6 +49,8 @@ import divisionRoutes from './routes/divisionRoutes';
 import testPublishRoutes from './routes/testPublishRoutes';
 import paymentObligationRoutes from './routes/paymentObligationRoutes';
 import meRoutes from './routes/meRoutes';
+import profileChangeRequestRoutes from './routes/profileChangeRequestRoutes';
+import payrollConfigRoutes from './routes/payrollConfigRoutes';
 
 export function createApp() {
   const app = express();
@@ -158,6 +160,8 @@ export function createApp() {
   app.use('/api/v1/divisions', divisionRoutes);
   app.use('/api/v1/payment-obligations', paymentObligationRoutes);
   app.use('/api/v1/me', meRoutes);
+  app.use('/api/v1/change-requests', profileChangeRequestRoutes);
+  app.use('/api/v1/payroll-config', payrollConfigRoutes);
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));

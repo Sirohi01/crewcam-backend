@@ -42,6 +42,7 @@ const wizardSchema = z.object({
   postalCode: z.string().optional(),
   timezone: z.string().optional().default('Asia/Kolkata'),
   baseCurrency: z.string().optional().default('INR'),
+  payrollCountry: z.string().trim().regex(/^[A-Za-z]{2}$/).transform((v) => v.toUpperCase()).optional(),
 
   // Step 4 — Subscription
   packageId: z.string().min(1, 'A subscription plan must be selected'),
@@ -176,6 +177,7 @@ export const createCompanyDraft = async (req: AuthRequest, res: Response) => {
       country: data.country,
       timezone: data.timezone,
       baseCurrency: data.baseCurrency,
+      payrollCountry: data.payrollCountry,
       panNumber: data.panNumber,
       gstin: data.gstin,
       cin: data.cin,

@@ -83,6 +83,7 @@ export interface ICompany extends ITenantScoped, IAuditable {
 
   weekStartsOn?: string;
   dateFormat?: string;
+  payrollCountry?: string; // PayrollCountry.code; unset = platform default (India)
   timeFormat?: string;
   numberFormat?: string;
   leaveYearStartMonth?: number;
@@ -185,6 +186,7 @@ const CompanySchema = new Schema<ICompany>({
 
   weekStartsOn: { type: String },
   dateFormat: { type: String },
+  payrollCountry: { type: String, trim: true, uppercase: true },
   timeFormat: { type: String },
   numberFormat: { type: String },
   leaveYearStartMonth: { type: Number },
