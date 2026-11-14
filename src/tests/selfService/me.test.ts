@@ -9,6 +9,7 @@ import { Role } from '../../models/Role';
 import { Tenant } from '../../models/Tenant';
 import { Package } from '../../models/Package';
 import { EmployeeProfileDetail } from '../../models/EmployeeProfileDetail';
+import { ShiftTiming } from '../../models/ShiftTiming';
 import { signAccessToken } from '../../utils/authTokens';
 
 // Phase 1 — employee self-service (/api/v1/me) plus the 2FA-secret leak found while
@@ -86,6 +87,39 @@ test('employee self-service', async (t) => {
     assert.equal(res.status, 200);
     assert.equal(res.body.data.panNumber, 'XXXXXX234F');
     assert.equal(res.body.data.firstName, 'carol');
+  });
+
+  await t.test('GET /me/profile includes the assigned shift for attendance rules', async () => {
+    const shift = await new ShiftTiming({
+      name: 'General', checkInTime: '10:00', checkOutTime: '19:00', gracePeriodLC: 10, weekOffDays: ['Saturday', 'Sunday'], tenantId: TENANT_A,
+    }).save();
+    const { token } = await createEmployee(TENANT_A, 'dora', { shiftTimingId: shift._id });
+    const res = await request(app).get('/api/v1/me/profile').set('Authorization', authHeader(token));
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.shiftTimingId.checkInTime, '10:00');
+    assert.equal(res.body.data.shiftTimingId.gracePeriodLC, 10);
+    assert.deepEqual(res.body.data.shiftTimingId.weekOffDays, ['Saturday', 'Sunday']);
+  });
+
+  await t.test('ordinary JSON bodies over 2 MB get 413, not a 50 MB parse', async () => {
+    const { token } = await createEmployee(TENANT_A, 'erin');
+    const res = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Authorization', authHeader(token))
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ bio: 'x'.repeat(3 * 1024 * 1024) }));
+    assert.equal(res.status, 413);
+    assert.match(res.body.message, /too large/i);
+  });
+
+  await t.test('hiring keeps the larger body limit', async () => {
+    const { token } = await createEmployee(TENANT_A, 'fred');
+    const res = await request(app)
+      .post('/api/v1/hiring')
+      .set('Authorization', authHeader(token))
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ padding: 'x'.repeat(3 * 1024 * 1024) }));
+    assert.notEqual(res.status, 413);
   });
 
   await t.test('PATCH /me/profile updates self-editable fields only', async () => {

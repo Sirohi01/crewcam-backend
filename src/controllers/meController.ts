@@ -5,6 +5,7 @@ import { User } from '../models/User';
 import { EmployeeProfileDetail } from '../models/EmployeeProfileDetail';
 import { BankPayrollInfo } from '../models/BankPayrollInfo';
 import { SalaryStructure } from '../models/SalaryStructure';
+import '../models/ShiftTiming'; // registers the model for populate('shiftTimingId')
 
 /**
  * Employee self-service ("My Profile"). Everything here is scoped to the caller: no
@@ -147,6 +148,8 @@ const loadProfile = async (req: AuthRequest) => {
     .populate('departmentId', 'name')
     .populate('designationId', 'name')
     .populate('reportingToId', 'firstName lastName email profilePictureUrl designation')
+    // Shift rules drive late/week-off calculations on the attendance page.
+    .populate('shiftTimingId', 'name checkInTime checkOutTime gracePeriodLC gracePeriodEG weekOffDays')
     .lean();
   if (!user) return null;
   return {

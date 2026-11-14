@@ -264,3 +264,24 @@ The suite covers:
 - self-review blocked; employees can't list; other company 404
 - bank: no record → 409 and still pending; approved account number stored encrypted and marked Verified
 - cancel own only
+
+---
+
+## Slice 1C-3: attendance rules and request-size limits
+
+### 1. Request body limit cut from 50 MB to 2 MB (High, availability)
+`app.ts` parsed every JSON and form body up to **50 MB**, so any authenticated (or, for public routes, unauthenticated) caller could make the server buffer and parse 50 MB per request. The cause was base64 images embedded in JSON.
+- Default limit is now **2 MB** for JSON and urlencoded bodies.
+- **15 MB** stays only on paths that still send embedded documents: `/api/v1/hiring`, `/api/v1/super-admin/tenants` and `/api/v1/super-admin/leads/import`. These are listed in `LARGE_BODY_PATHS` and should shrink as those screens move to `/upload`.
+- Oversized bodies now get a clear **413** ("Request is too large. Upload files as attachments…") instead of a generic 500.
+
+### 2. `/me/profile` includes the employee's shift
+`loadProfile` populates `shiftTimingId` (name, check-in/out, grace periods, week-off days). The attendance page uses it to decide what counts as late and which days are week-offs, instead of hard-coding 9:30 AM and Sunday.
+
+### Verification (run, not assumed)
+- `tsc --noEmit` clean.
+- New tests in `src/tests/selfService/me.test.ts`: the shift is returned on `/me/profile`; a 3 MB body to `/me/profile` gets 413; a 3 MB body to `/hiring` does not. The suite passes 12/12.
+- Full suite (clean `tsc --outDir`, SMTP blanked): 273 tests, 262 pass, 11 fail. The 8 are the known baseline. The other 3 suites (login, forgot-password, tenant isolation) hit about 110 s setup timeouts under load; re-run alone they pass 2/2, 3/3 and 11/11.
+
+### Rollback
+Revert the commit. There are no data changes.

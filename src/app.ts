@@ -59,8 +59,18 @@ export function createApp() {
   // these must be mounted with express.raw() before the global express.json() below.
   app.use('/api/v1/webhooks', express.raw({ type: '*/*' }), webhookRoutes);
 
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  // Request bodies were capped at 50 MB everywhere, which invites memory-exhaustion abuse.
+  // Default is now 2 MB; only routes with a real need get more: hiring (joining forms saved
+  // before Phase 1C-3 still carry base64 photos and are re-sent on edit) and super-admin
+  // bulk imports. Files go through multipart /upload instead (5 MB, type-checked).
+  const LARGE_BODY_PATHS = ['/api/v1/hiring', '/api/v1/super-admin/tenants', '/api/v1/super-admin/leads/import'];
+  const largeJson = express.json({ limit: '15mb' });
+  const defaultJson = express.json({ limit: '2mb' });
+  const largeForm = express.urlencoded({ extended: true, limit: '15mb' });
+  const defaultForm = express.urlencoded({ extended: true, limit: '2mb' });
+  const needsLargeBody = (path: string) => LARGE_BODY_PATHS.some((prefix) => path.startsWith(prefix));
+  app.use((req, res, next) => (needsLargeBody(req.path) ? largeJson : defaultJson)(req, res, next));
+  app.use((req, res, next) => (needsLargeBody(req.path) ? largeForm : defaultForm)(req, res, next));
   app.use(cookieParser());
   app.use(helmet());
 
@@ -168,6 +178,9 @@ export function createApp() {
 
   // Global Error Handler
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    if (err?.type === 'entity.too.large') {
+      return res.status(413).json({ message: 'Request is too large. Upload files as attachments instead of embedding them.' });
+    }
     console.error('Unhandled error:', err);
     const isProduction = process.env.NODE_ENV === 'production';
     res.status(err.status || 500).json({
