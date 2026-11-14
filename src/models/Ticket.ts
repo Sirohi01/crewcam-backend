@@ -13,7 +13,13 @@ export interface ITicket extends Document {
   assignedTo?: Types.ObjectId;
   resolution?: string;
   resolvedAt?: Date;
+  ticketNumber?: string;
+  rating?: number;
+  feedback?: string;
+  ratedAt?: Date;
 }
+
+export const TICKET_CATEGORIES = ['IT', 'HR', 'Finance', 'Facility', 'Other'] as const;
 
 const ticketSchema = new Schema<ITicket>({
   tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
@@ -33,7 +39,13 @@ const ticketSchema = new Schema<ITicket>({
   },
   assignedTo: { type: Schema.Types.ObjectId, ref: 'User' },
   resolution: { type: String },
-  resolvedAt: { type: Date }
+  resolvedAt: { type: Date },
+  // Human-readable reference, e.g. HD-2026-0007 (per tenant, per year).
+  ticketNumber: { type: String },
+  // The employee's rating of how their ticket was handled (1-5), once it is resolved.
+  rating: { type: Number, min: 1, max: 5 },
+  feedback: { type: String },
+  ratedAt: { type: Date },
 }, {
   timestamps: true
 });

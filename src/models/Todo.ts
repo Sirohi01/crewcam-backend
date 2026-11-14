@@ -8,8 +8,10 @@ export interface ITodo extends Document {
   description?: string;
   dueDate?: Date;
   priority: 'Low' | 'Medium' | 'High';
-  status: 'Pending' | 'Completed';
+  status: 'Pending' | 'In_Progress' | 'Completed';
   completedAt?: Date;
+  assignedBy?: Types.ObjectId; // set when someone else (manager/HR) delegated the task
+  relatedTo?: string;
 }
 
 const todoSchema = new Schema<ITodo>({
@@ -19,8 +21,10 @@ const todoSchema = new Schema<ITodo>({
   description: { type: String },
   dueDate: { type: Date },
   priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
-  status: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'In_Progress', 'Completed'], default: 'Pending' },
   completedAt: { type: Date },
+  assignedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  relatedTo: { type: String, trim: true },
 }, { timestamps: true });
 
 todoSchema.plugin(tenantPlugin);

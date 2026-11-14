@@ -6,6 +6,7 @@ import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { Notification } from '../models/Notification';
 import { DailyQuote } from '../models/DailyQuote';
+import { myNotificationFilter, toMyNotification } from '../utils/myNotifications';
 
 export const sendCommunication = async (req: AuthRequest, res: Response) => {
   try {
@@ -137,7 +138,7 @@ export const createNotification = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId || !req.user) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const { title, message, audienceType, audienceValue } = req.body;
+    const { title, message, audienceType, audienceValue, priority } = req.body;
     if (!title || !message) return res.status(400).json({ message: 'Title and message are required' });
 
     const type = ['All', 'Role', 'Department', 'Branch'].includes(audienceType) ? audienceType : 'All';
@@ -154,6 +155,7 @@ export const createNotification = async (req: AuthRequest, res: Response) => {
       message,
       audienceType: type,
       audienceValue,
+      priority: priority === 'High' ? 'High' : 'Normal',
       createdBy: req.user._id,
       readBy: [],
     });
@@ -180,18 +182,9 @@ export const getMyNotifications = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId || !req.user) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const notifications = await Notification.find({
-      tenantId,
-      $or: [
-        { audienceType: 'All' },
-        { audienceType: 'Role', audienceValue: req.user.roleId },
-        { audienceType: 'Department', audienceValue: req.user.departmentId },
-        { audienceType: 'Branch', audienceValue: req.user.branchId },
-        { audienceType: 'User', audienceValue: req.user._id },
-      ],
-    } as any).sort({ createdAt: -1 }).limit(50);
+    const notifications = await Notification.find(myNotificationFilter(tenantId, req.user) as any).sort({ createdAt: -1 }).limit(50);
 
-    res.status(200).json(notifications);
+    res.status(200).json(notifications.map((n) => toMyNotification(n, req.user!._id)));
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching notifications', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
@@ -203,13 +196,14 @@ export const markNotificationRead = async (req: AuthRequest, res: Response) => {
     if (!tenantId || !req.user) return res.status(400).json({ message: 'Tenant ID required' });
 
     const { id } = req.params;
+    // Only notifications this user can see — not any ID in the company.
     const notification = await Notification.findOneAndUpdate(
-      { _id: id, tenantId } as any,
+      { ...myNotificationFilter(tenantId, req.user), _id: id } as any,
       { $addToSet: { readBy: req.user._id } },
       { returnDocument: 'after' }
     );
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
-    res.status(200).json(notification);
+    res.status(200).json(toMyNotification(notification, req.user._id));
   } catch (error: any) {
     res.status(500).json({ message: 'Error marking notification read', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }

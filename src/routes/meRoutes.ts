@@ -10,6 +10,16 @@ import {
   getMySalaryStructure,
 } from '../controllers/meController';
 import { cancelMyChangeRequest, createChangeRequest, getMyChangeRequests } from '../controllers/profileChangeRequestController';
+import {
+  getMyTickets,
+  createMyTicket,
+  rateMyTicket,
+  getMyNotificationFeed,
+  markMyNotificationRead,
+  markAllMyNotificationsRead,
+  getMyTeam,
+} from '../controllers/meSupportController';
+import { requireFeature } from '../middleware/featureGate';
 
 /**
  * Employee self-service. Routes take no user ID: every handler acts on req.user, so
@@ -31,5 +41,13 @@ router.get('/salary-structure', getMySalaryStructure);
 router.get('/change-requests', getMyChangeRequests);
 router.post('/change-requests', createChangeRequest);
 router.post('/change-requests/:id/cancel', cancelMyChangeRequest);
+// Helpdesk: the employee's own tickets (HR's queue stays on /support/tickets).
+router.get('/tickets', requireFeature('Helpdesk'), getMyTickets);
+router.post('/tickets', requireFeature('Helpdesk'), createMyTicket);
+router.post('/tickets/:id/rating', requireFeature('Helpdesk'), rateMyTicket);
+router.get('/notifications', getMyNotificationFeed);
+router.post('/notifications/read-all', markAllMyNotificationsRead);
+router.post('/notifications/:id/read', markMyNotificationRead);
+router.get('/team', getMyTeam);
 
 export default router;

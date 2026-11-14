@@ -8,6 +8,7 @@ export interface INotification extends Document {
   audienceType: 'All' | 'Role' | 'Department' | 'Branch' | 'User';
   audienceValue?: Types.ObjectId | string;
   link?: string;
+  priority: 'Normal' | 'High';
   createdBy: Types.ObjectId;
   readBy: Types.ObjectId[];
 }
@@ -22,6 +23,7 @@ const notificationSchema = new Schema<INotification>({
   audienceType: { type: String, enum: ['All', 'Role', 'Department', 'Branch', 'User'], default: 'All' },
   audienceValue: { type: Schema.Types.Mixed },
   link: { type: String },
+  priority: { type: String, enum: ['Normal', 'High'], default: 'Normal' },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   readBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });

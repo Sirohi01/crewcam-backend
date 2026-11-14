@@ -25,6 +25,8 @@ export const requireFeature = (feature: string) => {
       }
 
       // The v2 plan builder stores catalogue IDs; expand them to module names/codes.
+      // '*' (all features) must be checked before normalising — normalize('*') is ''.
+      if ((pkg.features || []).includes('*')) return next();
       const features = (await expandFeatureEntries(pkg.features)).map(normalize);
       const packageAddons = (await expandFeatureEntries(pkg.addOnModules)).map(normalize);
       const tenantModules = (tenant?.modules || []).filter((m: any) => m.enabled).map((m: any) => normalize(m.key));

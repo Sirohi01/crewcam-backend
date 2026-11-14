@@ -285,3 +285,56 @@ The suite covers:
 
 ### Rollback
 Revert the commit. There are no data changes.
+
+---
+
+## Slice 1D-1: helpdesk, notifications and tasks for employees
+
+### Why
+The workspace Helpdesk, Notifications and My Tasks pages showed hard-coded sample data. The backend pieces underneath had gaps:
+- The default **Employee** role has no `SUPPORT_*` permission, so employees couldn't raise or see tickets at all.
+- Granting `SUPPORT_READ` would have shown them every ticket in the company.
+
+### Security and correctness fixes
+| Severity | Problem | Fix |
+|---|---|---|
+| High | **Any user could mark any notification in the company as read, and the response returned it in full.** A message sent to one employee (for example a salary revision) could be read by a colleague who had its ID. | Every read and "mark read" now goes through `myNotificationFilter` (company-wide, own role, department, branch, or sent directly to you). Others' notifications give 404. |
+| Medium | `GET /communication/notifications/mine` returned `readBy`, the IDs of everyone who had read each notification. | The response now has `isRead` for the caller only (`toMyNotification`). |
+| High | **Every "all features" package was blocked from every gated module except Core HR.** `requireFeature` normalised `'*'` to `''` before checking it. This predates this work. | `'*'` is checked before normalising (`middleware/featureGate.ts`). |
+| Medium | `POST /support/tickets` copied the whole request body onto the ticket, so the creator could set status, assignee or resolution. | Validated with `NEW_TICKET_SCHEMA` (category, subject, description, priority only). |
+| Medium | Support staff could resolve or close tickets they had raised themselves. | `PUT /support/tickets/:id` returns 403 on your own ticket. The assignee must belong to the same company. |
+| Low | `PUT /todos/:id` wrote fields as `undefined` and never cleared `completedAt`. | Validated partial update; `completedAt` is unset when a task is reopened. |
+
+### New API (all under `/api/v1`, no user IDs in paths)
+| Method and path | What it does |
+|---|---|
+| `GET /me/tickets` | Your tickets, plus stats (open, in progress, resolved this month, average resolution hours) and the latest resolved ticket you haven't rated. Gated by the `Helpdesk` feature. |
+| `POST /me/tickets` | Raise a ticket. Category is one of `IT`, `HR`, `Finance`, `Facility`, `Other`. Each ticket gets a reference such as `HD-2026-0007` (atomic, per company and year, via `Counter`). |
+| `POST /me/tickets/:id/rating` | Rate 1–5 with optional feedback: only your own ticket, only when it's Resolved or Closed, and only once. |
+| `GET /me/notifications` | 20 per page, newest first (`before` cursor). Filters: `status`, `priority`, `kind` (direct or announcement), `from`. Includes summary counts. |
+| `POST /me/notifications/:id/read`, `POST /me/notifications/read-all` | Mark notifications read, limited to ones addressed to you. |
+| `GET /me/team` | Your direct reports (`reportingToId` = you). |
+| `POST /todos/assign` | Delegate a task. Allowed only to the assignee's reporting manager or someone with `EMPLOYEE_WRITE`. The assignee is notified. |
+
+### Behaviour rules
+- **Ticket status notifications:** when HR changes a ticket's status, the employee who raised it gets a notification.
+- **Delegated tasks:**
+  - The assignee can change the status, but not the wording, and can't delete the task.
+  - When the assignee completes it, the person who assigned it is notified.
+
+### Model changes (additive, no migration needed)
+- **`Ticket`:** `ticketNumber`, `rating`, `feedback`, `ratedAt`. Exports `TICKET_CATEGORIES`.
+- **`Todo`:** status gains `In_Progress`; new fields `assignedBy` and `relatedTo`.
+- **`Notification`:** `priority` (`Normal` | `High`, default `Normal`). HR can send High-priority notifications through `POST /communication/notifications`.
+
+Existing tickets have no `ticketNumber`; the UI shows "—" for them.
+
+### Verification
+- `tsc --noEmit` clean.
+- New `src/tests/selfService/supportAndTasks.test.ts`: 6 tests, all passing.
+- Full suite (clean `tsc --outDir`, SMTP blanked): 291 tests, 283 pass, 8 fail — exactly the known baseline. A first run alongside `next build` timed out in suite setup; re-run alone it matches the baseline. They cover:
+  - own-ticket scoping and ignored status/assignee fields;
+  - the rating rules;
+  - the self-resolve block and the owner notification;
+  - the notification leak (404, no content), read-all, and no `readBy`;
+  - delegation rules and the completion notification.
