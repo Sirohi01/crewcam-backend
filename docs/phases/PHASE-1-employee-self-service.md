@@ -388,3 +388,19 @@ Existing tickets have no `ticketNumber`; the UI shows "—" for them.
   - the combined requests list with only your own items.
 - The `payAndLeave`, `supportAndTasks`, `me` and `changeRequests` suites re-run and pass.
 - Full suite (clean `tsc --outDir`, SMTP blanked): 298 tests, 290 pass, 8 fail — exactly the known baseline.
+
+---
+
+## Fix: Recruitment Process sidebar section
+
+Reported by the user ("recruitment process in side bar section correct it"). Every link resolved to a page, but three items were wrong:
+
+| Item | Problem | Fix |
+|---|---|---|
+| HOD Evaluation | Never shown. The frontend's `EXCLUDED_LABELS` (meant for legacy duplicates) hides that label in every section except Hiring Process. | Recruitment Process is exempt too, like Hiring Process (frontend `DynamicSidebar.tsx`). |
+| New Job | Opened the jobs **list** (`/dashboard/hiring/jobs`). | Now opens the new-job form (`/dashboard/hiring/jobs/new`). |
+| Interview Statistics | Opened the generic reports page (`/dashboard/report-analytics`). | Now opens `/dashboard/hiring/interviews/statistics`, the same page Hiring Process uses. |
+
+**Existing companies:** `syncSidebarDefaults` already moves rows for each company that still have the old default link to the new one. A link an admin customised is left as it is.
+
+**Test:** `src/tests/sidebar/recruitmentSidebar.test.ts` (3 tests): the defaults; existing companies corrected; customised links kept.

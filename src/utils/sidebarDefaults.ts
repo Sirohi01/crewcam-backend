@@ -149,7 +149,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   // the frontend bundle). ----
   { section: 'Recruitment Process', label: 'Recruitment Dashboard', href: '/dashboard/hr-dashboard', icon: 'LayoutDashboard', order: 1, requiredPermission: 'ATS_READ' },
   { section: 'Recruitment Process', label: 'Job Requisition', href: '/dashboard/hiring/manpower', icon: 'Briefcase', order: 2, requiredPermission: 'ATS_READ' },
-  { section: 'Recruitment Process', label: 'New Job', href: '/dashboard/hiring/jobs', icon: 'PlusSquare', order: 3, requiredPermission: 'ATS_WRITE' },
+  { section: 'Recruitment Process', label: 'New Job', href: '/dashboard/hiring/jobs/new', icon: 'PlusSquare', order: 3, requiredPermission: 'ATS_WRITE' },
   { section: 'Recruitment Process', label: 'Career', href: '/dashboard/career', icon: 'Briefcase', order: 4, requiredPermission: 'ATS_READ' },
   { section: 'Recruitment Process', label: 'All Candidates', href: '/dashboard/hiring/candidates', icon: 'UserPlus', order: 4.1, parent: 'Candidate', requiredPermission: 'ATS_READ' },
   { section: 'Recruitment Process', label: 'Selected Candidate', href: '/dashboard/hiring/candidates/selected', icon: 'CheckCircle2', order: 4.2, parent: 'Candidate', requiredPermission: 'ATS_READ' },
@@ -158,7 +158,7 @@ export const DEFAULT_SIDEBAR_ITEMS: SidebarDefaultItem[] = [
   { section: 'Recruitment Process', label: 'HOD Evaluation', href: '/dashboard/hiring/hod-evaluation', icon: 'ShieldCheck', order: 4.5, parent: 'Candidate', requiredPermission: 'ATS_READ' },
   { section: 'Recruitment Process', label: 'Candidate Pipeline', href: '/dashboard/hiring/pipeline', icon: 'ListTree', order: 4.6, parent: 'Candidate', requiredPermission: 'ATS_READ' },
   { section: 'Recruitment Process', label: 'Interviews', href: '/dashboard/hiring/interviews/list', icon: 'MessageSquare', order: 7, requiredPermission: 'ATS_READ' },
-  { section: 'Recruitment Process', label: 'Interview Statistics', href: '/dashboard/report-analytics', icon: 'TrendingUp', order: 8, requiredPermission: 'ATS_READ' },
+  { section: 'Recruitment Process', label: 'Interview Statistics', href: '/dashboard/hiring/interviews/statistics', icon: 'TrendingUp', order: 8, requiredPermission: 'ATS_READ' },
 
   // ---- Hiring Process (24 steps + Interview & Selection grouped in, not a separate top-level
   // section — both operate on the same candidate pipeline, splitting them into two sidebar

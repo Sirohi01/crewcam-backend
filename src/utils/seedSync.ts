@@ -179,6 +179,18 @@ export const syncSidebarDefaults = async (tenantId: string) => {
       SidebarConfig.updateOne({ tenantId, section: item.section, label: item.label } as any, { href: item.href })
     )
   );
+  // Recruitment Process links that pointed at the wrong page: "New Job" opened the jobs list
+  // and "Interview Statistics" opened the generic reports page. Only rows still on the old
+  // default are moved, so a link an admin customised is left alone.
+  const RECRUITMENT_HREF_FIXES: Array<{ label: string; from: string; to: string }> = [
+    { label: 'New Job', from: '/dashboard/hiring/jobs', to: '/dashboard/hiring/jobs/new' },
+    { label: 'Interview Statistics', from: '/dashboard/report-analytics', to: '/dashboard/hiring/interviews/statistics' },
+  ];
+  await Promise.all(RECRUITMENT_HREF_FIXES.map((fix) =>
+    existingByKey.get(`Recruitment Process::${fix.label}`)?.href === fix.from
+      ? SidebarConfig.updateOne({ tenantId, section: 'Recruitment Process', label: fix.label } as any, { href: fix.to })
+      : Promise.resolve()
+  ));
   const existingPipeline = existingByKey.get('Hiring Process::Candidate Pipeline');
   if (existingPipeline?.href === '/dashboard/hiring') {
     await SidebarConfig.updateOne(
