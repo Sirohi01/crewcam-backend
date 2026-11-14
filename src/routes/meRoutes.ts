@@ -20,6 +20,8 @@ import {
   getMyTeam,
 } from '../controllers/meSupportController';
 import { requireFeature } from '../middleware/featureGate';
+import { getMyPolicies, acknowledgeMyPolicy } from '../controllers/mePolicyController';
+import { getMyRequests } from '../controllers/meRequestsController';
 
 /**
  * Employee self-service. Routes take no user ID: every handler acts on req.user, so
@@ -49,5 +51,10 @@ router.get('/notifications', getMyNotificationFeed);
 router.post('/notifications/read-all', markAllMyNotificationsRead);
 router.post('/notifications/:id/read', markMyNotificationRead);
 router.get('/team', getMyTeam);
+// Company policies that apply to the caller, and acknowledging them.
+router.get('/policies', getMyPolicies);
+router.post('/policies/:id/acknowledge', acknowledgeMyPolicy);
+// Everything the caller has requested, across modules.
+router.get('/requests', getMyRequests);
 
 export default router;

@@ -9,6 +9,7 @@ import {
 import { authenticate } from '../middleware/auth';
 import { tenantResolver } from '../middleware/tenantResolver';
 import { checkPermission } from '../middleware/rbac';
+import { getPolicyAcknowledgements } from '../controllers/mePolicyController';
 import { requireFeature } from '../middleware/featureGate';
 
 const router = Router();
@@ -24,6 +25,9 @@ const protectWrite = checkPermission('MASTER_WRITE'); // or 'POLICY_WRITE'
 router.route('/')
   .get(protectRead, getCompanyPolicies)
   .post(protectWrite, createCompanyPolicy);
+
+// Compliance view: who has acknowledged the current version.
+router.get('/:id/acknowledgements', checkPermission(['EMPLOYEE_READ', 'MASTER_READ']), getPolicyAcknowledgements);
 
 router.route('/:id')
   .get(protectRead, getCompanyPolicyById)

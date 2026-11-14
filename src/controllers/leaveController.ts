@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 
 import { leaveDays } from '../utils/leaveDays';
 import { isOwnUploadUrl } from '../utils/fileStorage';
+import { notifyUser } from './communicationController';
 
 export const applyLeave = async (req: AuthRequest, res: Response) => {
   try {
@@ -148,10 +149,17 @@ export const approveRejectLeave = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
+    const existing = await LeaveRequest.findOne({ _id: id, tenantId } as any);
+    if (!existing) return res.status(404).json({ message: 'Leave request not found' });
+    if (String(existing.userId) === String(req.user!._id)) {
+      return res.status(403).json({ message: 'You cannot approve or reject your own leave' });
+    }
+
+    // Only a pending request can be decided — a decision is never silently flipped.
     const leaveRequest = await LeaveRequest.findOneAndUpdate(
-      { _id: id, tenantId } as any,
-      { 
-        status, 
+      { _id: id, tenantId, status: 'Pending' } as any,
+      {
+        status,
         approvedBy: req.user!._id as any,
         rejectionReason: status === 'Rejected' ? rejectionReason : undefined
       },
@@ -159,8 +167,13 @@ export const approveRejectLeave = async (req: AuthRequest, res: Response) => {
     );
 
     if (!leaveRequest) {
-      return res.status(404).json({ message: 'Leave request not found' });
+      return res.status(409).json({ message: `This request is already ${existing.status.toLowerCase()}` });
     }
+
+    const range = `${moment(existing.startDate).format('DD MMM')}${moment(existing.endDate).isSame(existing.startDate, 'day') ? '' : ` – ${moment(existing.endDate).format('DD MMM')}`}`;
+    await notifyUser(tenantId, existing.userId, req.user!._id, `Leave ${status.toLowerCase()}`,
+      `Your leave for ${range} was ${status.toLowerCase()}${status === 'Rejected' && rejectionReason ? `: ${rejectionReason}` : '.'}`,
+      '/dashboard/employee-leave');
 
     await AuditLog.create({
       tenantId,
@@ -176,6 +189,29 @@ export const approveRejectLeave = async (req: AuthRequest, res: Response) => {
     res.status(200).json({ message: `Leave ${status.toLowerCase()} successfully`, leaveRequest });
   } catch (error: any) {
     res.status(500).json({ message: 'Error updating leave status', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
+  }
+};
+
+/** The employee withdraws their own leave request while it is still pending. */
+export const cancelMyLeave = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    if (!tenantId || !req.user) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const leave = await LeaveRequest.findOneAndUpdate(
+      { _id: req.params.id, tenantId, userId: req.user._id, status: 'Pending' } as any,
+      { $set: { status: 'Cancelled' } },
+      { returnDocument: 'after' }
+    );
+    if (!leave) return res.status(404).json({ message: 'No pending leave request of yours with that ID' });
+
+    await AuditLog.create({
+      tenantId, userId: req.user._id, action: 'CANCEL_LEAVE', module: 'Leaves', status: 'SUCCESS',
+      ipAddress: req.ip as string, userAgent: req.headers['user-agent'] as string, details: { leaveRequestId: leave._id },
+    } as any);
+    res.json({ message: 'Leave request withdrawn', leaveRequest: leave });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error withdrawing leave', ...(process.env.NODE_ENV === 'production' ? {} : { error: error.message }) });
   }
 };
 

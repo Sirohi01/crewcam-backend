@@ -8,7 +8,7 @@ export interface IExpense extends Document {
   date: Date;
   description: string;
   receiptUrl?: string;
-  status: 'Pending' | 'Approved' | 'Rejected' | 'Reimbursed';
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Reimbursed' | 'Withdrawn';
   approverComments?: string;
 }
 
@@ -26,7 +26,8 @@ const expenseSchema = new Schema<IExpense>({
   receiptUrl: { type: String },
   status: { 
     type: String, 
-    enum: ['Pending', 'Approved', 'Rejected', 'Reimbursed'], 
+    // Withdrawn = pulled back by the employee before a decision.
+    enum: ['Pending', 'Approved', 'Rejected', 'Reimbursed', 'Withdrawn'], 
     default: 'Pending' 
   },
   approverComments: { type: String }

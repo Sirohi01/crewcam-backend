@@ -9,6 +9,7 @@ import { AuditLog } from '../models/AuditLog';
 import { PayrollApprovalRequest } from '../models/PayrollApprovalRequest';
 import { getEffectivePermissions } from '../middleware/rbac';
 import { isOwnUploadUrl } from '../utils/fileStorage';
+import { notifyUser } from './communicationController';
 
 /**
  * Whether the caller may list every employee's salary slips / expenses. Everyone else
@@ -320,19 +321,61 @@ export const getExpenses = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/** Which statuses each decision may follow. */
+const EXPENSE_TRANSITIONS: Record<string, string[]> = {
+  Approved: ['Pending'],
+  Rejected: ['Pending'],
+  Reimbursed: ['Approved'],
+};
+
+/** The employee pulls back their own claim while it is still pending. */
+export const withdrawMyExpense = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const expense = await Expense.findOneAndUpdate(
+      { _id: req.params.id, tenantId, employeeId: req.user!._id, status: 'Pending' } as any,
+      { $set: { status: 'Withdrawn' } },
+      { returnDocument: 'after' }
+    );
+    if (!expense) return res.status(404).json({ message: 'No pending claim of yours with that ID' });
+
+    await AuditLog.create({
+      tenantId, userId: req.user!._id, action: 'WITHDRAW_EXPENSE', module: 'Finance', status: 'SUCCESS',
+      ipAddress: req.ip as string, userAgent: req.headers['user-agent'] as string, details: { expenseId: expense._id },
+    } as any);
+    res.json({ message: 'Claim withdrawn', expense });
+  } catch (error: any) {
+    res.status(500).json(safeError('Error withdrawing claim', error));
+  }
+};
+
 export const updateExpenseStatus = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { id } = req.params;
     const { status, approverComments } = req.body;
 
+    const allowedFrom = EXPENSE_TRANSITIONS[status];
+    if (!allowedFrom) return res.status(400).json({ message: 'status must be Approved, Rejected or Reimbursed' });
+
+    const existing = await Expense.findOne({ _id: id, tenantId } as any);
+    if (!existing) return res.status(404).json({ message: 'Expense not found' });
+    if (String(existing.employeeId) === String(req.user!._id)) {
+      return res.status(403).json({ message: 'You cannot approve or reimburse your own claim' });
+    }
+
     const expense = await Expense.findOneAndUpdate(
-      { _id: id, tenantId } as any,
-      { status, approverComments },
+      { _id: id, tenantId, status: { $in: allowedFrom } } as any,
+      { $set: { status, ...(approverComments !== undefined ? { approverComments: String(approverComments).slice(0, 1000) } : {}) } },
       { returnDocument: 'after' }
     );
+    if (!expense) {
+      return res.status(409).json({ message: `A ${existing.status.toLowerCase()} claim cannot be marked ${status.toLowerCase()}` });
+    }
 
-    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    await notifyUser(tenantId, existing.employeeId, req.user!._id, `Reimbursement ${status.toLowerCase()}`,
+      `Your ${existing.type.toLowerCase()} claim of ₹${existing.amount.toLocaleString('en-IN')} was ${status.toLowerCase()}.`,
+      '/dashboard/reimbursement');
 
     await AuditLog.create({
       tenantId,

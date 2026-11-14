@@ -3,7 +3,7 @@ import { authenticate } from '../middleware/auth';
 import { tenantResolver } from '../middleware/tenantResolver';
 import { checkPermission } from '../middleware/rbac';
 import {
-  applyLeave, getMyLeaves, getTenantLeaves, approveRejectLeave,
+  applyLeave, getMyLeaves, getTenantLeaves, approveRejectLeave, cancelMyLeave,
   getLeaveStatistics, creditLeave,
 } from '../controllers/leaveController';
 
@@ -13,6 +13,7 @@ router.use(tenantResolver);
 
 router.post('/apply', applyLeave);
 router.get('/my-leaves', getMyLeaves);
+router.post('/:id/cancel', cancelMyLeave);
 
 router.get('/tenant-leaves', checkPermission('EMPLOYEE_READ'), getTenantLeaves);
 router.put('/:id/status', checkPermission('EMPLOYEE_WRITE'), approveRejectLeave);

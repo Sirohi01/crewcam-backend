@@ -338,3 +338,53 @@ Existing tickets have no `ticketNumber`; the UI shows "—" for them.
   - the self-resolve block and the owner notification;
   - the notification leak (404, no content), read-all, and no `readBy`;
   - delegation rules and the completion notification.
+
+---
+
+## Slice 1D-2: policies, My Requests, and leave/expense approval rules
+
+### Security and correctness fixes
+| Severity | Problem | Fix |
+|---|---|---|
+| High | **Approvers could approve their own leave** (`PUT /leaves/:id/status` with `EMPLOYEE_WRITE`). | Your own request returns 403. |
+| High | **Finance users could approve and reimburse their own expense claims** (`PUT /finance/expenses/:id/status`). The earlier fix only covered submission. | Your own claim returns 403. |
+| Medium | A decided leave could be flipped, for example Approved to Rejected after the fact. | Only `Pending` can be decided; anything else returns 409. |
+| Medium | An expense could be set to any status, including non-existent ones such as `Paid`, in any order. | Transitions are enforced: Pending → Approved or Rejected, then Approved → Reimbursed. Anything else returns 400 or 409. |
+| Medium | Employees needed `MASTER_READ` to read company policies, so in practice they couldn't. | New self-scoped `/me/policies`. The HR list still requires `MASTER_READ`. |
+| Medium | `POST`/`PUT /company-policies` copied the whole request body (including `createdBy`), accepted any outside `documentUrl`, and returned raw error messages. | Only known fields are accepted, `isOwnUploadUrl` is checked, and error details are hidden in production. |
+
+### New
+- **`PolicyAcknowledgement` model:** records one acknowledgement per policy, employee and **version**. A new version needs a fresh acknowledgement; older ones remain as the record. The candidate-onboarding `PolicyAcceptance` is unchanged.
+- **`GET /me/policies`:** published, portal-visible policies that apply to you, each with an acknowledgement status, plus summary counts.
+  - "Applies to you" means either the policy is for all employees, or you match every list HR filled in (department, designation, location). An empty list doesn't restrict.
+  - The admin form's "locations" come from `/companies/branches`, so they're matched against `User.branchId`.
+  - Targeting rules are not exposed to employees.
+- **`POST /me/policies/:id/acknowledge`:** requires `{ agree: true }`. Works only for a policy that applies to you. Repeating it is harmless. It also writes an audit log entry.
+- **`GET /company-policies/:id/acknowledgements`** (`EMPLOYEE_READ` or `MASTER_READ`): who has acknowledged the current version and who is still pending.
+- **Publish announcements:** when a policy is published, or a published policy gets a new version, the covered employees are notified.
+  - The notification is High priority when acknowledgement is required.
+  - Company-wide policies go out as one broadcast; targeted ones go to each matching person.
+- **`GET /me/requests`:** leave, reimbursements, profile change requests, helpdesk tickets and HR queries in one list, on one status scale: In Progress, Approved, Rejected, Withdrawn.
+  - A resolved ticket or answered query counts as Approved.
+  - Each item has a reference, the person who decided it, any note, `canWithdraw`, and a link to where it's managed.
+- **Withdrawing:**
+  - `POST /leaves/:id/cancel` sets a pending leave to `Cancelled`.
+  - `POST /finance/expenses/:id/withdraw` sets a pending claim to `Withdrawn`.
+  - Both work only on your own requests.
+- **Decision notifications:** employees are notified when their leave is approved or rejected (with the reason), and when a claim is approved, rejected or reimbursed.
+
+### Model changes (additive)
+- `LeaveRequest.status` gains `Cancelled`; `Expense.status` gains `Withdrawn`.
+- Leave balances already count only `Approved` and `Pending`, and the overlap check uses `$in: ['Pending', 'Approved']`, so a cancelled leave frees its days automatically.
+
+### Verification
+- `tsc --noEmit` clean.
+- New `src/tests/selfService/policiesAndRequests.test.ts`: 7 tests, all passing. They cover:
+  - which policies apply to whom, with targeting rules hidden;
+  - the acknowledgement rules, the version reset and the HR report;
+  - only known policy fields accepted, outside documents rejected, the announcement sent;
+  - leave: no self-approval, no re-deciding, withdraw;
+  - expenses: no self-approval, transition rules, withdraw;
+  - the combined requests list with only your own items.
+- The `payAndLeave`, `supportAndTasks`, `me` and `changeRequests` suites re-run and pass.
+- Full suite (clean `tsc --outDir`, SMTP blanked): 298 tests, 290 pass, 8 fail — exactly the known baseline.

@@ -8,7 +8,7 @@ export interface ILeaveRequest extends Document {
   startDate: Date;
   endDate: Date;
   reason: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
   approvedBy?: Types.ObjectId;
   rejectionReason?: string;
   attachmentUrl?: string;
@@ -25,7 +25,8 @@ const leaveRequestSchema = new Schema<ILeaveRequest>({
   startDate: { type: Date, required: true },
   endDate: { type: Date, required: true },
   reason: { type: String, required: true },
-  status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
+  // Cancelled = withdrawn by the employee before a decision.
+  status: { type: String, enum: ['Pending', 'Approved', 'Rejected', 'Cancelled'], default: 'Pending' },
   approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   rejectionReason: { type: String },
   attachmentUrl: { type: String },

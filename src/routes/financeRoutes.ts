@@ -12,6 +12,7 @@ import {
   createExpense,
   getExpenses,
   updateExpenseStatus,
+  withdrawMyExpense,
   createAgreement,
   getAgreements,
   updateAgreementStatus
@@ -34,6 +35,7 @@ router.get('/salary-slips', getSalarySlips); // Employees can fetch their own, a
 // Expenses
 router.post('/expenses', createExpense); // Employees can create
 router.get('/expenses', getExpenses);
+router.post('/expenses/:id/withdraw', withdrawMyExpense);
 router.put('/expenses/:id/status', checkPermission('FINANCE_WRITE'), updateExpenseStatus);
 
 // Agreements
