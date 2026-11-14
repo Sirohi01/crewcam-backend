@@ -7,6 +7,7 @@ import { FeatureFlag } from '../models/FeatureFlag';
 import { Payment } from '../models/Payment';
 import { AuditLog } from '../models/AuditLog';
 import { Ticket } from '../models/Ticket';
+import { Notification } from '../models/Notification';
 import mongoose from 'mongoose';
 import { toSearchPattern } from '../utils/regex';
 
@@ -199,6 +200,9 @@ export const getPlatformTickets = async (req: AuthRequest, res: Response) => {
 
     const query: any = {};
     if (req.query.status) query.status = req.query.status;
+    // channel=platform → only "Report a problem" submissions meant for the CrewCam team.
+    if (req.query.channel === 'platform') query.channel = 'platform';
+    if (req.query.channel === 'helpdesk') query.channel = { $ne: 'platform' };
     if (req.query.search) {
       const search = new RegExp(toSearchPattern(req.query.search), 'i');
       query.$or = [{ subject: search }, { department: search }];
@@ -217,10 +221,54 @@ export const getPlatformTickets = async (req: AuthRequest, res: Response) => {
       Ticket.countDocuments({ status: { $in: ['Open', 'In_Progress'] } }).setOptions({ bypassTenantIsolation: true }),
       Ticket.countDocuments({ status: { $in: ['Open', 'In_Progress'] }, priority: 'Urgent' }).setOptions({ bypassTenantIsolation: true }),
     ]);
+    const platformOpenCount = await Ticket.countDocuments({ channel: 'platform', status: { $in: ['Open', 'In_Progress'] } }).setOptions({ bypassTenantIsolation: true });
 
-    res.status(200).json({ data: tickets, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }, openCount, urgentCount });
+    res.status(200).json({ data: tickets, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }, openCount, urgentCount, platformOpenCount });
   } catch (error) {
     console.error('Error fetching platform tickets:', error);
     res.status(500).json({ message: 'Internal server error while fetching tickets' });
+  }
+};
+
+const PLATFORM_STATUS = ['Open', 'In_Progress', 'Resolved', 'Closed'];
+
+/**
+ * The CrewCam team answers a "Report a problem" submission. Only platform-channel tickets
+ * — a company's own helpdesk tickets are theirs to handle. The reporter is notified.
+ */
+export const updatePlatformTicket = async (req: AuthRequest, res: Response) => {
+  try {
+    const { status, resolution } = req.body || {};
+    if (status !== undefined && !PLATFORM_STATUS.includes(status)) return res.status(400).json({ message: 'Invalid status' });
+
+    const set: any = {};
+    if (status) set.status = status;
+    if (status === 'Resolved' || status === 'Closed') set.resolvedAt = new Date();
+    if (resolution !== undefined) set.resolution = String(resolution).slice(0, 5000);
+    if (!Object.keys(set).length) return res.status(400).json({ message: 'Nothing to update' });
+
+    const ticket: any = await Ticket.findOneAndUpdate(
+      { _id: req.params.id, channel: 'platform' },
+      { $set: set },
+      { returnDocument: 'after' }
+    ).setOptions({ bypassTenantIsolation: true });
+    if (!ticket) return res.status(404).json({ message: 'Problem report not found' });
+
+    if (status) {
+      await Notification.create({
+        tenantId: ticket.tenantId,
+        title: `Your report was ${status === 'In_Progress' ? 'picked up' : status.toLowerCase()}`,
+        message: `${ticket.subject}${set.resolution ? ` — ${set.resolution}` : ''}`,
+        audienceType: 'User',
+        audienceValue: ticket.employeeId,
+        link: '/dashboard/helpdesk',
+        createdBy: req.user!._id,
+        readBy: [],
+      } as any);
+    }
+    res.json({ message: 'Report updated', ticket });
+  } catch (error) {
+    console.error('Error updating platform ticket:', error);
+    res.status(500).json({ message: 'Internal server error while updating the report' });
   }
 };

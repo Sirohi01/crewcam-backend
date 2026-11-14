@@ -6,6 +6,9 @@ import { Ticket } from '../models/Ticket';
 import { Notification } from '../models/Notification';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
+import { AssetAllocation } from '../models/AssetAllocation';
+import { isOwnUploadUrl } from '../utils/fileStorage';
+import '../models/Asset';
 import { NEW_TICKET_SCHEMA, nextTicketNumber } from './helpdeskController';
 import { myNotificationFilter, toMyNotification } from '../utils/myNotifications';
 import '../models/Designation';
@@ -57,6 +60,12 @@ export const createMyTicket = async (req: AuthRequest, res: Response) => {
     const parsed = NEW_TICKET_SCHEMA.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: 'Invalid ticket', errors: parsed.error.issues });
 
+    // A ticket about an asset must be about one assigned to you.
+    if (parsed.data.assetId) {
+      const mine = await AssetAllocation.exists({ tenantId, employeeId: req.user!._id, assetId: parsed.data.assetId, status: 'Active' } as any);
+      if (!mine) return res.status(400).json({ message: 'That asset is not assigned to you' });
+    }
+
     const ticket = await Ticket.create({
       ...parsed.data,
       tenantId,
@@ -96,6 +105,67 @@ export const rateMyTicket = async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Thanks for the feedback', ticket });
   } catch (error) {
     fail(res, 'Error saving rating', error);
+  }
+};
+
+const PLATFORM_REPORT_SCHEMA = z.object({
+  issueType: z.enum(['bug', 'question', 'feedback']),
+  description: z.string().trim().min(5).max(5000),
+  pageUrl: z.string().trim().max(500).optional(),
+  screenshotUrl: z.string().refine(isOwnUploadUrl, 'Screenshot must be uploaded through the app').optional(),
+});
+const REPORT_LABEL = { bug: 'Bug report', question: 'Question', feedback: 'Feedback' } as const;
+
+/**
+ * "Report a problem" (floating button): goes to the CrewCam team — super admin's Support
+ * page — not the company helpdesk, and isn't gated by the Helpdesk add-on. The reporter
+ * can track it under My Tickets.
+ */
+export const createPlatformReport = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = tenantIdOf(req);
+    const parsed = PLATFORM_REPORT_SCHEMA.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Invalid report', errors: parsed.error.issues });
+    const { issueType, description, pageUrl, screenshotUrl } = parsed.data;
+
+    const firstLine = description.split(/\r?\n/)[0].slice(0, 80);
+    const ticket = await Ticket.create({
+      tenantId,
+      employeeId: req.user!._id,
+      channel: 'platform',
+      department: 'IT',
+      subject: `${REPORT_LABEL[issueType]}: ${firstLine}`,
+      description,
+      priority: issueType === 'bug' ? 'High' : 'Low',
+      attachmentUrl: screenshotUrl,
+      pageUrl,
+      ticketNumber: await nextTicketNumber(tenantId),
+    } as any);
+    res.status(201).json({ message: `Thanks — sent to the CrewCam team as ${ticket.ticketNumber}`, ticket });
+  } catch (error) {
+    fail(res, 'Error sending your report', error);
+  }
+};
+
+// ── Assets ────────────────────────────────────────────────────────────────
+
+/** Assets assigned to you, current and returned, with the related open tickets. */
+export const getMyAssets = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = tenantIdOf(req);
+    const [allocations, openIssues] = await Promise.all([
+      AssetAllocation.find({ tenantId, employeeId: req.user!._id } as any)
+        .select('assetId allocatedDate returnDate condition status')
+        .populate('assetId', 'name type serialNumber purchaseDate purchaseValue status')
+        .sort({ status: 1, allocatedDate: -1 })
+        .lean(),
+      Ticket.find({ tenantId, employeeId: req.user!._id, assetId: { $exists: true }, status: { $in: ['Open', 'In_Progress'] } } as any)
+        .select('assetId subject ticketNumber status createdAt')
+        .lean(),
+    ]);
+    res.json({ allocations, openIssues });
+  } catch (error) {
+    fail(res, 'Error fetching your assets', error);
   }
 };
 

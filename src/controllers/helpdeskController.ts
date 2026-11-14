@@ -6,6 +6,7 @@ import { AuditLog } from '../models/AuditLog';
 import { Counter } from '../models/Counter';
 import { User } from '../models/User';
 import { notifyUser } from './communicationController';
+import { isOwnUploadUrl } from '../utils/fileStorage';
 
 /** Fields anyone may set when raising a ticket. Status, assignee and resolution are HR's. */
 export const NEW_TICKET_SCHEMA = z.object({
@@ -13,6 +14,8 @@ export const NEW_TICKET_SCHEMA = z.object({
   subject: z.string().trim().min(3).max(150),
   description: z.string().trim().min(5).max(5000),
   priority: z.enum(['Low', 'Medium', 'High', 'Urgent']).default('Medium'),
+  attachmentUrl: z.string().refine(isOwnUploadUrl, 'Attachments must be uploaded through the app').optional(),
+  assetId: z.string().regex(/^[a-f\d]{24}$/i, 'invalid asset').optional(),
 });
 
 /** Next per-tenant, per-year reference, e.g. HD-2026-0007. Atomic via Counter. */
@@ -69,7 +72,8 @@ export const getTickets = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     const { status, department } = req.query;
     
-    const filter: any = { tenantId };
+    // Problem reports about CrewCam itself go to the platform team, not this queue.
+    const filter: any = { tenantId, channel: { $ne: 'platform' } };
     if (status) filter.status = status;
     if (department) filter.department = department;
 

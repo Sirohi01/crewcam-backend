@@ -7,7 +7,7 @@ import {
   getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp, scheduleGoLive, getCompanyInsights
 } from '../controllers/superAdminController';
 import { getAllAiProviders, configureAiProvider } from '../controllers/platformAiController';
-import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets } from '../controllers/platformController';
+import { getPlatformDashboardStats, getPlatformAuditLogs, getPlatformTickets, updatePlatformTicket } from '../controllers/platformController';
 import { getAllLeads, getLeadById, getPipelineSummary, createLead, updateLead, deleteLead, listLeadProposals, generateLeadProposal, sendLeadProposal, addLeadNote, getLeadMasterData, createLeadMasterData, updateLeadMasterData, deleteLeadMasterData, getAssignableUsers, getLeadStats, bulkImportLeads, getFollowUpStats, getReminderSettings, updateReminderSettings, sendLeadEmail, getHotLeadStats } from '../controllers/leadController';
 import { getOnboardingTasks, createOnboardingTask, updateOnboardingTask, deleteOnboardingTask } from '../controllers/onboardingTaskController';
 import { getReportsSummary } from '../controllers/reportsController';
@@ -49,6 +49,7 @@ router.get('/dashboard-stats', getPlatformDashboardStats);
 router.get('/audit-logs', getPlatformAuditLogs);
 router.get('/activity-logs', getSuperAdminActivityLogs);
 router.get('/tickets', getPlatformTickets);
+router.patch('/tickets/:id', updatePlatformTicket);
 router.get('/reports/summary', getReportsSummary);
 
 router.get('/next-corporate-id', getNextCorporateId);

@@ -18,6 +18,8 @@ import {
   markMyNotificationRead,
   markAllMyNotificationsRead,
   getMyTeam,
+  createPlatformReport,
+  getMyAssets,
 } from '../controllers/meSupportController';
 import { requireFeature } from '../middleware/featureGate';
 import { getMyPolicies, acknowledgeMyPolicy } from '../controllers/mePolicyController';
@@ -51,6 +53,9 @@ router.get('/notifications', getMyNotificationFeed);
 router.post('/notifications/read-all', markAllMyNotificationsRead);
 router.post('/notifications/:id/read', markMyNotificationRead);
 router.get('/team', getMyTeam);
+// "Report a problem" → CrewCam team (not gated by the Helpdesk add-on).
+router.post('/platform-reports', createPlatformReport);
+router.get('/assets', getMyAssets);
 // Company policies that apply to the caller, and acknowledging them.
 router.get('/policies', getMyPolicies);
 router.post('/policies/:id/acknowledge', acknowledgeMyPolicy);

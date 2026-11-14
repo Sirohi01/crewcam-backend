@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { notificationService } from '../services/notificationService';
@@ -122,7 +123,9 @@ export const notifyUser = async (tenantId: any, recipientId: any, createdBy: any
     title,
     message,
     audienceType: 'User',
-    audienceValue: recipientId,
+    // Stored as an ObjectId: audienceValue is Mixed, and the "my notifications" filter
+    // matches on user._id — a string ID (e.g. straight from a request body) never matched.
+    audienceValue: mongoose.isValidObjectId(recipientId) ? new mongoose.Types.ObjectId(String(recipientId)) : recipientId,
     ...(link ? { link } : {}),
     createdBy,
     readBy: [],
@@ -154,7 +157,9 @@ export const createNotification = async (req: AuthRequest, res: Response) => {
       title,
       message,
       audienceType: type,
-      audienceValue,
+      // ObjectId, not the raw string from the form — otherwise a Role/Department/Branch
+      // broadcast never matches anyone's notification feed.
+      audienceValue: type !== 'All' && mongoose.isValidObjectId(audienceValue) ? new mongoose.Types.ObjectId(String(audienceValue)) : audienceValue,
       priority: priority === 'High' ? 'High' : 'Normal',
       createdBy: req.user._id,
       readBy: [],

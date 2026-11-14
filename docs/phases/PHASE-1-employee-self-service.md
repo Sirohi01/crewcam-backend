@@ -404,3 +404,47 @@ Reported by the user ("recruitment process in side bar section correct it"). Eve
 **Existing companies:** `syncSidebarDefaults` already moves rows for each company that still have the old default link to the new one. A link an admin customised is left as it is.
 
 **Test:** `src/tests/sidebar/recruitmentSidebar.test.ts` (3 tests): the defaults; existing companies corrected; customised links kept.
+
+---
+
+## Slice 1D-3a: My Assets, asset allocation fix, "Report a problem", notification targeting
+
+### Bugs fixed
+| Severity | Problem | Fix |
+|---|---|---|
+| High | **Assigning an asset always failed.** `allocateAsset` created the allocation, then called `Asset.findByIdAndUpdate` with no tenant filter. The tenant guard (Phase 0) rejects that, so the request returned 500 and the asset stayed "Available" with a live allocation. `returnAsset` had the same flaw. | The asset is claimed atomically first (`Available` → `Allocated`, filtered by tenant), then the allocation is created; the claim is rolled back if that fails. Return is also tenant-scoped. |
+| High | **Notifications sent to one person, or to a role, department or branch, never reached anyone when the ID arrived as a string.** `audienceValue` is a Mixed field: a string from a request body was stored as a string, while the feed matches on the user's ObjectId. Every HR broadcast to a department, role or branch was invisible. | `notifyUser` and `createNotification` store the target as an ObjectId. |
+| Medium | You could allocate an asset to a user in another company. | The employee must be active in the same company. |
+| Medium | Asset create/update copied the whole request body. | Only known fields are accepted (`name`, `type`, `serialNumber`, `purchaseDate`, `purchaseValue`, `status`). |
+| Medium | The floating "SOS / Report an issue" button was a mock: Submit waited 1.5 s and showed "Issue Reported!", but nothing was sent. | Wired up; see below. |
+
+### New
+- **`GET /me/assets`:** your current and returned assets, plus open tickets linked to them.
+- **Tickets can link an asset and an attachment.**
+  - `assetId` must be an asset currently assigned to you.
+  - `attachmentUrl` must pass `isOwnUploadUrl`.
+- **"Report a problem" → CrewCam team:** `POST /me/platform-reports` creates a ticket with `channel: 'platform'`, an optional screenshot (`isOwnUploadUrl`) and the page it was sent from. Rules:
+  - It isn't gated by the Helpdesk add-on.
+  - It's excluded from the company's own queue (`GET /support/tickets`).
+  - The reporter can track it under My Tickets.
+- **Super admin:**
+  - `GET /super-admin/tickets?channel=platform|helpdesk` and a `platformOpenCount`.
+  - `PATCH /super-admin/tickets/:id` updates the status and resolution of **platform reports only**, and notifies the reporter. A company's own helpdesk ticket returns 404.
+- **Allocation notification:** assigning an asset notifies the employee.
+
+### Model changes (additive)
+- `Asset.purchaseValue` (optional, ₹).
+- `Ticket` gains `channel` (default `helpdesk`), `attachmentUrl`, `pageUrl` and `assetId`.
+
+### Known, not changed
+`Asset.serialNumber` is unique **across all companies**, so two companies can't register the same serial number. Making it unique per company means dropping the existing index in each database, so it's noted for Phase 8.
+
+### Verification
+- `tsc --noEmit` clean.
+- New `src/tests/selfService/assetsAndReports.test.ts`: 6 tests, all passing. They cover:
+  - allocate and return with status changes and the notification;
+  - no allocation to another company, and only known asset fields accepted;
+  - only your own assets listed, and asset tickets only for your own assets;
+  - platform reports routed to the CrewCam team (HR queue empty, super admin filter and update, reporter notified, helpdesk tickets protected);
+  - department broadcasts now delivered.
+- Full suite: 298 tests, 289 pass, 9 fail. The 8 are the known baseline. The ninth was the super-admin automation suite, whose test database failed to start within 10 s while under load; re-run alone it passes 10/10.

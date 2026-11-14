@@ -8,6 +8,7 @@ export interface IAsset extends Document {
   type: string;
   serialNumber: string;
   purchaseDate?: Date;
+  purchaseValue?: number; // ₹, optional — shown to the employee as the asset's value
   status: 'Available' | 'Allocated' | 'Maintenance' | 'Retired';
 }
 
@@ -17,6 +18,7 @@ const assetSchema = new Schema<IAsset>({
   type: { type: String, required: true },
   serialNumber: { type: String, required: true, unique: true },
   purchaseDate: { type: Date },
+  purchaseValue: { type: Number, min: 0 },
   status: {
     type: String,
     enum: ['Available', 'Allocated', 'Maintenance', 'Retired'],

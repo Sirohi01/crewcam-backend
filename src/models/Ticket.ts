@@ -17,6 +17,10 @@ export interface ITicket extends Document {
   rating?: number;
   feedback?: string;
   ratedAt?: Date;
+  channel?: 'helpdesk' | 'platform';
+  attachmentUrl?: string;
+  pageUrl?: string;
+  assetId?: Types.ObjectId;
 }
 
 export const TICKET_CATEGORIES = ['IT', 'HR', 'Finance', 'Facility', 'Other'] as const;
@@ -46,6 +50,12 @@ const ticketSchema = new Schema<ITicket>({
   rating: { type: Number, min: 1, max: 5 },
   feedback: { type: String },
   ratedAt: { type: Date },
+  // 'platform' = a problem report about CrewCam itself (the floating "Report a problem"
+  // button). Those go to the CrewCam team (super admin), not the company's helpdesk queue.
+  channel: { type: String, enum: ['helpdesk', 'platform'], default: 'helpdesk', index: true },
+  attachmentUrl: { type: String }, // uploaded through /upload (screenshot, photo of damage…)
+  pageUrl: { type: String },       // app page the report was made from
+  assetId: { type: Schema.Types.ObjectId, ref: 'Asset' }, // asset the ticket is about
 }, {
   timestamps: true
 });

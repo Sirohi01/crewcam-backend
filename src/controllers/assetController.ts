@@ -3,6 +3,13 @@ import { AuthRequest } from '../middleware/auth';
 import { Asset } from '../models/Asset';
 import { AssetAllocation } from '../models/AssetAllocation';
 import { AuditLog } from '../models/AuditLog';
+import { User } from '../models/User';
+import { notifyUser } from './communicationController';
+
+// Fields HR may set on an asset. tenantId comes from the session only.
+const ASSET_FIELDS = ['name', 'type', 'serialNumber', 'purchaseDate', 'purchaseValue', 'status'] as const;
+const pickAssetFields = (body: any) =>
+  Object.fromEntries(ASSET_FIELDS.filter((k) => body?.[k] !== undefined && body?.[k] !== '').map((k) => [k, body[k]]));
 
 const logAudit = async (tenantId: any, userId: any, action: string, req: AuthRequest, details: any) => {
   await AuditLog.create({
@@ -23,7 +30,7 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId || req.user?.tenantId;
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
 
-    const asset = await Asset.create({ ...req.body, tenantId });
+    const asset = await Asset.create({ ...pickAssetFields(req.body), tenantId });
     await logAudit(tenantId, req.user!._id, 'CREATE_ASSET', req, { assetId: (asset as any)._id });
 
     res.status(201).json(asset);
@@ -51,8 +58,8 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
 
     const asset = await Asset.findOneAndUpdate(
       { _id: id, tenantId } as any,
-      { ...req.body },
-      { returnDocument: 'after' }
+      { $set: pickAssetFields(req.body) },
+      { returnDocument: 'after', runValidators: true }
     );
     if (!asset) return res.status(404).json({ message: 'Asset not found' });
 
@@ -70,18 +77,30 @@ export const allocateAsset = async (req: AuthRequest, res: Response) => {
     if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
     const { assetId, employeeId, condition } = req.body;
 
-    const asset = await Asset.findOne({ _id: assetId, tenantId: tenantId as any, status: 'Available' });
+    const employee = await User.exists({ _id: employeeId, tenantId, isActive: true } as any);
+    if (!employee) return res.status(400).json({ message: 'Employee not found in this company' });
+
+    // Claim the asset first (Available -> Allocated, atomically) so two allocations can't
+    // both win. The old code created the allocation, then updated the asset without a
+    // tenant filter, which the tenant guard rejects — leaving the asset "Available".
+    const asset = await Asset.findOneAndUpdate(
+      { _id: assetId, tenantId: tenantId as any, status: 'Available' } as any,
+      { $set: { status: 'Allocated' } },
+      { returnDocument: 'after' }
+    );
     if (!asset) return res.status(400).json({ message: 'Asset not found or not available' });
 
-    const allocation = await AssetAllocation.create({
-      tenantId,
-      assetId,
-      employeeId,
-      condition
-    });
+    let allocation;
+    try {
+      allocation = await AssetAllocation.create({ tenantId, assetId, employeeId, condition });
+    } catch (err) {
+      await Asset.updateOne({ _id: assetId, tenantId } as any, { $set: { status: 'Available' } });
+      throw err;
+    }
 
-    await Asset.findByIdAndUpdate(assetId, { status: 'Allocated' });
     await logAudit(tenantId, req.user!._id, 'ALLOCATE_ASSET', req, { allocationId: (allocation as any)._id, assetId, employeeId });
+    await notifyUser(tenantId, employeeId, req.user!._id, 'Asset assigned to you',
+      `${asset.name} (${asset.serialNumber}) has been assigned to you.`, '/dashboard/employee/assets');
 
     res.status(201).json(allocation);
   } catch (error: any) {
@@ -102,7 +121,7 @@ export const returnAsset = async (req: AuthRequest, res: Response) => {
     );
     if (!allocation) return res.status(404).json({ message: 'Active allocation not found' });
 
-    await Asset.findByIdAndUpdate(allocation.assetId, { status: 'Available' });
+    await Asset.updateOne({ _id: allocation.assetId, tenantId } as any, { $set: { status: 'Available' } });
     await logAudit(tenantId, req.user!._id, 'RETURN_ASSET', req, { allocationId: id, assetId: allocation.assetId });
 
     res.status(200).json(allocation);
