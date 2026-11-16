@@ -15,7 +15,15 @@ export const toSignedCloudinaryUrl = (fileUrl: string): string => {
   const match = fileUrl.match(/^https?:\/\/res\.cloudinary\.com\/[^/]+\/raw\/upload\/(?:v\d+\/)?(.+)$/);
   if (!match) return fileUrl;
 
-  const publicId = match[1];
+  // The captured path segment is still URL-encoded (e.g. "%20" for a space) and still carries
+  // its file extension — Cloudinary's real public_id has neither: it's the decoded path with
+  // the extension split out into its own `format` argument. Passing the raw, still-encoded,
+  // still-extensioned string as the public_id (as this used to) computes a signature for an id
+  // Cloudinary never stored, so the signed URL 404s for any filename with a space or a dot.
+  const decodedPath = decodeURIComponent(match[1]);
+  const lastDot = decodedPath.lastIndexOf('.');
+  const publicId = lastDot > 0 ? decodedPath.slice(0, lastDot) : decodedPath;
+  const format = lastDot > 0 ? decodedPath.slice(lastDot + 1) : '';
   if (!publicId) return fileUrl;
-  return cloudinary.utils.private_download_url(publicId, '', { resource_type: 'raw', type: 'upload' });
+  return cloudinary.utils.private_download_url(publicId, format, { resource_type: 'raw', type: 'upload' });
 };

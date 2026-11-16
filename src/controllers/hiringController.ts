@@ -953,42 +953,257 @@ export const updateManpowerRequestStatus = async (req: AuthRequest, res: Respons
 export const getHiringDashboardStats = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    
-    const openPositions = await ManpowerRequest.countDocuments({ tenantId, status: { $in: ['Approved', 'Pending'] } });
-    const activeCandidates = await Candidate.countDocuments({ tenantId, status: { $nin: ['Hired', 'Rejected', 'Hold'] } });
-    
+    if (!tenantId) return res.status(400).json({ message: 'Tenant ID required' });
+
+    const tenantObjId = new mongoose.Types.ObjectId(String(tenantId));
+
     const today = new Date();
-    today.setHours(0,0,0,0);
-    const interviewsScheduled = await Interview.countDocuments({ tenantId, interviewDate: { $gte: today } });
-    const offersReleased = await Candidate.countDocuments({ tenantId, status: 'Offered' });
-    const positionsFilled = await Candidate.countDocuments({ tenantId, status: 'Hired' });
-    
-    const applications = await Candidate.countDocuments({ tenantId, status: 'Applied' });
-    const shortlisted = await Candidate.countDocuments({ tenantId, status: 'SHORTLISTED' });
-    const screening = await Candidate.countDocuments({ tenantId, status: 'Screening' });
-    const interviewing = await Candidate.countDocuments({ tenantId, status: 'Interviewing' });
-    
+    today.setHours(0, 0, 0, 0);
     const endOfToday = new Date(today);
-    endOfToday.setHours(23,59,59,999);
-    
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const now = new Date();
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    // 1. Open Positions (sum of vacancies across active manpower requests)
+    const [openPositionsCurrentAgg, openPosThisMonthAgg, openPosLastMonthAgg] = await Promise.all([
+      ManpowerRequest.aggregate([
+        { $match: { tenantId: tenantObjId, status: { $in: ['Approved', 'Pending'] } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$numberOfPositions', 1] } } } }
+      ]),
+      ManpowerRequest.aggregate([
+        { $match: { tenantId: tenantObjId, createdAt: { $gte: startOfCurrentMonth } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$numberOfPositions', 1] } } } }
+      ]),
+      ManpowerRequest.aggregate([
+        { $match: { tenantId: tenantObjId, createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$numberOfPositions', 1] } } } }
+      ])
+    ]);
+    const openPositions = openPositionsCurrentAgg[0]?.total || 0;
+    const openThisMonth = openPosThisMonthAgg[0]?.total || 0;
+    const openLastMonth = openPosLastMonthAgg[0]?.total || 0;
+    const openDiff = openThisMonth - openLastMonth;
+    const openPositionsTrend = `${Math.abs(openDiff)} from last month`;
+    const openPositionsUp = openDiff >= 0;
+
+    // 2. Active Candidates
+    const [activeCandidates, candThisMonth, candLastMonth] = await Promise.all([
+      Candidate.countDocuments({ tenantId, status: { $nin: ['Hired', 'Rejected', 'Hold'] } }),
+      Candidate.countDocuments({ tenantId, createdAt: { $gte: startOfCurrentMonth } }),
+      Candidate.countDocuments({ tenantId, createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } })
+    ]);
+    let candTrend = '0 from last month';
+    let candUp = true;
+    if (candLastMonth > 0) {
+      const pct = Math.round(((candThisMonth - candLastMonth) / candLastMonth) * 100);
+      candTrend = `${Math.abs(pct)}% from last month`;
+      candUp = pct >= 0;
+    } else if (candThisMonth > 0) {
+      candTrend = `${candThisMonth} from last month`;
+      candUp = true;
+    }
+
+    // 3. Interviews Scheduled
+    const [interviewsScheduled, ivThisMonth, ivLastMonth] = await Promise.all([
+      Interview.countDocuments({
+        tenantId,
+        $or: [
+          { scheduledDate: { $gte: today } },
+          { interviewDate: { $gte: today } } as any,
+          { status: 'Scheduled' }
+        ]
+      } as any),
+      Interview.countDocuments({
+        tenantId,
+        $or: [
+          { scheduledDate: { $gte: startOfCurrentMonth } },
+          { interviewDate: { $gte: startOfCurrentMonth } } as any,
+          { createdAt: { $gte: startOfCurrentMonth } }
+        ]
+      } as any),
+      Interview.countDocuments({
+        tenantId,
+        $or: [
+          { scheduledDate: { $gte: startOfLastMonth, $lte: endOfLastMonth } },
+          { interviewDate: { $gte: startOfLastMonth, $lte: endOfLastMonth } } as any,
+          { createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }
+        ]
+      } as any)
+    ]);
+    let ivTrend = '0 from last month';
+    let ivUp = true;
+    if (ivLastMonth > 0) {
+      const pct = Math.round(((ivThisMonth - ivLastMonth) / ivLastMonth) * 100);
+      ivTrend = `${Math.abs(pct)}% from last month`;
+      ivUp = pct >= 0;
+    } else if (ivThisMonth > 0) {
+      ivTrend = `${ivThisMonth} from last month`;
+      ivUp = true;
+    }
+
+    // 4. Offers Released
+    const [offersReleased, offersThisMonth, offersLastMonth] = await Promise.all([
+      Candidate.countDocuments({ tenantId, status: 'Offered' }),
+      Candidate.countDocuments({ tenantId, status: 'Offered', updatedAt: { $gte: startOfCurrentMonth } }),
+      Candidate.countDocuments({ tenantId, status: 'Offered', updatedAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } })
+    ]);
+    const offersDiff = offersThisMonth - offersLastMonth;
+    const offersTrend = `${Math.abs(offersDiff)} from last month`;
+    const offersUp = offersDiff >= 0;
+
+    // 5. Positions Filled
+    const [positionsFilled, hiredThisMonth, hiredLastMonth, hiredCandidates] = await Promise.all([
+      Candidate.countDocuments({ tenantId, status: 'Hired' }),
+      Candidate.countDocuments({ tenantId, status: 'Hired', updatedAt: { $gte: startOfCurrentMonth } }),
+      Candidate.countDocuments({ tenantId, status: 'Hired', updatedAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
+      Candidate.find({ tenantId, status: 'Hired' }).select('createdAt updatedAt').lean()
+    ]);
+    const hiredDiff = hiredThisMonth - hiredLastMonth;
+    const hiredTrend = `${Math.abs(hiredDiff)} from last month`;
+    const hiredUp = hiredDiff >= 0;
+
+    // 6. Time to Hire (Avg Days)
+    let avgTimeToHireDays = 0;
+    if (hiredCandidates.length > 0) {
+      const totalDays = hiredCandidates.reduce((acc, c: any) => {
+        const created = c.createdAt ? new Date(c.createdAt).getTime() : Date.now();
+        const hired = c.updatedAt ? new Date(c.updatedAt).getTime() : Date.now();
+        const diffDays = Math.max(1, Math.round((hired - created) / (1000 * 60 * 60 * 24)));
+        return acc + diffDays;
+      }, 0);
+      avgTimeToHireDays = Math.round(totalDays / hiredCandidates.length);
+    }
+    const hiredThisList = hiredCandidates.filter((c: any) => c.updatedAt && new Date(c.updatedAt) >= startOfCurrentMonth);
+    const hiredLastList = hiredCandidates.filter((c: any) => c.updatedAt && new Date(c.updatedAt) >= startOfLastMonth && new Date(c.updatedAt) <= endOfLastMonth);
+    let avgThis = 0;
+    if (hiredThisList.length > 0) {
+      avgThis = Math.round(hiredThisList.reduce((acc, c: any) => acc + Math.max(1, Math.round((new Date(c.updatedAt).getTime() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24))), 0) / hiredThisList.length);
+    }
+    let avgLast = 0;
+    if (hiredLastList.length > 0) {
+      avgLast = Math.round(hiredLastList.reduce((acc, c: any) => acc + Math.max(1, Math.round((new Date(c.updatedAt).getTime() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24))), 0) / hiredLastList.length);
+    }
+    const timeDiff = avgLast > 0 ? avgThis - avgLast : 0;
+    let timeTrend = '0 Days from last month';
+    if (avgLast > 0) {
+      timeTrend = `${Math.abs(timeDiff)} Days from last month`;
+    } else if (avgTimeToHireDays > 0) {
+      timeTrend = `${avgTimeToHireDays} Days avg`;
+    } else {
+      timeTrend = 'No hires yet';
+    }
+
+    // Pipeline funnel counts
+    const [applications, shortlisted, screening, interviewing] = await Promise.all([
+      Candidate.countDocuments({ tenantId, status: 'Applied' }),
+      Candidate.countDocuments({ tenantId, status: 'SHORTLISTED' }),
+      Candidate.countDocuments({ tenantId, status: { $in: ['Screening', 'AI_SCREENING'] } }),
+      Candidate.countDocuments({ tenantId, status: { $in: ['Interviewing', 'INTERVIEW_SCHEDULED'] } })
+    ]);
+
+    // Today's interviews
     const todaysInterviews = await Interview.find({ 
       tenantId, 
-      interviewDate: { $gte: today, $lte: endOfToday } 
-    }).populate('candidateId', 'firstName lastName').populate('interviewerId', 'firstName lastName');
+      $or: [
+        { scheduledDate: { $gte: today, $lte: endOfToday } },
+        { interviewDate: { $gte: today, $lte: endOfToday } } as any
+      ]
+    } as any).populate('candidateId', 'firstName lastName jobRole').populate('interviewerId', 'firstName lastName');
 
-    const hotCandidates = await Candidate.find({ tenantId, status: { $in: ['Offered', 'Interviewing'] } }).sort({ updatedAt: -1 }).limit(5);
-    const activeJobOpenings = await ManpowerRequest.find({ tenantId, status: 'Approved' }).populate('departmentId', 'name').limit(5);
-    const upcomingJoining = await Candidate.find({ tenantId, status: 'Hired' }).sort({ updatedAt: -1 }).limit(5);
+    // Hot candidates & Active openings & Upcoming joinings & Pending approvals
+    const [hotCandidates, activeJobOpenings, upcomingJoining, overviewAgg, sourceAgg, pendingApprovals] = await Promise.all([
+      Candidate.find({ tenantId, status: { $in: ['Offered', 'Interviewing'] } }).sort({ updatedAt: -1 }).limit(5),
+      ManpowerRequest.find({ tenantId, status: 'Approved' }).populate('departmentId', 'name').sort({ createdAt: -1 }).limit(5),
+      Candidate.find({ tenantId, status: 'Hired' }).sort({ updatedAt: -1 }).limit(5),
+      ManpowerRequest.aggregate([
+        { $match: { tenantId: tenantObjId, status: 'Approved' } },
+        { $group: { _id: '$departmentId', count: { $sum: { $ifNull: ['$numberOfPositions', 1] } } } },
+        { $lookup: { from: 'departments', localField: '_id', foreignField: '_id', as: 'dept' } },
+        { $unwind: { path: '$dept', preserveNullAndEmptyArrays: true } }
+      ]),
+      Candidate.aggregate([
+        { $match: { tenantId: tenantObjId } },
+        {
+          $group: {
+            _id: { $ifNull: ['$source', 'Direct Application'] },
+            candidates: { $sum: 1 },
+            hired: { $sum: { $cond: [{ $eq: ['$status', 'Hired'] }, 1, 0] } }
+          }
+        },
+        { $sort: { candidates: -1 } },
+        { $limit: 5 }
+      ]),
+      ManpowerRequest.find({ tenantId, status: 'Pending' }).select('jobTitle numberOfPositions status').sort({ createdAt: -1 }).limit(5).lean()
+    ]);
+
+    const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#22c55e', '#14b8a6', '#ec4899', '#6366f1'];
+    const totalOpenAgg = overviewAgg.reduce((sum, d) => sum + (d.count || 0), 0) || 1;
+    const hiringOverview = overviewAgg.map((d, i) => ({
+      name: d.dept?.name || 'General',
+      value: d.count || 0,
+      pct: Math.round(((d.count || 0) / totalOpenAgg) * 100),
+      color: COLORS[i % COLORS.length]
+    }));
+
+    const sourcePerformance = sourceAgg.map((s) => ({
+      source: s._id || 'Direct',
+      candidates: s.candidates,
+      hired: s.hired,
+      rate: s.candidates > 0 ? Number(((s.hired / s.candidates) * 100).toFixed(1)) : 0
+    }));
+
+    const aiInsights: string[] = [];
+    if (openPositions > 0) {
+      aiInsights.push(`${openPositions} open position(s) are actively hiring.`);
+    }
+    if (interviewsScheduled > 0) {
+      aiInsights.push(`${interviewsScheduled} interview(s) scheduled for upcoming evaluation.`);
+    }
+    if (offersReleased > 0) {
+      aiInsights.push(`${offersReleased} offer letter(s) released awaiting candidate response.`);
+    }
+    if (positionsFilled > 0) {
+      aiInsights.push(`${positionsFilled} candidate(s) successfully hired.`);
+    }
+    if (sourcePerformance.length > 0 && sourcePerformance[0].candidates > 0) {
+      aiInsights.push(`${sourcePerformance[0].source} is your top candidate source with ${sourcePerformance[0].candidates} applicant(s).`);
+    }
 
     return res.status(200).json({
       success: true,
       data: {
-        kpis: { openPositions, activeCandidates, interviewsScheduled, offersReleased, positionsFilled },
+        kpis: {
+          openPositions,
+          activeCandidates,
+          interviewsScheduled,
+          offersReleased,
+          positionsFilled,
+          timeToHire: avgTimeToHireDays > 0 ? `${avgTimeToHireDays} Days` : '0 Days',
+          trends: {
+            openPositions: { trend: openPositionsTrend, up: openPositionsUp },
+            activeCandidates: { trend: candTrend, up: candUp },
+            interviewsScheduled: { trend: ivTrend, up: ivUp },
+            offersReleased: { trend: offersTrend, up: offersUp },
+            positionsFilled: { trend: hiredTrend, up: hiredUp },
+            timeToHire: { trend: timeTrend, up: timeDiff <= 0 }
+          }
+        },
         pipeline: { applications, shortlisted, screening, interviewing, offered: offersReleased, joined: positionsFilled },
         todaysInterviews,
         hotCandidates,
         activeJobOpenings,
-        upcomingJoining
+        upcomingJoining,
+        hiringOverview,
+        sourcePerformance,
+        aiInsights,
+        pendingApprovals: pendingApprovals.map((r: any) => ({
+          _id: r._id,
+          title: (r.numberOfPositions || 1) > 1 ? `${r.jobTitle} (${r.numberOfPositions} Nos.)` : r.jobTitle,
+          status: 'Awaiting Approval',
+        })),
       }
     });
   } catch (error) {

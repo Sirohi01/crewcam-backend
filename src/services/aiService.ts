@@ -115,7 +115,16 @@ const fetchFileBuffer = async (fileUrl: string): Promise<Buffer> => {
       422,
     );
   }
-  const response = await fetch(toSignedCloudinaryUrl(fileUrl));
+  // Raw Cloudinary uploads are usually served publicly, so try the plain URL first — signing
+  // (via toSignedCloudinaryUrl) depends on reconstructing the exact public_id Cloudinary
+  // stored from the delivery URL, which doesn't always round-trip byte-for-byte (filenames
+  // with spaces/punctuation), turning a working public file into a false 404. Only fall back
+  // to a signed URL for tenants whose raw delivery genuinely is access-restricted.
+  let response = await fetch(fileUrl);
+  if (!response.ok) {
+    const signedUrl = toSignedCloudinaryUrl(fileUrl);
+    if (signedUrl !== fileUrl) response = await fetch(signedUrl);
+  }
   if (!response.ok) throw new AiFeatureError(`Could not fetch resume file (HTTP ${response.status})`);
   const arrayBuffer = await response.arrayBuffer();
   return Buffer.from(arrayBuffer);
@@ -570,7 +579,16 @@ export const extractCandidateProfile = async (
   try {
     resumeText = await extractResumeText(resumeUrl);
   } catch (err: any) {
-    throw new AiFeatureError('Could not read the resume file', 422);
+    // mammoth (the .docx reader) throws this exact message for a legacy .doc file — it only
+    // understands the newer, zip-based .docx format, so a plain "could not read" error leaves
+    // no clue that the fix is "re-save as .docx or PDF and re-upload."
+    const isLegacyDocError = /end of central directory|is this a zip file/i.test(err?.message || '');
+    throw new AiFeatureError(
+      isLegacyDocError
+        ? 'This is an older .doc Word file, which isn\'t supported — please re-save it as .docx or PDF and upload again.'
+        : 'Could not read the resume file',
+      422,
+    );
   }
   if (!resumeText) throw new AiFeatureError('Resume contained no extractable text', 422);
 
