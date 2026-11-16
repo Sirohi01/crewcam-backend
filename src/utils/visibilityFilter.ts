@@ -24,7 +24,7 @@ const MODULE_TO_SECTIONS: Record<string, string[]> = {
   'leave-mgmt': ['Attendance Section'],
   'payroll-mgmt': ['Payroll'],
   'performance-mgmt': ['PMS System'],
-  'recruitment': ['Hiring Process'],
+  'recruitment': ['Hiring Process', 'Recruitment Process', 'Requirement'],
   'document-mgmt': ['Communications'],
   'helpdesk': ['Support & Operations', 'Meeting Section'],
 };
