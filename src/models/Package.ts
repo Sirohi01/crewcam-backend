@@ -1,7 +1,10 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { auditPlugin, IAuditable } from './plugins/auditPlugin';
 
-export const PACKAGE_TIERS = ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'] as const;
+// FREE/STARTER/GROWTH/PRO added for the Free→Starter→Growth→Pro→Enterprise ladder
+// (Crewcam_HRCRM_Plans_Pricing.xlsx, sheet "6 My HRCRM Plans"). BASIC/PROFESSIONAL/CUSTOM
+// kept for backward compatibility with anything already tagged that way.
+export const PACKAGE_TIERS = ['FREE', 'BASIC', 'STARTER', 'PROFESSIONAL', 'GROWTH', 'PRO', 'ENTERPRISE', 'CUSTOM'] as const;
 export type PackageTier = typeof PACKAGE_TIERS[number];
 
 export interface IPackage extends Document, IAuditable {
@@ -14,6 +17,9 @@ export interface IPackage extends Document, IAuditable {
   maxDepartments: number;
   maxDesignations: number;
   maxUsers: number;
+  // Billing floor from the pricing model (sheet "7 Pricing Drill-Through": billed
+  // employees = MAX(actual, minimum)) — distinct from maxUsers, which is an upper cap.
+  minBilledEmployees: number;
   features: string[];
   addOnModules: string[];
   planCode: string;
@@ -52,6 +58,7 @@ const PackageSchema = new Schema<IPackage>({
   maxDepartments: { type: Number, required: true, default: 5 },
   maxDesignations: { type: Number, required: true, default: 10 },
   maxUsers: { type: Number, required: true },
+  minBilledEmployees: { type: Number, default: 0 },
   features: [{ type: String }],
   addOnModules: [{ type: String }],
   planCode: { type: String, default: '' },

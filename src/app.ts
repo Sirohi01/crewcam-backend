@@ -45,6 +45,7 @@ import departmentKpiRoutes from './routes/departmentKpiRoutes';
 import customFieldRoutes from './routes/customFieldRoutes';
 import teamMemberRoutes from './routes/teamMemberRoutes';
 import notificationRoutes from './routes/notificationRoutes';
+import emergencyRoutes from './routes/emergencyRoutes';
 import divisionRoutes from './routes/divisionRoutes';
 import testPublishRoutes from './routes/testPublishRoutes';
 import paymentObligationRoutes from './routes/paymentObligationRoutes';
@@ -167,6 +168,7 @@ export function createApp() {
   app.use('/api/v1/custom-fields', customFieldRoutes);
   app.use('/api/v1/sub-departments', teamMemberRoutes);
   app.use('/api/v1/notifications', notificationRoutes);
+  app.use('/api/v1/emergency', emergencyRoutes);
   app.use('/api/v1/divisions', divisionRoutes);
   app.use('/api/v1/payment-obligations', paymentObligationRoutes);
   app.use('/api/v1/me', meRoutes);

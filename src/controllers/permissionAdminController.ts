@@ -34,6 +34,7 @@ const PERMISSION_CATALOG = [
   { name: 'ROLE_ADMIN', module: 'Platform Admin' },
   { name: 'NOTIFICATION_SEND', module: 'Communications' }, // WhatsApp / outbound messages
   { name: 'KPI_WRITE', module: 'Performance' }, // create/edit Department KPIs
+  { name: 'EMERGENCY_RESPOND', module: 'Emergency' }, // receive, acknowledge and resolve emergency alerts
   { name: 'OBLIGATIONS_READ', module: 'Payment Obligations' },
   { name: 'OBLIGATIONS_WRITE', module: 'Payment Obligations' },
   // Employer-side (Owner/Director/CFO/...) concepts with no dedicated page/route yet — kept

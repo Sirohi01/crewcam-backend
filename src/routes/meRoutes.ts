@@ -24,6 +24,7 @@ import {
 import { requireFeature } from '../middleware/featureGate';
 import { getMyPolicies, acknowledgeMyPolicy } from '../controllers/mePolicyController';
 import { getMyRequests } from '../controllers/meRequestsController';
+import { getMyEmergency, triggerMyAlert, cancelMyAlert } from '../controllers/emergencyController';
 
 /**
  * Employee self-service. Routes take no user ID: every handler acts on req.user, so
@@ -61,5 +62,9 @@ router.get('/policies', getMyPolicies);
 router.post('/policies/:id/acknowledge', acknowledgeMyPolicy);
 // Everything the caller has requested, across modules.
 router.get('/requests', getMyRequests);
+// Emergency page: company safety info, my alerts, trigger / cancel an alert.
+router.get('/emergency', getMyEmergency);
+router.post('/emergency/alerts', triggerMyAlert);
+router.post('/emergency/alerts/:id/cancel', cancelMyAlert);
 
 export default router;

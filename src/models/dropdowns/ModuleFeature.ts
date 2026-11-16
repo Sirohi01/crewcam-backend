@@ -5,7 +5,7 @@ export const FEATURE_TYPES = ['Native', 'Third-Party'] as const;
 // Mirrors Package.PACKAGE_TIERS — kept as a local copy of the literal values (not an
 // import) since "which plan tiers include this feature" is a presentation concern of
 // this catalog, independent of the Package schema itself.
-export const FEATURE_PACKAGE_TIERS = ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'] as const;
+export const FEATURE_PACKAGE_TIERS = ['FREE', 'BASIC', 'STARTER', 'PROFESSIONAL', 'GROWTH', 'PRO', 'ENTERPRISE', 'CUSTOM'] as const;
 
 export interface IModuleFeature extends IAuditable {
   moduleId: Types.ObjectId;

@@ -1202,7 +1202,7 @@ export const getAllPackages = async (req: AuthRequest, res: Response) => {
 export const createPackage = async (req: AuthRequest, res: Response) => {
   try {
     const {
-      name, description, imageUrl, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
+      name, description, imageUrl, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, minBilledEmployees, features, addOnModules,
       planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD,
@@ -1219,6 +1219,7 @@ export const createPackage = async (req: AuthRequest, res: Response) => {
       maxDepartments,
       maxDesignations,
       maxUsers,
+      minBilledEmployees,
       features,
       addOnModules,
       planCode,
@@ -1258,7 +1259,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      name, description, imageUrl, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, features, addOnModules,
+      name, description, imageUrl, tier, maxCompanies, maxBranches, maxDepartments, maxDesignations, maxUsers, minBilledEmployees, features, addOnModules,
       planCode, planBadge, displayOrder, targetAudience,
       priceINR, priceUSD, pricePerUserMonthlyINR, pricePerUserMonthlyUSD, pricePerUserYearlyINR, pricePerUserYearlyUSD,
       setupFeeINR, setupFeeUSD, freeAiCredits, aiCreditTopUpPriceINR, aiCreditTopUpPriceUSD, isActive,
@@ -1278,6 +1279,7 @@ export const updatePackage = async (req: AuthRequest, res: Response) => {
         ...(maxDepartments !== undefined && { maxDepartments }),
         ...(maxDesignations !== undefined && { maxDesignations }),
         ...(maxUsers !== undefined && { maxUsers }),
+        ...(minBilledEmployees !== undefined && { minBilledEmployees }),
         ...(features !== undefined && { features }),
         ...(addOnModules !== undefined && { addOnModules }),
         ...(planCode !== undefined && { planCode }),
