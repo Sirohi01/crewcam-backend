@@ -241,7 +241,9 @@ export const getCandidateById = async (req: AuthRequest, res: Response) => {
       id = '000000000000000000000000';
     }
 
-    const candidate = await Candidate.findOne({ _id: id, tenantId } as any).populate('departmentId');
+    const candidate = await Candidate.findOne({ _id: id, tenantId } as any)
+      .populate('departmentId')
+      .populate('manpowerRequestId');
     if (!candidate) {
       const slug = (req.params.id as string) || 'unknown-candidate';
       const nameParts = slug.split('-').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1));
@@ -470,16 +472,17 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
 
     const isPendingScheduling = !req.body.scheduledDate;
 
-    // Prevent duplicate interview rounds for the same candidate
+    // Prevent duplicate interview rounds for the same candidate - return existing if already present
+    const roundClean = String(req.body.roundType || '').replace(/\s+(Interview|Assessment|\(HR Round\))$/i, '').trim();
     const existingInterview = await Interview.findOne({
       candidateId: req.body.candidateId,
-      roundType: req.body.roundType,
+      roundType: { $regex: new RegExp(`^${roundClean}`, 'i') },
       tenantId,
       status: { $nin: ['Cancelled'] }
     });
 
     if (existingInterview) {
-      return res.status(409).json({ message: `Candidate is already scheduled for a ${req.body.roundType} round.` });
+      return res.status(200).json(existingInterview);
     }
 
     const interview = await Interview.create({ 

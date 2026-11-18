@@ -8,6 +8,8 @@ export interface IAnswerAnalysis {
 
 export interface IInterviewQuestion {
   question: string;
+  category?: string;
+  difficulty?: string;
   suggestedAnswer?: string;
   recordingUrl?: string;
   recordingPublicId?: string;
@@ -29,7 +31,7 @@ export interface IInterview extends Document {
   tenantId: Types.ObjectId;
   candidateId: Types.ObjectId;
   interviewerId: Types.ObjectId;
-  roundType: 'AI Screening Interview' | 'Technical Interview' | 'Managerial Interview' | 'Written Assessment' | 'Offer (HR Round)';
+  roundType: 'AI Screening Interview' | 'Technical Interview' | 'Managerial Interview' | 'Written Assessment' | 'Offer (HR Round)' | 'Technical' | 'Managerial' | 'Written' | 'HR' | 'AI Screening';
   scheduledDate?: Date;
   status: 'Pending_Scheduling' | 'Scheduled' | 'In_Progress' | 'Completed' | 'Cancelled' | 'No_Show';
   rating?: number;
@@ -51,7 +53,10 @@ const interviewSchema = new Schema<IInterview>({
   interviewerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   roundType: {
     type: String,
-    enum: ['AI Screening Interview', 'Technical Interview', 'Managerial Interview', 'Written Assessment', 'Offer (HR Round)'],
+    enum: [
+      'AI Screening Interview', 'Technical Interview', 'Managerial Interview', 'Written Assessment', 'Offer (HR Round)',
+      'Technical', 'Managerial', 'Written', 'HR', 'AI Screening'
+    ],
     required: true
   },
   scheduledDate: { type: Date },
@@ -67,6 +72,8 @@ const interviewSchema = new Schema<IInterview>({
   meetingLink: { type: String },
   interviewQuestions: [{
     question: { type: String, required: true },
+    category: { type: String },
+    difficulty: { type: String },
     suggestedAnswer: { type: String },
     recordingUrl: { type: String },
     recordingPublicId: { type: String },

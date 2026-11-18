@@ -13,6 +13,13 @@ import { Payment } from '../models/Payment';
 import { Attendance } from '../models/Attendance';
 import { LeaveRequest } from '../models/LeaveRequest';
 import { Ticket } from '../models/Ticket';
+import { SalarySlip } from '../models/SalarySlip';
+import { Department } from '../models/Department';
+import { LeaveType } from '../models/LeaveType';
+import { Asset } from '../models/Asset';
+import { Candidate } from '../models/Candidate';
+import { Appraisal } from '../models/Appraisal';
+import { PlatformModule } from '../models/dropdowns/Module';
 import { CompanyLifecycleEvent } from '../models/CompanyLifecycleEvent';
 import { Integration } from '../models/Integration';
 import { Session } from '../models/Session';
@@ -313,11 +320,29 @@ export const getTenantDashboardStats = async (req: AuthRequest, res: Response) =
     const tenantId = id;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(now);
     endOfDay.setHours(23, 59, 59, 999);
+
+    // Attendance / Leave / Payroll cards each have their own month picker (?attendanceMonth=YYYY-MM etc.);
+    // anything missing or malformed falls back to the current month.
+    const monthRange = (v: any) => {
+      const m = /^(\d{4})-(\d{2})$/.exec(String(v || ''));
+      const y = m ? Number(m[1]) : now.getFullYear();
+      const mo = m ? Number(m[2]) - 1 : now.getMonth();
+      return { start: new Date(y, mo, 1), end: new Date(y, mo + 1, 0, 23, 59, 59, 999) };
+    };
+    const attRange = monthRange(req.query.attendanceMonth);
+    const leaveRange = monthRange(req.query.leaveMonth);
+
+    // Working days in the month = Mon–Fri, which is what the Attendance rule defaults to.
+    let workingDays = 0;
+    for (let d = new Date(attRange.start); d <= attRange.end; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) workingDays++;
+    }
 
     const [totalEmployees, presentToday, onLeave, newJoiners, openTickets] = await Promise.all([
       User.countDocuments({ tenantId, isActive: true }),
@@ -327,17 +352,210 @@ export const getTenantDashboardStats = async (req: AuthRequest, res: Response) =
       Ticket.countDocuments({ tenantId, status: { $ne: 'Closed' } })
     ]);
 
+    // ── Headcount trend: employees on the books at the end of each of the last 12 months ──
+    const months: { month: string; start: Date; end: Date }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+      months.push({ month: start.toLocaleString('en-US', { month: 'short', year: '2-digit' }).replace(' ', " '"), start, end });
+    }
+    const users = await User.find({ tenantId } as any).select('createdAt dateOfJoining departmentId isActive employmentStatus').lean();
+    const joinedAt = (u: any) => new Date(u.dateOfJoining || u.createdAt);
+    const headcountTrend = months.map((m) => ({
+      month: m.month,
+      value: users.filter((u: any) => joinedAt(u) <= m.end).length,
+    }));
+
+    // ── Department distribution ──
+    const departments = await Department.find({ tenantId } as any).select('name').lean();
+    const deptName = new Map(departments.map((d: any) => [String(d._id), d.name]));
+    const deptCounts = new Map<string, number>();
+    users.filter((u: any) => u.isActive !== false).forEach((u: any) => {
+      const name = (u.departmentId && deptName.get(String(u.departmentId))) || 'Unassigned';
+      deptCounts.set(name, (deptCounts.get(name) || 0) + 1);
+    });
+    const deptTotal = Array.from(deptCounts.values()).reduce((a, b) => a + b, 0);
+    const departmentDistribution = Array.from(deptCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({ name, value, pct: deptTotal ? `${((value / deptTotal) * 100).toFixed(1)}%` : '0%' }));
+
+    // ── Attendance this month ──
+    const monthAttendance = await Attendance.find({ tenantId, date: { $gte: attRange.start, $lte: attRange.end } } as any).select('status userId date').lean();
+    const countStatus = (s: string) => monthAttendance.filter((a: any) => a.status === s).length;
+    const presentDays = countStatus('Present') + countStatus('Half-Day') * 0.5;
+    const leaveDaysAtt = countStatus('On Leave');
+    const absentDays = countStatus('Absent');
+    const attendanceRecorded = monthAttendance.length;
+    const attendance = {
+      workingDays,
+      presentDays: Number(presentDays.toFixed(2)),
+      absentDays,
+      leaveDays: leaveDaysAtt,
+      averagePct: attendanceRecorded ? Number(((presentDays / attendanceRecorded) * 100).toFixed(2)) : 0,
+    };
+
+    // ── Leave this month, by leave type ──
+    const monthLeaves = await LeaveRequest.find({
+      tenantId, status: 'Approved', startDate: { $lte: leaveRange.end }, endDate: { $gte: leaveRange.start },
+    } as any).select('leaveTypeId startDate endDate').lean();
+    const leaveTypes = await LeaveType.find({ tenantId } as any).select('name').lean();
+    const leaveTypeName = new Map(leaveTypes.map((t: any) => [String(t._id), t.name]));
+    const leaveByType = new Map<string, number>();
+    monthLeaves.forEach((l: any) => {
+      const from = Math.max(new Date(l.startDate).getTime(), leaveRange.start.getTime());
+      const to = Math.min(new Date(l.endDate).getTime(), leaveRange.end.getTime());
+      const days = Math.max(1, Math.round((to - from) / 86400000) + 1);
+      const name = leaveTypeName.get(String(l.leaveTypeId)) || 'Other Leave';
+      leaveByType.set(name, (leaveByType.get(name) || 0) + days);
+    });
+    const leaveTotal = Array.from(leaveByType.values()).reduce((a, b) => a + b, 0);
+    const leave = {
+      total: leaveTotal,
+      breakdown: Array.from(leaveByType.entries()).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({
+        label, value, pct: leaveTotal ? `${((value / leaveTotal) * 100).toFixed(1)}%` : '0%',
+      })),
+    };
+
+    // ── Payroll: the latest month that has salary slips ──
+    const pm = /^(\d{4})-(\d{2})$/.exec(String(req.query.payrollMonth || ''));
+    const latestSlip: any = pm
+      ? { year: Number(pm[1]), month: Number(pm[2]) }
+      : await SalarySlip.findOne({ tenantId } as any).sort({ year: -1, month: -1 }).select('month year').lean();
+    const slipPeriods = await SalarySlip.find({ tenantId } as any).select('month year').lean();
+    const payrollPeriods = Array.from(new Set(slipPeriods.map((x: any) => `${x.year}-${String(x.month).padStart(2, '0')}`))).sort().reverse().slice(0, 12);
+    let payroll: any = { label: now.toLocaleString('en-US', { month: 'short', year: 'numeric' }), total: 0, net: 0, deductions: 0, earnings: 0 };
+    if (latestSlip) {
+      const slips = await SalarySlip.find({ tenantId, month: (latestSlip as any).month, year: (latestSlip as any).year } as any)
+        .select('totalEarnings totalDeductions netPay').lean();
+      const sum = (k: string) => slips.reduce((a: number, s: any) => a + (Number(s[k]) || 0), 0);
+      payroll = {
+        label: new Date((latestSlip as any).year, (latestSlip as any).month - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+        total: sum('totalEarnings'),
+        net: sum('netPay'),
+        deductions: sum('totalDeductions'),
+        earnings: sum('totalEarnings'),
+      };
+    }
+
+    // ── Recent activity: newest joiners, leave decisions, tickets, slips ──
+    const [recentUsers, recentLeaves, recentTickets] = await Promise.all([
+      User.find({ tenantId } as any).sort({ createdAt: -1 }).limit(3).select('firstName lastName designation createdAt').lean(),
+      LeaveRequest.find({ tenantId } as any).sort({ updatedAt: -1 }).limit(3).select('userId status startDate endDate updatedAt').populate('userId', 'firstName lastName').lean(),
+      Ticket.find({ tenantId } as any).sort({ createdAt: -1 }).limit(2).select('subject status createdAt').lean(),
+    ]);
+    const fmtDay = (d: any) => new Date(d).toLocaleString('en-US', { day: 'numeric', month: 'short' });
+    const activities: any[] = [
+      ...recentUsers.map((u: any) => ({ type: 'joiner', title: `New employee ${[u.firstName, u.lastName].filter(Boolean).join(' ')} joined`, sub: u.designation || 'Employee', at: u.createdAt })),
+      ...recentLeaves.map((l: any) => ({ type: 'leave', title: `Leave request ${String(l.status).toLowerCase()}`, sub: `${[l.userId?.firstName, l.userId?.lastName].filter(Boolean).join(' ') || 'Employee'} - ${fmtDay(l.startDate)} to ${fmtDay(l.endDate)}`, at: l.updatedAt })),
+      ...recentTickets.map((t: any) => ({ type: 'ticket', title: `Ticket ${String(t.status).toLowerCase()}`, sub: t.subject, at: t.createdAt })),
+    ];
+    if (latestSlip) activities.push({ type: 'payroll', title: `Payroll ${payroll.label} processed`, sub: `Total Amount: ₹ ${(payroll.total / 100000).toFixed(2)} Lakh`, at: now });
+    activities.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+    // ── Modules enabled for this company ──
+    const company = await Company.findOne({ tenantId } as any).setOptions({ bypassTenantIsolation: true }).select('selectedModules addonModules').lean();
+    const rawModules: string[] = [...((company as any)?.selectedModules || []), ...((company as any)?.addonModules || [])];
+    const moduleIds = rawModules.filter((m) => /^[a-f0-9]{24}$/i.test(m));
+    const moduleDocs = moduleIds.length ? await PlatformModule.find({ _id: { $in: moduleIds } }).select('name').lean() : [];
+    const moduleNameById = new Map(moduleDocs.map((m: any) => [String(m._id), m.name]));
+    const modules = Array.from(new Set(rawModules.map((m) => moduleNameById.get(m) || (/^[a-f0-9]{24}$/i.test(m) ? '' : m)).filter(Boolean)));
+
     res.status(200).json({
       totalEmployees,
       presentToday,
       onLeave,
       newJoiners,
       openTickets,
-      monthlyPayroll: 2875000 // Placeholder
+      monthlyPayroll: payroll.total,
+      headcountTrend,
+      departmentDistribution,
+      attendance,
+      leave,
+      payroll,
+      payrollPeriods,
+      activities: activities.slice(0, 5),
+      modules,
     });
   } catch (error) {
     console.error('Error fetching tenant dashboard stats:', error);
     res.status(500).json({ message: 'Internal server error while fetching tenant dashboard stats' });
+  }
+};
+
+// Row data for each tab on the super-admin company dashboard — one generic endpoint so the
+// tabs (Employees, Attendance, Leave, ...) can each render a real table for the chosen tenant.
+export const getTenantSectionRecords = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.params.id as string;
+    const section = String(req.params.section || '').toLowerCase();
+    const person = (u: any) => (u ? [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || '—' : '—');
+    const day = (d: any) => (d ? new Date(d).toLocaleDateString('en-GB') : '—');
+    let columns: string[] = [];
+    let rows: any[][] = [];
+
+    switch (section) {
+      case 'employees': {
+        const list = await User.find({ tenantId, isActive: true } as any).populate('departmentId', 'name').select('firstName lastName email employeeCode designation departmentId dateOfJoining').limit(200).lean();
+        columns = ['Employee', 'Code', 'Email', 'Department', 'Designation', 'Joined'];
+        rows = list.map((u: any) => [person(u), u.employeeCode || '—', u.email, u.departmentId?.name || '—', u.designation || '—', day(u.dateOfJoining)]);
+        break;
+      }
+      case 'attendance': {
+        const list = await Attendance.find({ tenantId } as any).sort({ date: -1 }).limit(100).populate('userId', 'firstName lastName email').lean();
+        columns = ['Employee', 'Date', 'Status', 'Clock In', 'Clock Out', 'Hours'];
+        rows = list.map((a: any) => [person(a.userId), day(a.date), a.status, a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString('en-US') : '—', a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString('en-US') : '—', a.totalHours ?? '—']);
+        break;
+      }
+      case 'leave': {
+        const list = await LeaveRequest.find({ tenantId } as any).sort({ createdAt: -1 }).limit(100).populate('userId', 'firstName lastName email').populate('leaveTypeId', 'name').lean();
+        columns = ['Employee', 'Leave Type', 'From', 'To', 'Status'];
+        rows = list.map((l: any) => [person(l.userId), l.leaveTypeId?.name || '—', day(l.startDate), day(l.endDate), l.status]);
+        break;
+      }
+      case 'payroll': {
+        const list = await SalarySlip.find({ tenantId } as any).sort({ year: -1, month: -1 }).limit(100).populate('employeeId', 'firstName lastName email').lean();
+        columns = ['Employee', 'Period', 'Earnings', 'Deductions', 'Net Pay', 'Status'];
+        rows = list.map((s: any) => [person(s.employeeId), `${String(s.month).padStart(2, '0')}/${s.year}`, `₹ ${Number(s.totalEarnings || 0).toLocaleString('en-IN')}`, `₹ ${Number(s.totalDeductions || 0).toLocaleString('en-IN')}`, `₹ ${Number(s.netPay || 0).toLocaleString('en-IN')}`, s.status]);
+        break;
+      }
+      case 'performance': {
+        const list = await Appraisal.find({ tenantId } as any).sort({ createdAt: -1 }).limit(100).populate('employeeId', 'firstName lastName email').lean();
+        columns = ['Employee', 'Cycle', 'Self Rating', 'HOD Rating', 'HR Rating', 'Status'];
+        rows = list.map((a: any) => [person(a.employeeId), a.cycle || '—', a.selfRating ?? '—', a.hodRating ?? '—', a.hrRating ?? '—', a.status]);
+        break;
+      }
+      case 'recruitment': {
+        const list = await Candidate.find({ tenantId } as any).sort({ createdAt: -1 }).limit(100).lean();
+        columns = ['Candidate', 'Email', 'Phone', 'Role', 'Source', 'Status'];
+        rows = list.map((c: any) => [[c.firstName, c.lastName].filter(Boolean).join(' ') || '—', c.email || '—', c.phone || '—', c.jobRole || '—', c.source || '—', c.status || '—']);
+        break;
+      }
+      case 'assets': {
+        const list = await Asset.find({ tenantId } as any).sort({ createdAt: -1 }).limit(100).lean();
+        columns = ['Asset', 'Type', 'Serial No.', 'Purchased', 'Value', 'Status'];
+        rows = list.map((a: any) => [a.name, a.type || '—', a.serialNumber || '—', day(a.purchaseDate), a.purchaseValue != null ? `₹ ${Number(a.purchaseValue).toLocaleString('en-IN')}` : '—', a.status || '—']);
+        break;
+      }
+      case 'documents': {
+        const company = await Company.findOne({ tenantId } as any).setOptions({ bypassTenantIsolation: true }).select('documents').lean();
+        const docs: any[] = (company as any)?.documents || [];
+        columns = ['Document', 'Type', 'Uploaded'];
+        rows = docs.map((d: any) => [d.name || d.title || d.fileName || 'Document', d.type || d.category || '—', day(d.uploadedAt || d.createdAt)]);
+        break;
+      }
+      case 'helpdesk': {
+        const list = await Ticket.find({ tenantId } as any).sort({ createdAt: -1 }).limit(100).populate('employeeId', 'firstName lastName email').lean();
+        columns = ['Ticket', 'Subject', 'Raised By', 'Priority', 'Status', 'Created'];
+        rows = list.map((t: any) => [t.ticketNumber || '—', t.subject, person(t.employeeId), t.priority || '—', t.status, day(t.createdAt)]);
+        break;
+      }
+      default:
+        return res.status(404).json({ message: 'Unknown section' });
+    }
+    res.status(200).json({ columns, rows });
+  } catch (error) {
+    console.error('Error fetching tenant section records:', error);
+    res.status(500).json({ message: 'Internal server error while fetching section records' });
   }
 };
 

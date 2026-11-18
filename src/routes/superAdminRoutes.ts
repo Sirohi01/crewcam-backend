@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   createFeature, createPackage, createPermission, createTenant, deleteFeature, deleteTenant, getAiUsageLogs,
-  getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, updateFeature, updatePackage, updateTenant,
+  getAllFeatures, getAllPackages, getAllPermissions, getAllTenants, getTenantById, getTenantDashboardStats, getTenantSectionRecords, updateFeature, updatePackage, updateTenant,
   resendCredentials, topUpAiCredits, markSetupFeePaid, recordSubscriptionPayment,
   resendCompanyCredentials, getNextCorporateId,
   getTenantRoles, getTenantAdmins, getTenantEmployees, inviteTenantAdmin, updateTenantAdmin, deleteTenantAdmin, deleteTenantEmployee, updateTenantEmployee, bulkImportEmployees, getSuperAdminActivityLogs, sendDeleteCompanyOtp, sendWizardOtp, verifyWizardOtp, scheduleGoLive, getCompanyInsights
@@ -57,6 +57,7 @@ router.get('/companies/insights', getCompanyInsights);
 router.get('/tenants', getAllTenants);
 router.get('/tenants/:id', getTenantById);
 router.get('/tenants/:id/dashboard-stats', getTenantDashboardStats);
+router.get('/tenants/:id/section/:section', getTenantSectionRecords);
 router.post('/tenants', createTenant);
 router.put('/tenants/:id', updateTenant);
 router.put('/tenants/:id/schedule-go-live', scheduleGoLive);

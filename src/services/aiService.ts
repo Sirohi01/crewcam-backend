@@ -170,21 +170,30 @@ const SCREENING_JSON_SCHEMA: JsonSchemaDef = {
   },
 };
 
-const buildManpowerContext = async (tenantId: string, candidateId: string): Promise<string> => {
+const buildManpowerContext = async (tenantId: string, candidateId: string, candidateDoc?: any): Promise<string> => {
+  let refId: any = null;
   const pipelineState = await getOrCreatePipelineState(tenantId, candidateId);
   const manpowerStep = pipelineState?.steps.find((s) => s.key === 'manpowerRequest');
-  if (!manpowerStep?.refId) return '';
+  if (manpowerStep?.refId) {
+    refId = manpowerStep.refId;
+  } else {
+    const candidate = candidateDoc || await Candidate.findOne({ _id: candidateId, tenantId } as any);
+    refId = candidate?.manpowerRequestId || candidate?.applicationDetails?.manpowerRequestId;
+  }
+  if (!refId) return '';
 
-  const manpowerRequest = await ManpowerRequest.findOne({ _id: manpowerStep.refId, tenantId } as any);
+  const manpowerRequest = await ManpowerRequest.findOne({ _id: refId, tenantId } as any);
   if (!manpowerRequest) return '';
 
   return [
-    manpowerRequest.jobDescriptionSummary && `Job description: ${manpowerRequest.jobDescriptionSummary}`,
-    manpowerRequest.keyResponsibilities?.length && `Key responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
-    manpowerRequest.qualificationReq && `Qualification required: ${manpowerRequest.qualificationReq}`,
-    manpowerRequest.experienceReq && `Experience required: ${manpowerRequest.experienceReq}`,
-    manpowerRequest.technicalSkills && `Technical skills: ${manpowerRequest.technicalSkills}`,
-    manpowerRequest.softSkills && `Soft skills: ${manpowerRequest.softSkills}`,
+    manpowerRequest.jobTitle && `Target Job Title: ${manpowerRequest.jobTitle}`,
+    manpowerRequest.jobDescriptionSummary && `Job Description: ${manpowerRequest.jobDescriptionSummary}`,
+    manpowerRequest.detailedJustification && `Role Scope & Context: ${manpowerRequest.detailedJustification}`,
+    manpowerRequest.keyResponsibilities?.length && `Key Responsibilities: ${manpowerRequest.keyResponsibilities.join('; ')}`,
+    manpowerRequest.technicalSkills?.length && `Required Technical Skills: ${Array.isArray(manpowerRequest.technicalSkills) ? manpowerRequest.technicalSkills.join(', ') : manpowerRequest.technicalSkills}`,
+    manpowerRequest.softSkills?.length && `Soft Skills: ${Array.isArray(manpowerRequest.softSkills) ? manpowerRequest.softSkills.join(', ') : manpowerRequest.softSkills}`,
+    manpowerRequest.experienceReq && `Required Experience: ${manpowerRequest.experienceReq}`,
+    manpowerRequest.qualificationReq && `Required Qualification: ${manpowerRequest.qualificationReq}`,
   ].filter(Boolean).join('\n');
 };
 
@@ -648,8 +657,15 @@ export const extractCandidateProfile = async (
   throw new AiFeatureError(`AI resume extraction failed across all providers: ${errorSummary}`, 502);
 };
 
+interface InterviewQuestionItem {
+  question: string;
+  category?: string;
+  insight?: string;
+  difficulty?: string;
+}
+
 interface InterviewQuestionsResult {
-  questions: string[];
+  questions: (string | InterviewQuestionItem)[];
 }
 
 const INTERVIEW_QUESTIONS_JSON_SCHEMA: JsonSchemaDef = {
@@ -657,7 +673,20 @@ const INTERVIEW_QUESTIONS_JSON_SCHEMA: JsonSchemaDef = {
   schema: {
     type: 'object',
     properties: {
-      questions: { type: 'array', items: { type: 'string' }, description: '8-10 interview questions tailored to this round' },
+      questions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            category: { type: 'string', description: 'Technical domain or category (e.g. Architecture, Database Design, Security, Optimization)' },
+            question: { type: 'string', description: 'The question text tailored to the candidate job role, JD, and calibrated to their experience difficulty' },
+            insight: { type: 'string', description: 'What this question evaluates and key technical criteria in a strong response' },
+            difficulty: { type: 'string', description: 'Difficulty tier: Junior, Mid, Senior, or Lead' }
+          },
+          required: ['question']
+        },
+        description: '5-8 interview questions calibrated to the candidate experience, JD and difficulty'
+      }
     },
     required: ['questions'],
     additionalProperties: false,
@@ -673,77 +702,632 @@ const ROUND_GUIDANCE: Record<string, string> = {
   'Offer (HR Round)': 'Closing round: career goals, compensation expectations, culture fit, and any open concerns before an offer.',
 };
 
+export function generateCalibratedFallbackQuestions(
+  roundType: string,
+  jobRole: string = '',
+  expYears: number = 0,
+  skills: string[] = [],
+  jdSummary: string = ''
+): Array<{ question: string; category: string; insight: string; difficulty: string }> {
+  const role = (jobRole || 'Software Engineer').trim();
+  const lower = role.toLowerCase();
+  const roundLower = (roundType || '').toLowerCase();
+  const topSkills = (skills || []).filter(Boolean).slice(0, 3).join(', ');
+  const skillNote = topSkills ? ` (specifically involving ${topSkills})` : '';
 
+  let diffLabel = 'Mid-Level (3-5 Yrs)';
+  let level = 'Mid';
+  if (expYears < 2) {
+    level = 'Junior';
+    diffLabel = 'Junior / Entry (0-2 Yrs)';
+  } else if (expYears >= 6 && expYears < 10) {
+    level = 'Senior';
+    diffLabel = 'Senior Level (6-9 Yrs)';
+  } else if (expYears >= 10) {
+    level = 'Lead';
+    diffLabel = 'Lead / Principal (10+ Yrs)';
+  }
 
+  // A. Managerial Round
+  if (roundLower.includes('managerial') || roundLower.includes('leadership')) {
+    if (level === 'Junior' || level === 'Mid') {
+      return [
+        {
+          category: 'Task Prioritization & Deadlines',
+          difficulty: diffLabel,
+          question: `How do you prioritize deliverables when unexpected high-urgency tasks conflict with planned sprint deadlines as a ${role}?`,
+          insight: 'Evaluates time management, structured triage, and composure under delivery pressure.'
+        },
+        {
+          category: 'Conflict Resolution & Peer Collaboration',
+          difficulty: diffLabel,
+          question: `Describe a disagreement you had with a teammate or cross-functional stakeholder over a technical or project decision. How did you resolve it?`,
+          insight: 'Assesses interpersonal maturity, active listening, and finding constructive consensus.'
+        },
+        {
+          category: 'Delivery Ownership & Accountability',
+          difficulty: diffLabel,
+          question: `Walk through a situation where a project deliverable was at risk of delay. What proactive steps did you take to mitigate the risk?`,
+          insight: 'Checks proactive ownership, risk escalation, and solution-oriented accountability.'
+        },
+        {
+          category: 'Feedback & Continuous Growth',
+          difficulty: diffLabel,
+          question: `How do you receive critical feedback from your manager, and how do you incorporate it into your daily execution?`,
+          insight: 'Evaluates receptiveness to feedback, self-awareness, and continuous improvement.'
+        },
+        {
+          category: 'Cross-Functional Communication',
+          difficulty: diffLabel,
+          question: `How do you explain technical concepts, blockers, or project milestones to non-technical stakeholders (e.g. Sales, Operations)?`,
+          insight: 'Tests communication clarity, stakeholder empathy, and translating technical complexity into business impact.'
+        }
+      ];
+    }
+    // Senior & Lead Managerial
+    return [
+      {
+        category: 'Strategic Vision & Execution',
+        difficulty: diffLabel,
+        question: `As a seasoned ${role} (${expYears} years exp), how do you align quarterly engineering OKRs with broader business and revenue targets${skillNote}?`,
+        insight: 'Assesses strategic thinking, business acumen, and converting corporate goals into team execution.'
+      },
+      {
+        category: 'Performance Management & Underperformance',
+        difficulty: diffLabel,
+        question: `Describe how you handled a team member who was consistently missing delivery commitments. What framework did you use to coach or correct the situation?`,
+        insight: 'Evaluates performance coaching, empathetic management, objective documentation, and decisive action.'
+      },
+      {
+        category: 'Engineering Culture & Talent Retention',
+        difficulty: diffLabel,
+        question: `How do you build and maintain a high-performance culture while preventing burnout across high-intensity release cycles?`,
+        insight: 'Checks leadership emotional intelligence, sustainable pacing, and talent retention strategies.'
+      },
+      {
+        category: 'Resource Allocation & Headcount Planning',
+        difficulty: diffLabel,
+        question: `How do you negotiate and justify headcount, tooling budgets, and technical debt repayment against urgent product feature demands?`,
+        insight: 'Tests executive negotiation, trade-off analysis, and strategic resource governance.'
+      },
+      {
+        category: 'Crisis Management & Stakeholder Alignment',
+        difficulty: diffLabel,
+        question: `Describe the highest-stakes outage, project failure, or stakeholder conflict you navigated. How did you manage leadership communications and post-mortem resolution?`,
+        insight: 'Evaluates executive presence under pressure, root cause accountability, and systemic problem resolution.'
+      }
+    ];
+  }
 
+  // B. Frontend Roles
+  if (lower.includes('frontend') || lower.includes('react') || lower.includes('ui developer') || lower.includes('web developer')) {
+    if (level === 'Junior') {
+      return [
+        {
+          category: 'Core Fundamentals & Syntax',
+          difficulty: diffLabel,
+          question: `As a junior ${role}, explain how the Virtual DOM in React updates the real DOM, and describe the differences between props and state${skillNote}.`,
+          insight: 'Evaluates foundational React mechanics, unidirectional data flow, and component lifecycle basics.'
+        },
+        {
+          category: 'Form Handling & State',
+          difficulty: diffLabel,
+          question: `How do you build controlled form inputs in React, validate user input on the fly, and prevent common re-rendering issues?`,
+          insight: 'Checks practical hands-on capability to build standard interactive UI forms cleanly.'
+        },
+        {
+          category: 'Responsive Styling & Layout',
+          difficulty: diffLabel,
+          question: `Describe how you use Flexbox, CSS Grid, and media queries (e.g. Tailwind or modern CSS) to build a mobile-first responsive layout.`,
+          insight: 'Assesses basic layout principles, fluid design, and clean cross-device rendering.'
+        },
+        {
+          category: 'Data Fetching & Error Handling',
+          difficulty: diffLabel,
+          question: `How do you fetch data from a REST API using fetch/Axios inside useEffect, and how do you display loading and error states to the user?`,
+          insight: 'Checks basic asynchronous JavaScript, promise resolution, and user experience awareness.'
+        },
+        {
+          category: 'Code Quality & Debugging',
+          difficulty: diffLabel,
+          question: `Walk through your process of debugging a JavaScript console error or broken UI component in Chrome DevTools.`,
+          insight: 'Tests troubleshooting mindset, breakpoint debugging, and practical problem resolution.'
+        }
+      ];
+    }
+    if (level === 'Mid') {
+      return [
+        {
+          category: 'State Architecture & Reusability',
+          difficulty: diffLabel,
+          question: `As a ${role} with ${expYears} years of experience, how do you decide when to use local state, Context API, or dedicated state stores (Zustand/Redux Toolkit)${skillNote}?`,
+          insight: 'Evaluates scalable component hierarchy design, avoiding prop drilling, and state co-location principles.'
+        },
+        {
+          category: 'Performance Profiling & Optimization',
+          difficulty: diffLabel,
+          question: `What techniques and profiling tools do you use to diagnose unnecessary re-renders, optimize heavy lists (virtualization), and optimize bundle sizes?`,
+          insight: 'Assesses useMemo/useCallback discipline, React Profiler, lazy loading, and code-splitting.'
+        },
+        {
+          category: 'Server State & Cache Management',
+          difficulty: diffLabel,
+          question: `How do you implement optimistic UI updates, background re-validation, and request deduplication using TanStack Query or RTK Query?`,
+          insight: 'Checks modern data synchronization patterns, client-side caching, and resilient network error recovery.'
+        },
+        {
+          category: 'Component Library & Accessibility',
+          difficulty: diffLabel,
+          question: `How do you design accessible compound components adhering to WCAG 2.1 AA keyboard navigation and screen-reader standards?`,
+          insight: 'Evaluates design system contributions, a11y compliance, semantic HTML, and multi-device usability.'
+        },
+        {
+          category: 'Automated Testing & Security',
+          difficulty: diffLabel,
+          question: `What security practices do you enforce to prevent XSS and CSRF attacks on the client side, and how do you approach automated testing with Jest and Playwright/Cypress?`,
+          insight: 'Tests code quality assurance, defensive coding against web vulnerabilities, and automated test coverage.'
+        }
+      ];
+    }
+    // Senior & Lead Frontend
+    return [
+      {
+        category: 'Micro-Frontends & Architecture',
+        difficulty: diffLabel,
+        question: `As a senior ${role}, how would you architect a large-scale frontend monorepo (Turborepo/Nx) with shared UI packages and independent squad deployment${skillNote}?`,
+        insight: 'Evaluates modular architecture, Module Federation, dependency management, and build cache optimization.'
+      },
+      {
+        category: 'Core Web Vitals & SSR Paradigms',
+        difficulty: diffLabel,
+        question: `Deeply analyze your strategy for optimizing Core Web Vitals (LCP, INP, CLS) in Next.js/SSR applications, including streaming SSR and selective hydration.`,
+        insight: 'Assesses modern server-side rendering mechanics, critical CSS inlining, font optimization, and JavaScript execution budget.'
+      },
+      {
+        category: 'Design Systems at Scale',
+        difficulty: diffLabel,
+        question: `How do you architect a multi-brand, tokenized design system consumed by 5+ engineering teams, ensuring backward compatibility during major version upgrades?`,
+        insight: 'Checks design token architecture (Figma Tokens/Style Dictionary), semantic versioning, and developer experience governance.'
+      },
+      {
+        category: 'Real-Time Sync & Offline Fault Tolerance',
+        difficulty: diffLabel,
+        question: `How do you design bi-directional WebSocket state sync with client-side indexedDB storage, handling network dropouts, reconnection storms, and conflict resolution?`,
+        insight: 'Tests distributed client architecture, CRDT/operational transform basics, and high-reliability offline capabilities.'
+      },
+      {
+        category: 'Frontend Security & Governance',
+        difficulty: diffLabel,
+        question: `What CSP (Content Security Policy) headers, token rotation mechanisms, and automated dependency supply-chain security gates (SBOM) do you enforce in CI/CD?`,
+        insight: 'Evaluates defense-in-depth security governance, third-party script isolation, and engineering standards enforcement.'
+      }
+    ];
+  }
+
+  // C. Backend Roles
+  if (lower.includes('backend') || lower.includes('node') || lower.includes('java') || lower.includes('python') || lower.includes('api') || lower.includes('database')) {
+    if (level === 'Junior') {
+      return [
+        {
+          category: 'API Fundamentals & HTTP Protocol',
+          difficulty: diffLabel,
+          question: `As a junior ${role}, explain RESTful API design principles, standard HTTP status codes, and request payload validation${skillNote}.`,
+          insight: 'Checks basic protocol understanding, REST conventions, and server-side request validation.'
+        },
+        {
+          category: 'Database Basics & CRUD',
+          difficulty: diffLabel,
+          question: `Describe the difference between SQL and NoSQL databases, and write or explain a SQL query using JOIN, WHERE, and GROUP BY.`,
+          insight: 'Evaluates basic data retrieval, relational modeling fundamentals, and schema querying.'
+        },
+        {
+          category: 'Asynchronous Programming',
+          difficulty: diffLabel,
+          question: `Explain how the Node.js event loop handles non-blocking I/O operations and how Promises and async/await help prevent callback hell.`,
+          insight: 'Tests fundamental language runtime understanding, asynchronous control flow, and error handling.'
+        },
+        {
+          category: 'Authentication Basics',
+          difficulty: diffLabel,
+          question: `How does JWT authentication work between a client and a backend server, and why should passwords be hashed using algorithms like bcrypt?`,
+          insight: 'Assesses basic security hygiene, token lifecycle understanding, and password storage best practices.'
+        },
+        {
+          category: 'Error Handling & Logging',
+          difficulty: diffLabel,
+          question: `How do you design centralized error-handling middleware in an API framework so clients receive clear, safe error responses without leaking stack traces?`,
+          insight: 'Checks practical software craftsmanship and clean error response design.'
+        }
+      ];
+    }
+    if (level === 'Mid') {
+      return [
+        {
+          category: 'Database Optimization & Indexing',
+          difficulty: diffLabel,
+          question: `As a ${role} with ${expYears} years of experience, describe your indexing strategy for high-frequency queries and how you use EXPLAIN plans to eliminate full table scans${skillNote}.`,
+          insight: 'Evaluates query execution plan analysis, composite B-Tree indexes, and database performance tuning.'
+        },
+        {
+          category: 'Asynchronous Queues & Background Jobs',
+          difficulty: diffLabel,
+          question: `How do you implement background job queues using Redis (e.g. BullMQ or Celery) to handle heavy tasks without blocking user-facing API threads?`,
+          insight: 'Assesses asynchronous background processing, job retries, dead-letter queues, and concurrency control.'
+        },
+        {
+          category: 'Transactions & Concurrency',
+          difficulty: diffLabel,
+          question: `How do you handle database transactions (ACID), rollbacks, and optimistic vs pessimistic locking to prevent race conditions during concurrent updates?`,
+          insight: 'Checks data integrity, isolation levels, race-condition mitigation, and deadlock avoidance.'
+        },
+        {
+          category: 'API Security & Authorization',
+          difficulty: diffLabel,
+          question: `How do you implement Role-Based Access Control (RBAC), rate-limiting middleware, and protection against SQL injection and mass-assignment vulnerabilities?`,
+          insight: 'Evaluates API defense mechanisms, authorization enforcement, and OWASP Top 10 mitigation.'
+        },
+        {
+          category: 'Testing & Containerization',
+          difficulty: diffLabel,
+          question: `Describe how you write automated integration tests with mock database containers and how you optimize production Docker container images for minimal footprint.`,
+          insight: 'Tests automated test coverage, test isolation, and modern container deployment readiness.'
+        }
+      ];
+    }
+    // Senior & Lead Backend
+    return [
+      {
+        category: 'Distributed System Design',
+        difficulty: diffLabel,
+        question: `As a senior ${role}, architect a high-throughput, fault-tolerant backend capable of handling 50,000 requests/sec with sub-50ms p99 latency${skillNote}.`,
+        insight: 'Evaluates microservices partitioning, load balancing, stateless API design, connection pooling, and horizontal scaling.'
+      },
+      {
+        category: 'Event-Driven Architecture & Kafka',
+        difficulty: diffLabel,
+        question: `How do you design an event-driven system with Kafka/EventBridge, ensuring idempotency, exactly-once processing semantics, and managing dead-letter queues?`,
+        insight: 'Assesses streaming event processing, consumer group scaling, partition keys, and out-of-order message handling.'
+      },
+      {
+        category: 'Multi-Tier Caching & Invalidation',
+        difficulty: diffLabel,
+        question: `Describe your multi-tier caching architecture (in-memory + Redis cluster + CDN), and how you prevent cache stampede, penetration, and avalanche?`,
+        insight: 'Tests advanced distributed caching, mutex locks, probabilistic early expiration, and cache invalidation strategies.'
+      },
+      {
+        category: 'Database Sharding & Partitioning',
+        difficulty: diffLabel,
+        question: `How do you implement database read/write replicas with replication lag handling, and what partitioning/sharding keys do you choose for multi-terabyte datasets?`,
+        insight: 'Checks database scalability at volume, replication consistency trade-offs, and horizontal partitioning.'
+      },
+      {
+        category: 'Observability & Zero-Downtime Migration',
+        difficulty: diffLabel,
+        question: `How do you execute zero-downtime database schema migrations on a 24/7 live database while maintaining OpenTelemetry distributed tracing across all downstream services?`,
+        insight: 'Evaluates expand-and-contract migration patterns, distributed tracing, and production resilience under continuous release cycles.'
+      }
+    ];
+  }
+
+  // D. Full Stack Roles
+  if (lower.includes('full stack') || lower.includes('fullstack') || lower.includes('mern') || lower.includes('mean')) {
+    if (level === 'Junior') {
+      return [
+        {
+          category: 'Full-Stack Data Flow',
+          difficulty: diffLabel,
+          question: `As a junior Full Stack Developer, explain the end-to-end data lifecycle from a React client form submit, through Express/Node.js, to MongoDB/PostgreSQL storage${skillNote}.`,
+          insight: 'Evaluates complete request-response comprehension across the frontend, API, and database layers.'
+        },
+        {
+          category: 'State vs Database Synchronization',
+          difficulty: diffLabel,
+          question: `How do you ensure UI state in the frontend remains consistent when an API request fails on the backend?`,
+          insight: 'Checks optimistic UI handling, error propagation, and state rollbacks.'
+        },
+        {
+          category: 'Authentication & Session Handling',
+          difficulty: diffLabel,
+          question: `Explain how you store and send auth tokens securely (e.g., httpOnly cookies vs local storage) between frontend and backend.`,
+          insight: 'Assesses basic security practices and cross-layer authentication mechanics.'
+        },
+        {
+          category: 'CRUD Implementation & Validation',
+          difficulty: diffLabel,
+          question: `How do you implement schema validation (e.g. Zod or Joi) on both frontend and backend to avoid duplicate logic and inconsistent data?`,
+          insight: 'Checks shared TypeScript types, schema validation, and defensive programming.'
+        },
+        {
+          category: 'Deployment & Environment Variables',
+          difficulty: diffLabel,
+          question: `How do you manage development vs production environment variables (.env) across frontend and backend services?`,
+          insight: 'Tests configuration hygiene, build-time vs runtime variables, and basic deployment awareness.'
+        }
+      ];
+    }
+    // Mid & Senior Full Stack
+    return [
+      {
+        category: 'End-to-End Type Safety',
+        difficulty: diffLabel,
+        question: `As a Full Stack Developer with ${expYears} years exp, how do you architect end-to-end type safety between database schemas, API routes, and frontend state (e.g., tRPC or OpenAPI codegen)${skillNote}?`,
+        insight: 'Evaluates typed contracts, eliminating manual schema duplication, and preventing contract breakage.'
+      },
+      {
+        category: 'Performance Profiling & Bottlenecks',
+        difficulty: diffLabel,
+        question: `When a customer complains that a page takes 6 seconds to load, how do you isolate whether the bottleneck is database query latency, server compute, or client-side rendering?`,
+        insight: 'Assesses full-stack diagnostic methodology, waterfall analysis, DB query profiling, and browser DevTools.'
+      },
+      {
+        category: 'Authentication, RBAC & Multi-Tenancy',
+        difficulty: diffLabel,
+        question: `How do you architect multi-tenant data isolation and role-based access control (RBAC) securely spanning database queries, API middleware, and frontend route guards?`,
+        insight: 'Checks tenant leakage prevention, middleware security, and defensive layered authorization.'
+      },
+      {
+        category: 'SSR, Caching & Data Hydration',
+        difficulty: diffLabel,
+        question: `In modern full-stack frameworks (Next.js App Router / Remix), how do you structure Server Components vs Client Components to minimize bundle size while maximizing interactivity?`,
+        insight: 'Evaluates modern hybrid rendering paradigms, data hydration, and streaming performance.'
+      },
+      {
+        category: 'CI/CD & Production Zero-Downtime Releases',
+        difficulty: diffLabel,
+        question: `How do you architect a CI/CD pipeline that handles automated testing, database migrations, and blue-green container deployments without dropping user sessions?`,
+        insight: 'Tests DevOps literacy, deployment risk mitigation, automated regression testing, and rollback strategies.'
+      }
+    ];
+  }
+
+  // E. HR & Talent Acquisition
+  if (lower.includes('hr') || lower.includes('human resources') || lower.includes('talent acquisition') || lower.includes('recruiter') || lower.includes('people')) {
+    if (level === 'Junior') {
+      return [
+        {
+          category: 'Sourcing & Candidate Screening',
+          difficulty: diffLabel,
+          question: `As a junior HR/Recruiter, how do you screen inbound resumes against a technical JD and identify red flags or transferable skills${skillNote}?`,
+          insight: 'Evaluates resume evaluation skills, job requirement mapping, and initial candidate qualification.'
+        },
+        {
+          category: 'Candidate Experience & Coordination',
+          difficulty: diffLabel,
+          question: `How do you maintain clear communication and timely updates to candidates throughout multi-stage interview rounds?`,
+          insight: 'Assesses organizational skills, candidate empathy, and employer brand representation.'
+        },
+        {
+          category: 'Interview Scheduling & ATS Hygiene',
+          difficulty: diffLabel,
+          question: `Walk through your daily workflow in an ATS (Applicant Tracking System) for tracking candidates and managing panel interviewer schedules.`,
+          insight: 'Checks process adherence, data hygiene, and coordination diligence.'
+        },
+        {
+          category: 'Employee Onboarding Basics',
+          difficulty: diffLabel,
+          question: `What are the critical steps in executing a smooth day-one onboarding experience for new hires?`,
+          insight: 'Evaluates compliance awareness, documentation checklists, and welcoming orientation practices.'
+        },
+        {
+          category: 'HR Queries & Policy Communication',
+          difficulty: diffLabel,
+          question: `How do you handle routine employee queries regarding leave policies, benefits, and company handbook guidelines?`,
+          insight: 'Tests policy knowledge, confidentiality, and professional employee communication.'
+        }
+      ];
+    }
+    // Mid & Senior HR
+    return [
+      {
+        category: 'Talent Acquisition Strategy & Metrics',
+        difficulty: diffLabel,
+        question: `As an HR professional with ${expYears} years exp, how do you optimize Time-to-Hire, Cost-per-Hire, and Quality-of-Hire for hard-to-fill technical and leadership positions${skillNote}?`,
+        insight: 'Evaluates recruitment analytics, talent pipeline forecasting, and executive search strategies.'
+      },
+      {
+        category: 'Employee Relations & Conflict Resolution',
+        difficulty: diffLabel,
+        question: `Describe how you investigated and resolved a complex employee grievance or workplace misconduct complaint while ensuring fair labor compliance and confidentiality.`,
+        insight: 'Assesses investigation methodology, labor law adherence, emotional intelligence, and neutrality.'
+      },
+      {
+        category: 'Performance Management & Appraisal Systems',
+        difficulty: diffLabel,
+        question: `How do you design and facilitate 360-degree performance appraisal cycles that motivate high performers while addressing underperformance constructively?`,
+        insight: 'Checks performance appraisal architecture, KPI calibration, and leadership coaching.'
+      },
+      {
+        category: 'Compensation, Benefits & Retention',
+        difficulty: diffLabel,
+        question: `How do you conduct market salary benchmarking to build competitive compensation bands (ESOPs, bonuses, base) while maintaining budget constraints?`,
+        insight: 'Evaluates total rewards design, salary band benchmarking, and retention modeling.'
+      },
+      {
+        category: 'Organizational Culture & Change Management',
+        difficulty: diffLabel,
+        question: `How do you manage employee morale and retain top talent during periods of organizational restructuring, mergers, or rapid scaling?`,
+        insight: 'Tests change management frameworks, executive leadership partnership, and cultural stewardship.'
+      }
+    ];
+  }
+
+  // F. General Fallback Calibrated Questions
+  return [
+    {
+      category: 'Core Domain Execution',
+      difficulty: diffLabel,
+      question: `As a ${diffLabel} ${role}, what frameworks and standard workflows do you apply daily to deliver consistent, high-quality outcomes${skillNote}?`,
+      insight: `Assesses fundamental domain competency and role execution capability.`
+    },
+    {
+      category: 'Problem-Solving & Troubleshooting',
+      difficulty: diffLabel,
+      question: `Describe a challenging roadblock or unexpected constraint you faced as a ${role}. What structured methodology did you use to diagnose and resolve it?`,
+      insight: `Evaluates systematic troubleshooting, analytical depth, and resilience under pressure.`
+    },
+    {
+      category: 'Quality Assurance & Process Adherence',
+      difficulty: diffLabel,
+      question: `What quality standards and verification checklists do you enforce to ensure your deliverables are compliant with company standards and error-free?`,
+      insight: `Checks attention to detail, precision, error prevention, and quality assurance.`
+    },
+    {
+      category: 'Stakeholder Alignment & Collaboration',
+      difficulty: diffLabel,
+      question: `How do you coordinate with cross-functional teams and align conflicting priorities to ensure project milestones are delivered on schedule?`,
+      insight: `Tests stakeholder negotiation, communication clarity, and collaborative teamwork.`
+    },
+    {
+      category: 'Continuous Innovation & Impact',
+      difficulty: diffLabel,
+      question: `What emerging industry practices, automation tools, or methodologies in ${role} have you adopted to increase efficiency and business value?`,
+      insight: `Evaluates forward-looking perspective, continuous learning, and driving measurable impact.`
+    }
+  ];
+}
 
 export const generateInterviewQuestions = async (
   tenantId: string,
   interviewId: string,
   triggeredBy: string,
 ): Promise<InterviewQuestionsResult> => {
-  const resolved = await resolveTenantAiProvider(tenantId);
-  if (!resolved) throw new AiFeatureError(NOT_CONFIGURED_MESSAGE, 400);
-
-  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId', 'firstName lastName jobRole');
+  const interview = await Interview.findOne({ _id: interviewId, tenantId } as any).populate('candidateId');
   if (!interview) throw new AiFeatureError('Interview not found', 404);
   const candidate = interview.candidateId as any;
-  const manpowerContext = await buildManpowerContext(tenantId, String(candidate?._id || ''));
+  const manpowerContext = await buildManpowerContext(tenantId, String(candidate?._id || ''), candidate);
 
-  try {
-    const roundType = interview.roundType;
-    const userPrompt = [
-      `Candidate: ${candidate?.firstName || ''} ${candidate?.lastName || ''}`.trim(),
-      `Role: ${candidate?.jobRole || 'Unknown role'}`,
-      `Interview round: ${roundType}`,
-      `Round focus: ${ROUND_GUIDANCE[roundType] || 'General fit and skills assessment.'}`,
-      manpowerContext || 'No additional job description/skills context is available — base questions on the role title alone.',
-      '\nWrite interview questions for this specific round only — do not duplicate what earlier or later rounds would already cover.',
-    ].join('\n');
+  const roundType = interview.roundType || 'Technical Interview';
+  const appDetails = candidate?.applicationDetails || {};
+  const totalExpRaw = String(appDetails.totalExperience || candidate?.experience || '').trim();
+  const expYears = parseFloat(totalExpRaw.replace(/[^0-9.]/g, '')) || 0;
+  const candidateSkills = Array.isArray(appDetails.skills) ? appDetails.skills : (appDetails.skills ? [appDetails.skills] : []);
+  const jobRole = candidate?.jobRole || appDetails.appliedFor || 'Software Engineer';
+  const jdSummary = candidate?.jobDescriptionSummary || '';
 
-    const { raw, promptTokens, completionTokens } = await callAiJson({
-      provider: resolved.provider,
-      apiKey: resolved.apiKey,
-      model: resolved.model,
-      systemPrompt: 'You are an experienced interview panelist preparing questions for one specific interview round. Be concrete and specific to the role and skills given.',
-      userPrompt,
-      jsonSchema: INTERVIEW_QUESTIONS_JSON_SCHEMA,
-    });
-    const result = JSON.parse(raw) as InterviewQuestionsResult;
+  let difficultyTier = 'Mid-Level (3-5 Years) - Moderate Difficulty';
+  let difficultyGuideline = 'Calibrate questions to intermediate depth: practical feature implementation, debugging production issues, API design, code refactoring, and independent delivery.';
 
-    interview.interviewQuestions = result.questions.map((question) => ({ question }));
-    await interview.save();
-
-    const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
-    const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
-    await AiUsageLog.create({
-      tenantId, feature: 'interview-question-generation', aiModel: resolved.model,
-      promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
-      costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
-      createdBy: triggeredBy, updatedBy: triggeredBy,
-    } as any);
-    await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
-
-    return result;
-  } catch (err: any) {
-    await AiUsageLog.create({
-      tenantId, feature: 'interview-question-generation', status: 'FAILURE',
-      metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
-    } as any);
-    // Fallback to dummy questions instead of failing the request
-    const dummyQuestions = [
-      "Tell me about a time you had to prioritize multiple tasks when working under tight deadlines.",
-      "Describe a situation where you had to manage a challenging stakeholder. How did you handle it?",
-      "How do you align your team's goals with the broader objectives of the organization?",
-      "Tell me about a time you had to make a difficult decision with incomplete information.",
-      "How do you encourage innovation and continuous learning within your team?"
-    ];
-    
-    interview.interviewQuestions = dummyQuestions.map((question) => ({ question }));
-    await interview.save();
-    
-    return { questions: dummyQuestions };
+  if (expYears < 2) {
+    difficultyTier = 'Junior / Entry Level (0-2 Years) - Foundational Difficulty';
+    difficultyGuideline = 'Calibrate questions to foundational depth: core programming fundamentals, syntax, standard workflows, understanding underlying mechanics, and practical basic problem solving.';
+  } else if (expYears >= 6 && expYears < 10) {
+    difficultyTier = 'Senior Professional (6-9 Years) - High Difficulty';
+    difficultyGuideline = 'Calibrate questions to advanced depth: high-throughput system architecture, database optimization, scalability trade-offs, fault tolerance, security threat modeling, and code quality governance.';
+  } else if (expYears >= 10) {
+    difficultyTier = 'Lead / Principal / Architect (10+ Years) - Expert Difficulty';
+    difficultyGuideline = 'Calibrate questions to expert strategic depth: enterprise-wide systems design, multi-region distributed systems, architectural patterns, technical vision, cloud cost optimization, and engineering leadership.';
   }
+
+  // Check if AI is configured
+  const resolved = await resolveTenantAiProvider(tenantId).catch(() => null);
+
+  if (resolved) {
+    try {
+      const skillsStr = candidateSkills.join(', ') || 'None listed';
+      const pastCompanies = Array.isArray(appDetails.experiences)
+        ? appDetails.experiences.map((e: any) => `${e.role || ''} at ${e.company || ''}`).filter(Boolean).join('; ')
+        : (appDetails.currentCompany || 'None listed');
+
+      const userPrompt = [
+        `CANDIDATE INFORMATION:`,
+        `Name: ${candidate?.firstName || ''} ${candidate?.lastName || ''}`.trim(),
+        `Target Job Role: ${jobRole}`,
+        `Total Experience: ${totalExpRaw || `${expYears} years`} (${difficultyTier})`,
+        `Candidate Known Skills: ${skillsStr}`,
+        `Past Employment Background: ${pastCompanies}`,
+        `Interview Round: ${roundType}`,
+        `Round Focus: ${ROUND_GUIDANCE[roundType] || 'In-depth assessment of technical skills, problem-solving, and role readiness.'}`,
+        '',
+        `JOB DESCRIPTION & REQUISITION REQUIREMENTS (JD):`,
+        manpowerContext || 'No attached Manpower Request; base questions directly on the Job Role title and candidate experience.',
+        '',
+        `CRITICAL INSTRUCTIONS FOR DIFFICULTY & RELEVANCE:`,
+        `1. ROLE & JD TAILORING: Every question must directly assess technical competencies required by the Job Role and the Job Description (JD).`,
+        `2. EXPERIENCE-BASED DIFFICULTY: The difficulty must strictly match: ${difficultyTier}.`,
+        `   Guideline: ${difficultyGuideline}`,
+        `   Do NOT ask elementary questions to senior candidates, and do NOT ask 10+ year enterprise architecture questions to junior candidates.`,
+        `3. REALISTIC PROBLEM-SOLVING: Formulate realistic scenario-based questions that test practical decision-making and troubleshooting rather than mere textbook definitions.`,
+        `4. WRITE QUESTIONS FOR THIS ROUND ONLY: Tailor questions for ${roundType}.`,
+      ].join('\n');
+
+      const { raw, promptTokens, completionTokens } = await callAiJson({
+        provider: resolved.provider,
+        apiKey: resolved.apiKey,
+        model: resolved.model,
+        systemPrompt: 'You are an experienced interview panelist and hiring director preparing technical questions for an interview. Be concrete and rigorously calibrate question difficulty to the candidate years of experience and the JD.',
+        userPrompt,
+        jsonSchema: INTERVIEW_QUESTIONS_JSON_SCHEMA,
+      });
+      const result = JSON.parse(raw) as InterviewQuestionsResult;
+
+      const rawQuestions = result.questions || [];
+      if (rawQuestions.length > 0) {
+        interview.interviewQuestions = rawQuestions.map((item: any) => {
+          if (typeof item === 'string') {
+            return {
+              question: item,
+              category: 'Technical Assessment',
+              difficulty: difficultyTier,
+              answerAnalysis: {
+                verdict: 'no_answer',
+                reasoning: `Evaluates domain proficiency and practical problem-solving for ${jobRole}.`
+              }
+            };
+          }
+          return {
+            question: item.question,
+            category: item.category || 'Technical Assessment',
+            difficulty: item.difficulty || difficultyTier,
+            answerAnalysis: {
+              verdict: 'no_answer',
+              reasoning: item.insight || `Evaluates candidate technical depth and experience at ${difficultyTier}.`
+            }
+          };
+        });
+        await interview.save();
+
+        const pricing = MODEL_PRICING[resolved.model] ?? { promptPer1k: 0, completionPer1k: 0 };
+        const costUsd = (promptTokens / 1000) * pricing.promptPer1k + (completionTokens / 1000) * pricing.completionPer1k;
+        await AiUsageLog.create({
+          tenantId, feature: 'interview-question-generation', aiModel: resolved.model,
+          promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+          costUSD: costUsd, costINR: costUsd * 83, status: 'SUCCESS',
+          createdBy: triggeredBy, updatedBy: triggeredBy,
+        } as any);
+        await Tenant.updateOne({ _id: tenantId }, { $inc: { aiCredits: -1 } });
+
+        return result;
+      }
+    } catch (err: any) {
+      await AiUsageLog.create({
+        tenantId, feature: 'interview-question-generation', status: 'FAILURE',
+        metadata: { error: err.message }, createdBy: triggeredBy, updatedBy: triggeredBy,
+      } as any);
+      console.warn("AI Question generation failed, applying calibrated role questions fallback:", err.message);
+    }
+  }
+
+  // Fallback: Generate role-specific, difficulty-calibrated questions
+  const fallbackQuestions = generateCalibratedFallbackQuestions(
+    roundType,
+    jobRole,
+    expYears,
+    candidateSkills,
+    jdSummary
+  );
+
+  interview.interviewQuestions = fallbackQuestions.map((q) => ({
+    question: q.question,
+    category: q.category,
+    difficulty: q.difficulty,
+    answerAnalysis: {
+      verdict: 'no_answer',
+      reasoning: q.insight
+    }
+  }));
+  await interview.save();
+
+  return { questions: fallbackQuestions };
 };
 
 interface InterviewAnswerResult {
