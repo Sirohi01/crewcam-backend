@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { seedPackages } from './seedPackages';
+import { seedPlanAddOns } from './seedPlanAddOns';
+import { seedPlanFeatures } from './seedPlanFeatures';
 import { seedUsersAndCompanies } from './seedUsersAndCompanies';
 import { seedShiftTimings } from './seedShiftTimings';
 import { seedManpower } from './seedManpower';
@@ -20,7 +22,9 @@ const runAllSeeds = async () => {
 
         console.log('\n--- Seeding Packages ---');
         await seedPackages();
-        
+        await seedPlanAddOns();
+        await seedPlanFeatures();
+
         console.log('\n--- Seeding Super Admin ---');
         await seedSuperAdmin();
 

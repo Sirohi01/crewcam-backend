@@ -26,6 +26,8 @@ export interface IPackage extends Document, IAuditable {
   planBadge: string;
   displayOrder: number;
   targetAudience: string[];
+  // Commercial policy rows shown on the plan-features page (sheet "09 FINAL SALES POLICY").
+  commercialTerms?: { label: string; value: string }[];
   priceINR: number;
   priceUSD: number;
   pricePerUserMonthlyINR: number;
@@ -65,6 +67,7 @@ const PackageSchema = new Schema<IPackage>({
   planBadge: { type: String, default: '' },
   displayOrder: { type: Number, default: 0 },
   targetAudience: [{ type: String }],
+  commercialTerms: [{ _id: false, label: { type: String }, value: { type: String } }],
   priceINR: { type: Number, default: 0 },
   priceUSD: { type: Number, default: 0 },
   pricePerUserMonthlyINR: { type: Number, default: 0 },

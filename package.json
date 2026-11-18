@@ -11,6 +11,7 @@
     "dev": "nodemon -e ts,js,json --exec ts-node -T src/server.ts",
     "build": "tsc",
     "seed": "ts-node src/seeders/seedAll.ts",
+    "seed:pricing": "ts-node src/seeders/seedPlanPricing.ts",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
   },
   "keywords": [],
