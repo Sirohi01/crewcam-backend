@@ -12,6 +12,9 @@
     "build": "tsc",
     "seed": "ts-node src/seeders/seedAll.ts",
     "seed:pricing": "ts-node src/seeders/seedPlanPricing.ts",
+    "seed:plans": "ts-node src/seeders/seedPlanPart.ts plans",
+    "seed:addons": "ts-node src/seeders/seedPlanPart.ts addons",
+    "seed:features": "ts-node src/seeders/seedPlanPart.ts features",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
   },
   "keywords": [],
